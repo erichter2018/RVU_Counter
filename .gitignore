@@ -1,0 +1,29 @@
+# Python
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs
+*.log
+rvu_counter.log
+
+# Data files (optional - uncomment if you don't want to commit these)
+# rvu_records.json
+# rvu_settings.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
