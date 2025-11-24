@@ -41,9 +41,6 @@
     "CT HEAD WITHOUT IV CONTRAST": 0.9,
     "CT HEAD WITHOUT IV CONTRAST STROKE": 0.9,
     "CT INTERNAL AUDITORY CANAL WITHOUT IV CONTRAST": 1.0,
-    "CT LUMBAR SPINE WITH IV CONTRAST": 2.0,
-    "CT LUMBAR SPINE WITHOUT IV CONTRAST": 2.0,
-    "CT LUMBAR SPINE WITHOUT IV CONTRAST RECON": 1.0,
     "CT MAXILLOFACIAL WITHOUT IV CONTRAST": 1.0,
     "CT NECK ANGIOGRAPHY WITH IV CONTRAST": 1.75,
     "CT NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST": 1.75,
@@ -53,9 +50,6 @@
     "CT ORBITS WITH IV CONTRAST": 1.0,
     "CT PELVIS WITH IV CONTRAST": 1.0,
     "CT PELVIS WITHOUT IV CONTRAST": 1.0,
-    "CT THORACIC LUMBAR SPINE WITHOUT IV CONTRAST": 2.0,
-    "CT THORACIC SPINE WITH IV CONTRAST": 1.0,
-    "CT THORACIC SPINE WITHOUT IV CONTRAST RECON": 1.0,
     "MR BRAIN WITHOUT IV CONTRAST": 2.3,
     "US ABDOMEN LIMITED": 0.68,
     "US LOWER EXTREMITY VEINS LIMITED UNILATERAL": 0.68,
@@ -73,8 +67,10 @@
     "Ultrasound transvaginal complete": 1.38,
     "US Arterial Lower Extremity": 1.2,
     "US Other": 0.68,
-    "XR": 0.3,
+    "XR Other": 0.3,
+    "XR Chest": 0.3,
     "CT Brain": 0.9,
+    "CT Chest": 1.0,
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
@@ -82,11 +78,8 @@
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
     "CT Brain and Cervical": 1.9,
-    "CT Thoracic and Lumbar Spine": 2.0,
-    "CT": 1.0,
-    "MR": 1.75,
-    "US": 0.68,
-    "NM": 1.0
+    "CT Spine": 1.0,
+    "CT Thoracic and Lumbar Spine": 2.0
   },
   "classification_rules": {
     "CT AP": [
@@ -241,6 +234,39 @@
           "CT",
           "thor",
           "lumb"
+        ]
+      }
+    ],
+    "CT Chest": [
+      {
+        "required_keywords": [
+          "CT",
+          "Chest"
+        ],
+        "excluded_keywords": [
+          "neck",
+          "abd",
+          "pel"
+        ]
+      }
+    ],
+    "CT Spine": [
+      {
+        "required_keywords": [
+          "CT",
+          "Spine"
+        ],
+        "excluded_keywords": [
+          "thor",
+          "lumb"
+        ]
+      }
+    ],
+    "XR Chest": [
+      {
+        "required_keywords": [
+          "XR",
+          "Chest"
         ]
       }
     ]

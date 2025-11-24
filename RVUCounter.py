@@ -179,8 +179,13 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             required_keywords = rule.get("required_keywords", [])
             excluded_keywords = rule.get("excluded_keywords", [])
             
-            # Check if any excluded keywords are present (case-insensitive, lowercase comparison)
-            if excluded_keywords:
+            # Special case for "CT Spine": exclude only if ALL excluded keywords are present
+            if study_type == "CT Spine" and excluded_keywords:
+                all_excluded = all(keyword.lower() in procedure_lower for keyword in excluded_keywords)
+                if all_excluded:
+                    continue  # Skip this rule if all excluded keywords are present
+            # For other rules: exclude if any excluded keyword is present (case-insensitive, lowercase comparison)
+            elif excluded_keywords:
                 any_excluded = any(keyword.lower() in procedure_lower for keyword in excluded_keywords)
                 if any_excluded:
                     continue  # Skip this rule if excluded keyword is present
@@ -658,7 +663,7 @@ class RVUCounterApp:
                     self.root.title("RVU Counter - Running")
                     self.update_shift_start_label()
                     self.update_display()
-            else:
+        else:
                 # No existing shift, start a new one
                 self.shift_start = datetime.now()
                 self.is_running = True
@@ -805,7 +810,7 @@ class RVUCounterApp:
         study_type_frame = ttk.Frame(debug_frame)
         study_type_frame.pack(fill=tk.X)
         
-        self.debug_study_type_label = ttk.Label(study_type_frame, text="Type: -", font=("Consolas", 8), foreground="gray")
+        self.debug_study_type_label = ttk.Label(study_type_frame, text="Study Type: -", font=("Consolas", 8), foreground="gray")
         self.debug_study_type_label.pack(side=tk.LEFT, anchor=tk.W)
         
         self.debug_study_rvu_label = ttk.Label(study_type_frame, text="", font=("Consolas", 8), foreground="gray")
@@ -1309,12 +1314,12 @@ class RVUCounterApp:
             self.debug_procedure_label.config(text=f"Procedure: {procedure_display if procedure_display else '-'}")
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                study_type_display = self.current_study_type[:19] + "..." if len(self.current_study_type) > 19 else self.current_study_type
-                self.debug_study_type_label.config(text=f"Type: {study_type_display}")
+                study_type_display = self.current_study_type[:13] + "..." if len(self.current_study_type) > 13 else self.current_study_type
+                self.debug_study_type_label.config(text=f"Study Type: {study_type_display}")
                 rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
                 self.debug_study_rvu_label.config(text=f"{rvu_value:.1f} RVU")
             else:
-                self.debug_study_type_label.config(text=f"Type: -")
+                self.debug_study_type_label.config(text=f"Study Type: -")
                 self.debug_study_rvu_label.config(text="")
 
     def _format_hour_label(self, dt: datetime) -> str:
