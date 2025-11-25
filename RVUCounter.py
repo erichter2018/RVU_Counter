@@ -335,6 +335,7 @@ class RVUData:
             "direct_lookups": self.settings_data.get("direct_lookups", {}),
             "rvu_table": self.settings_data.get("rvu_table", {}),
             "classification_rules": self.settings_data.get("classification_rules", {}),
+            "compensation_rates": self.settings_data.get("compensation_rates", {}),
             "window_positions": self.settings_data.get("window_positions", {}),
             "records": self.records_data.get("records", []),
             "current_shift": self.records_data.get("current_shift", {
@@ -761,41 +762,61 @@ class RVUCounterApp:
         # Total
         self.total_label_text = ttk.Label(counters_frame, text="Total wRVU:", font=("Arial", 10), anchor=tk.E)
         self.total_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        self.total_label = ttk.Label(counters_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
-        self.total_label.grid(row=row, column=1, sticky=tk.W)
+        total_value_frame = ttk.Frame(counters_frame)
+        total_value_frame.grid(row=row, column=1, sticky=tk.W)
+        self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.total_label.pack(side=tk.LEFT)
+        self.total_comp_label = tk.Label(total_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.total_comp_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.total_value_frame = total_value_frame
         row += 1
         
         # Average per hour
         self.avg_label_text = ttk.Label(counters_frame, text="Avg/Hour:", font=("Arial", 10), anchor=tk.E)
         self.avg_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        self.avg_label = ttk.Label(counters_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
-        self.avg_label.grid(row=row, column=1, sticky=tk.W)
+        avg_value_frame = ttk.Frame(counters_frame)
+        avg_value_frame.grid(row=row, column=1, sticky=tk.W)
+        self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.avg_label.pack(side=tk.LEFT)
+        self.avg_comp_label = tk.Label(avg_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.avg_comp_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.avg_value_frame = avg_value_frame
         row += 1
         
         # Last hour
         self.last_hour_label_text = ttk.Label(counters_frame, text="Last Hour:", font=("Arial", 10), anchor=tk.E)
         self.last_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        self.last_hour_label = ttk.Label(counters_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
-        self.last_hour_label.grid(row=row, column=1, sticky=tk.W)
+        last_hour_value_frame = ttk.Frame(counters_frame)
+        last_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
+        self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.last_hour_label.pack(side=tk.LEFT)
+        self.last_hour_comp_label = tk.Label(last_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.last_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.last_hour_value_frame = last_hour_value_frame
         row += 1
         
-        # Last full hour
-        self.last_full_hour_label_text = ttk.Label(counters_frame, text="Last Full Hour:", font=("Arial", 10), anchor=tk.E)
+        # Last full hour - format: "8pm-9pm Hour: x.x"
+        self.last_full_hour_label_text = ttk.Label(counters_frame, text="Hour:", font=("Arial", 10), anchor=tk.E, width=14)
         self.last_full_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         last_full_hour_value_frame = ttk.Frame(counters_frame)
         last_full_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.last_full_hour_label.pack(side=tk.LEFT)
-        self.last_full_hour_range_label = ttk.Label(last_full_hour_value_frame, text="", font=("Arial", 7), foreground="gray")
-        self.last_full_hour_range_label.pack(side=tk.LEFT, padx=(5, 0))
+        self.last_full_hour_comp_label = tk.Label(last_full_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.last_full_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.last_full_hour_value_frame = last_full_hour_value_frame
         row += 1
         
         # Projected
         self.projected_label_text = ttk.Label(counters_frame, text="Projected This Hour:", font=("Arial", 10), anchor=tk.E)
         self.projected_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        self.projected_label = ttk.Label(counters_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
-        self.projected_label.grid(row=row, column=1, sticky=tk.W)
+        projected_value_frame = ttk.Frame(counters_frame)
+        projected_value_frame.grid(row=row, column=1, sticky=tk.W)
+        self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.projected_label.pack(side=tk.LEFT)
+        self.projected_comp_label = tk.Label(projected_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.projected_comp_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.projected_value_frame = projected_value_frame
         
         # Buttons frame
         buttons_frame = ttk.Frame(main_frame)
@@ -1373,6 +1394,51 @@ class RVUCounterApp:
             logger.info(f"Deleted study: {removed['accession']}")
             self.update_display()
     
+    def _get_hour_key(self, dt: datetime) -> str:
+        """Convert datetime hour to rate lookup key like '2am', '12pm'."""
+        hour = dt.hour
+        if hour == 0:
+            return "12am"
+        elif hour < 12:
+            return f"{hour}am"
+        elif hour == 12:
+            return "12pm"
+        else:
+            return f"{hour - 12}pm"
+    
+    def _is_weekend(self, dt: datetime) -> bool:
+        """Check if date is weekend (Saturday=5, Sunday=6)."""
+        return dt.weekday() >= 5
+    
+    def _get_compensation_rate(self, dt: datetime) -> float:
+        """Get compensation rate per RVU for a given datetime."""
+        rates = self.data_manager.data.get("compensation_rates", {})
+        if not rates:
+            logger.warning("No compensation_rates found in data")
+            return 0.0
+        
+        role = self.data_manager.data["settings"].get("role", "Partner").lower()
+        # Map role to key in rates
+        role_key = "partner" if role == "partner" else "assoc"
+        day_type = "weekend" if self._is_weekend(dt) else "weekday"
+        hour_key = self._get_hour_key(dt)
+        
+        try:
+            rate = rates[day_type][role_key][hour_key]
+            return rate
+        except KeyError as e:
+            logger.warning(f"KeyError getting rate: {e} - keys: {day_type}/{role_key}/{hour_key}")
+            return 0.0
+    
+    def _calculate_study_compensation(self, record: dict) -> float:
+        """Calculate compensation for a single study based on when it was finished."""
+        try:
+            time_finished = datetime.fromisoformat(record["time_finished"])
+            rate = self._get_compensation_rate(time_finished)
+            return record["rvu"] * rate
+        except (KeyError, ValueError):
+            return 0.0
+    
     def calculate_stats(self) -> dict:
         """Calculate statistics."""
         if not self.shift_start:
@@ -1383,46 +1449,54 @@ class RVUCounterApp:
                 "last_full_hour": 0.0,
                 "last_full_hour_range": "",
                 "projected": 0.0,
+                "comp_total": 0.0,
+                "comp_avg": 0.0,
+                "comp_last_hour": 0.0,
+                "comp_last_full_hour": 0.0,
+                "comp_projected": 0.0,
             }
         
         records = self.data_manager.data["current_shift"]["records"]
         current_time = datetime.now()
         
-        # Total
+        # Total RVU and compensation
         total_rvu = sum(r["rvu"] for r in records)
+        total_comp = sum(self._calculate_study_compensation(r) for r in records)
         
         # Average per hour
         hours_elapsed = (current_time - self.shift_start).total_seconds() / 3600
         avg_per_hour = total_rvu / hours_elapsed if hours_elapsed > 0 else 0.0
+        avg_comp_per_hour = total_comp / hours_elapsed if hours_elapsed > 0 else 0.0
         
-        # Last hour
+        # Last hour - filter records and calculate both RVU and compensation
         one_hour_ago = current_time - timedelta(hours=1)
-        last_hour_rvu = sum(
-            r["rvu"] for r in records
-            if datetime.fromisoformat(r["time_finished"]) >= one_hour_ago
-        )
+        last_hour_records = [r for r in records if datetime.fromisoformat(r["time_finished"]) >= one_hour_ago]
+        last_hour_rvu = sum(r["rvu"] for r in last_hour_records)
+        last_hour_comp = sum(self._calculate_study_compensation(r) for r in last_hour_records)
         
         # Last full hour (e.g., 2am to 3am)
         current_hour_start = current_time.replace(minute=0, second=0, microsecond=0)
         last_full_hour_start = current_hour_start - timedelta(hours=1)
         last_full_hour_end = current_hour_start
         
-        last_full_hour_rvu = sum(
-            r["rvu"] for r in records
-            if last_full_hour_start <= datetime.fromisoformat(r["time_finished"]) < last_full_hour_end
-        )
+        last_full_hour_records = [r for r in records 
+                                   if last_full_hour_start <= datetime.fromisoformat(r["time_finished"]) < last_full_hour_end]
+        last_full_hour_rvu = sum(r["rvu"] for r in last_full_hour_records)
+        last_full_hour_comp = sum(self._calculate_study_compensation(r) for r in last_full_hour_records)
         last_full_hour_range = f"{self._format_hour_label(last_full_hour_start)}-{self._format_hour_label(last_full_hour_end)}"
         
-        # Projected for current hour
-        current_hour_rvu = sum(
-            r["rvu"] for r in records
-            if datetime.fromisoformat(r["time_finished"]) >= current_hour_start
-        )
+        # Projected for current hour - use current hour's rate for projection
+        current_hour_records = [r for r in records if datetime.fromisoformat(r["time_finished"]) >= current_hour_start]
+        current_hour_rvu = sum(r["rvu"] for r in current_hour_records)
+        current_hour_comp = sum(self._calculate_study_compensation(r) for r in current_hour_records)
+        
         minutes_into_hour = (current_time - current_hour_start).total_seconds() / 60
         if minutes_into_hour > 0:
             projected = (current_hour_rvu / minutes_into_hour) * 60
+            projected_comp = (current_hour_comp / minutes_into_hour) * 60
         else:
             projected = 0.0
+            projected_comp = 0.0
         
         return {
             "total": total_rvu,
@@ -1431,6 +1505,11 @@ class RVUCounterApp:
             "last_full_hour": last_full_hour_rvu,
             "last_full_hour_range": last_full_hour_range,
             "projected": projected,
+            "comp_total": total_comp,
+            "comp_avg": avg_comp_per_hour,
+            "comp_last_hour": last_hour_comp,
+            "comp_last_full_hour": last_full_hour_comp,
+            "comp_projected": projected_comp,
         }
     
     def create_tooltip(self, widget, text):
@@ -1473,45 +1552,68 @@ class RVUCounterApp:
         
         if settings.get("show_total", True):
             self.total_label_text.grid()
-            self.total_label.grid()
+            self.total_value_frame.grid()
             self.total_label.config(text=f"{stats['total']:.1f}")
+            if settings.get("show_comp_total", False):
+                self.total_comp_label.config(text=f"(${stats['comp_total']:,.0f})")
+            else:
+                self.total_comp_label.config(text="")
         else:
             self.total_label_text.grid_remove()
-            self.total_label.grid_remove()
+            self.total_value_frame.grid_remove()
         
         if settings.get("show_avg", True):
             self.avg_label_text.grid()
-            self.avg_label.grid()
+            self.avg_value_frame.grid()
             self.avg_label.config(text=f"{stats['avg_per_hour']:.1f}")
+            if settings.get("show_comp_avg", False):
+                self.avg_comp_label.config(text=f"(${stats['comp_avg']:,.0f})")
+            else:
+                self.avg_comp_label.config(text="")
         else:
             self.avg_label_text.grid_remove()
-            self.avg_label.grid_remove()
+            self.avg_value_frame.grid_remove()
         
         if settings.get("show_last_hour", True):
             self.last_hour_label_text.grid()
-            self.last_hour_label.grid()
+            self.last_hour_value_frame.grid()
             self.last_hour_label.config(text=f"{stats['last_hour']:.1f}")
+            if settings.get("show_comp_last_hour", False):
+                self.last_hour_comp_label.config(text=f"(${stats['comp_last_hour']:,.0f})")
+            else:
+                self.last_hour_comp_label.config(text="")
         else:
             self.last_hour_label_text.grid_remove()
-            self.last_hour_label.grid_remove()
+            self.last_hour_value_frame.grid_remove()
         
         if settings.get("show_last_full_hour", True):
             self.last_full_hour_label_text.grid()
             self.last_full_hour_value_frame.grid()
             self.last_full_hour_label.config(text=f"{stats['last_full_hour']:.1f}")
             range_text = stats.get("last_full_hour_range", "")
-            self.last_full_hour_range_label.config(text=f"({range_text})" if range_text else "")
+            if range_text:
+                self.last_full_hour_label_text.config(text=f"{range_text} Hour:")
+            else:
+                self.last_full_hour_label_text.config(text="Hour:")
+            if settings.get("show_comp_last_full_hour", False):
+                self.last_full_hour_comp_label.config(text=f"(${stats['comp_last_full_hour']:,.0f})")
+            else:
+                self.last_full_hour_comp_label.config(text="")
         else:
             self.last_full_hour_label_text.grid_remove()
             self.last_full_hour_value_frame.grid_remove()
         
         if settings.get("show_projected", True):
             self.projected_label_text.grid()
-            self.projected_label.grid()
+            self.projected_value_frame.grid()
             self.projected_label.config(text=f"{stats['projected']:.1f}")
+            if settings.get("show_comp_projected", False):
+                self.projected_comp_label.config(text=f"(${stats['comp_projected']:,.0f})")
+            else:
+                self.projected_comp_label.config(text="")
         else:
             self.projected_label_text.grid_remove()
-            self.projected_label.grid_remove()
+            self.projected_value_frame.grid_remove()
         
         # Only rebuild widgets if records changed
         if rebuild_widgets:
@@ -1721,9 +1823,9 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"350x400+{window_pos['x']}+{window_pos['y']}")
+            self.window.geometry(f"450x450+{window_pos['x']}+{window_pos['y']}")
         else:
-            self.window.geometry("350x400")
+            self.window.geometry("450x450")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -1743,27 +1845,96 @@ class SettingsWindow:
         main_frame = ttk.Frame(self.window, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        settings = self.data_manager.data["settings"]
+        
         # Auto-start
-        self.auto_start_var = tk.BooleanVar(value=self.data_manager.data["settings"]["auto_start"])
+        self.auto_start_var = tk.BooleanVar(value=settings["auto_start"])
         ttk.Checkbutton(main_frame, text="Auto-resume shift on launch", variable=self.auto_start_var).pack(anchor=tk.W, pady=2)
         
-        # Counter visibility
-        ttk.Label(main_frame, text="Show Counters:", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        # Two-column frame for counters and compensation
+        columns_frame = ttk.Frame(main_frame)
+        columns_frame.pack(fill=tk.X, pady=(10, 5))
         
-        self.show_total_var = tk.BooleanVar(value=self.data_manager.data["settings"]["show_total"])
-        ttk.Checkbutton(main_frame, text="Total", variable=self.show_total_var).pack(anchor=tk.W, pady=2)
+        # Column 1: Show Counters
+        counters_col = ttk.Frame(columns_frame)
+        counters_col.pack(side=tk.LEFT, anchor=tk.N, padx=(0, 20))
         
-        self.show_avg_var = tk.BooleanVar(value=self.data_manager.data["settings"]["show_avg"])
-        ttk.Checkbutton(main_frame, text="Average per Hour", variable=self.show_avg_var).pack(anchor=tk.W, pady=2)
+        ttk.Label(counters_col, text="Show Counters:", font=("Arial", 9, "bold")).pack(anchor=tk.W)
         
-        self.show_last_hour_var = tk.BooleanVar(value=self.data_manager.data["settings"]["show_last_hour"])
-        ttk.Checkbutton(main_frame, text="Last Hour", variable=self.show_last_hour_var).pack(anchor=tk.W, pady=2)
+        # Counter variables and checkbuttons
+        self.show_total_var = tk.BooleanVar(value=settings["show_total"])
+        self.total_cb = ttk.Checkbutton(counters_col, text="Total", variable=self.show_total_var, 
+                                         command=lambda: self.sync_compensation_state("total"))
+        self.total_cb.pack(anchor=tk.W, pady=2)
         
-        self.show_last_full_hour_var = tk.BooleanVar(value=self.data_manager.data["settings"]["show_last_full_hour"])
-        ttk.Checkbutton(main_frame, text="Last Full Hour", variable=self.show_last_full_hour_var).pack(anchor=tk.W, pady=2)
+        self.show_avg_var = tk.BooleanVar(value=settings["show_avg"])
+        self.avg_cb = ttk.Checkbutton(counters_col, text="Average per Hour", variable=self.show_avg_var,
+                                       command=lambda: self.sync_compensation_state("avg"))
+        self.avg_cb.pack(anchor=tk.W, pady=2)
         
-        self.show_projected_var = tk.BooleanVar(value=self.data_manager.data["settings"]["show_projected"])
-        ttk.Checkbutton(main_frame, text="Projected This Hour", variable=self.show_projected_var).pack(anchor=tk.W, pady=2)
+        self.show_last_hour_var = tk.BooleanVar(value=settings["show_last_hour"])
+        self.last_hour_cb = ttk.Checkbutton(counters_col, text="Last Hour", variable=self.show_last_hour_var,
+                                             command=lambda: self.sync_compensation_state("last_hour"))
+        self.last_hour_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_last_full_hour_var = tk.BooleanVar(value=settings["show_last_full_hour"])
+        self.last_full_hour_cb = ttk.Checkbutton(counters_col, text="Last Full Hour", variable=self.show_last_full_hour_var,
+                                                  command=lambda: self.sync_compensation_state("last_full_hour"))
+        self.last_full_hour_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_projected_var = tk.BooleanVar(value=settings["show_projected"])
+        self.projected_cb = ttk.Checkbutton(counters_col, text="Projected This Hour", variable=self.show_projected_var,
+                                             command=lambda: self.sync_compensation_state("projected"))
+        self.projected_cb.pack(anchor=tk.W, pady=2)
+        
+        # Role radio buttons (Partner/Associate)
+        role_frame = ttk.Frame(counters_col)
+        role_frame.pack(anchor=tk.W, pady=(10, 2))
+        
+        self.role_var = tk.StringVar(value=settings.get("role", "Partner"))
+        ttk.Radiobutton(role_frame, text="Partner", variable=self.role_var, value="Partner").pack(side=tk.LEFT)
+        ttk.Radiobutton(role_frame, text="Associate", variable=self.role_var, value="Associate").pack(side=tk.LEFT, padx=(10, 0))
+        
+        # Column 2: Show Compensation
+        comp_col = ttk.Frame(columns_frame)
+        comp_col.pack(side=tk.LEFT, anchor=tk.N)
+        
+        ttk.Label(comp_col, text="Show Compensation:", font=("Arial", 9, "bold")).pack(anchor=tk.W)
+        
+        # Compensation variables and checkbuttons (initially set based on counter state)
+        
+        self.show_comp_total_var = tk.BooleanVar(value=settings.get("show_comp_total", False))
+        self.comp_total_cb = ttk.Checkbutton(comp_col, text="Total", variable=self.show_comp_total_var)
+        self.comp_total_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_comp_avg_var = tk.BooleanVar(value=settings.get("show_comp_avg", False))
+        self.comp_avg_cb = ttk.Checkbutton(comp_col, text="Average per Hour", variable=self.show_comp_avg_var)
+        self.comp_avg_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_comp_last_hour_var = tk.BooleanVar(value=settings.get("show_comp_last_hour", False))
+        self.comp_last_hour_cb = ttk.Checkbutton(comp_col, text="Last Hour", variable=self.show_comp_last_hour_var)
+        self.comp_last_hour_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_comp_last_full_hour_var = tk.BooleanVar(value=settings.get("show_comp_last_full_hour", False))
+        self.comp_last_full_hour_cb = ttk.Checkbutton(comp_col, text="Last Full Hour", variable=self.show_comp_last_full_hour_var)
+        self.comp_last_full_hour_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_comp_projected_var = tk.BooleanVar(value=settings.get("show_comp_projected", False))
+        self.comp_projected_cb = ttk.Checkbutton(comp_col, text="Projected This Hour", variable=self.show_comp_projected_var)
+        self.comp_projected_cb.pack(anchor=tk.W, pady=2)
+        
+        # Store mapping for easy sync
+        self.comp_mapping = {
+            "total": (self.show_total_var, self.show_comp_total_var, self.comp_total_cb),
+            "avg": (self.show_avg_var, self.show_comp_avg_var, self.comp_avg_cb),
+            "last_hour": (self.show_last_hour_var, self.show_comp_last_hour_var, self.comp_last_hour_cb),
+            "last_full_hour": (self.show_last_full_hour_var, self.show_comp_last_full_hour_var, self.comp_last_full_hour_cb),
+            "projected": (self.show_projected_var, self.show_comp_projected_var, self.comp_projected_cb),
+        }
+        
+        # Initial sync of compensation state based on counter state
+        for key in self.comp_mapping:
+            self.sync_compensation_state(key)
         
         # Min study seconds
         ttk.Label(main_frame, text="Min Study Duration (seconds):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
@@ -1788,6 +1959,17 @@ class SettingsWindow:
         ttk.Button(save_cancel_frame, text="Save", command=self.save_settings).pack(side=tk.LEFT, padx=2)
         ttk.Button(save_cancel_frame, text="Cancel", command=self.window.destroy).pack(side=tk.LEFT, padx=2)
     
+    def sync_compensation_state(self, key):
+        """Sync compensation checkbox state based on counter checkbox."""
+        counter_var, comp_var, comp_cb = self.comp_mapping[key]
+        if counter_var.get():
+            # Counter is enabled - enable compensation checkbox
+            comp_cb.config(state=tk.NORMAL)
+        else:
+            # Counter is disabled - disable and uncheck compensation
+            comp_var.set(False)
+            comp_cb.config(state=tk.DISABLED)
+    
     def save_settings(self):
         """Save settings."""
         try:
@@ -1797,6 +1979,12 @@ class SettingsWindow:
             self.data_manager.data["settings"]["show_last_hour"] = self.show_last_hour_var.get()
             self.data_manager.data["settings"]["show_last_full_hour"] = self.show_last_full_hour_var.get()
             self.data_manager.data["settings"]["show_projected"] = self.show_projected_var.get()
+            self.data_manager.data["settings"]["show_comp_total"] = self.show_comp_total_var.get()
+            self.data_manager.data["settings"]["show_comp_avg"] = self.show_comp_avg_var.get()
+            self.data_manager.data["settings"]["show_comp_last_hour"] = self.show_comp_last_hour_var.get()
+            self.data_manager.data["settings"]["show_comp_last_full_hour"] = self.show_comp_last_full_hour_var.get()
+            self.data_manager.data["settings"]["show_comp_projected"] = self.show_comp_projected_var.get()
+            self.data_manager.data["settings"]["role"] = self.role_var.get()
             self.data_manager.data["settings"]["min_study_seconds"] = int(self.min_seconds_var.get())
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
             

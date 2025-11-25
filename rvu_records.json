@@ -19,6 +19,36 @@
           "XR HUMERUS",
           "XR SHOULDER 2 OR MORE VIEWS"
         ]
+      },
+      {
+        "accession": "45629150000100CBMC",
+        "procedure": "CT ABDOMEN WITHOUT IV CONTRAST",
+        "patient_class": "Outpatient",
+        "study_type": "CT Other",
+        "rvu": 1.0,
+        "time_performed": "2025-11-24T22:01:21.433591",
+        "time_finished": "2025-11-24T22:01:25.111366",
+        "duration_seconds": 3.677775
+      },
+      {
+        "accession": "45629320000100CBMC",
+        "procedure": "XR WRIST 3 OR MORE VIEWS",
+        "patient_class": "Outpatient",
+        "study_type": "XR Other",
+        "rvu": 0.3,
+        "time_performed": "2025-11-24T22:01:55.204212",
+        "time_finished": "2025-11-24T22:01:59.121301",
+        "duration_seconds": 3.917089
+      },
+      {
+        "accession": "45630290001500CBMC",
+        "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+        "patient_class": "Outpatient",
+        "study_type": "CT Chest",
+        "rvu": 1.0,
+        "time_performed": "2025-11-24T22:06:36.760558",
+        "time_finished": "2025-11-24T22:07:11.625862",
+        "duration_seconds": 34.865304
       }
     ]
   },

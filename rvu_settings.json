@@ -6,6 +6,12 @@
     "show_last_hour": true,
     "show_last_full_hour": true,
     "show_projected": true,
+    "show_comp_total": true,
+    "show_comp_avg": true,
+    "show_comp_last_hour": true,
+    "show_comp_last_full_hour": true,
+    "show_comp_projected": true,
+    "role": "Partner",
     "min_study_seconds": 1,
     "ignore_duplicate_accessions": true
   },
@@ -238,7 +244,7 @@
   "window_positions": {
     "main": {
       "x": 4986,
-      "y": -328
+      "y": -326
     },
     "settings": {
       "x": 5295,
