@@ -1,289 +1,781 @@
 {
   "records": [],
   "current_shift": {
-    "shift_start": "2025-11-24T03:44:56.280392",
-    "shift_end": null,
-    "records": [
-      {
-        "accession": "00414CT250069946ABZ1",
-        "procedure": "CT THORACIC SPINE WITHOUT IV CONTRAST",
-        "study_type": "CT",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T03:44:59.515029",
-        "time_finished": "2025-11-24T03:45:59.347544",
-        "duration_seconds": 59.832515
-      },
-      {
-        "accession": "00414CT250069947ABZ1",
-        "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
-        "study_type": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
-        "rvu": 2.0,
-        "time_performed": "2025-11-24T03:46:08.814785",
-        "time_finished": "2025-11-24T03:46:38.788975",
-        "duration_seconds": 29.97419
-      },
-      {
-        "accession": "00414CT250069943ABZ1",
-        "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
-        "study_type": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T03:49:55.382883",
-        "time_finished": "2025-11-24T03:52:59.335160",
-        "duration_seconds": 183.952277
-      },
-      {
-        "accession": "00414CT250069948ABZ1",
-        "procedure": "CT NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
-        "study_type": "CTA Neck",
-        "rvu": 1.75,
-        "time_performed": "2025-11-24T03:57:07.624177",
-        "time_finished": "2025-11-24T03:58:18.058669",
-        "duration_seconds": 70.434492
-      },
-      {
-        "accession": "SSH2511240000301CST",
-        "procedure": "CT LUMBAR SPINE WITH IV CONTRAST",
-        "study_type": "CT LUMBAR SPINE WITH IV CONTRAST",
-        "rvu": 2.0,
-        "time_performed": "2025-11-24T04:02:10.643847",
-        "time_finished": "2025-11-24T04:05:10.981750",
-        "duration_seconds": 180.337903
-      },
-      {
-        "accession": "SSH2511240000305CST",
-        "procedure": "CT THORACIC SPINE WITH IV CONTRAST",
-        "study_type": "CT THORACIC SPINE WITH IV CONTRAST",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T04:05:40.302925",
-        "time_finished": "2025-11-24T04:07:01.514574",
-        "duration_seconds": 81.211649
-      },
-      {
-        "accession": "A01266011DU",
-        "procedure": "XR RIBS UNILATERAL WITH CHEST",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:07:25.489454",
-        "time_finished": "2025-11-24T04:07:37.282956",
-        "duration_seconds": 11.793502
-      },
-      {
-        "accession": "00416XR250038730ABZ3",
-        "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:12:23.996488",
-        "time_finished": "2025-11-24T04:12:47.588166",
-        "duration_seconds": 23.591678
-      },
-      {
-        "accession": "205692320251124OK",
-        "procedure": "XR CHEST 1 VIEW",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:13:01.273763",
-        "time_finished": "2025-11-24T04:13:24.229516",
-        "duration_seconds": 22.955753
-      },
-      {
-        "accession": "205692520251124OK",
-        "procedure": "XR ELBOW 1-2 VIEWS RIGHT",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:13:30.999135",
-        "time_finished": "2025-11-24T04:13:44.737024",
-        "duration_seconds": 13.737889
-      },
-      {
-        "accession": "4002532701471NMCH",
-        "procedure": "CT HEAD WITHOUT IV CONTRAST",
-        "study_type": "CT Brain",
-        "rvu": 0.9,
-        "time_performed": "2025-11-24T04:16:33.161143",
-        "time_finished": "2025-11-24T04:17:36.227025",
-        "duration_seconds": 63.065882
-      },
-      {
-        "accession": "SSH2511240000600CST",
-        "procedure": "CT NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
-        "study_type": "CTA Neck",
-        "rvu": 1.75,
-        "time_performed": "2025-11-24T04:17:48.182521",
-        "time_finished": "2025-11-24T04:19:37.137415",
-        "duration_seconds": 108.954894
-      },
-      {
-        "accession": "02CT250012572TCR",
-        "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
-        "study_type": "CTA Brain and Neck",
-        "rvu": 3.5,
-        "time_performed": "2025-11-24T04:25:17.124475",
-        "time_finished": "2025-11-24T04:25:35.473816",
-        "duration_seconds": 18.349341
-      },
-      {
-        "accession": "000576655ARLUSH",
-        "procedure": "XR KNEE 3 VIEWS RIGHT",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:25:50.943889",
-        "time_finished": "2025-11-24T04:32:10.736911",
-        "duration_seconds": 379.793022
-      },
-      {
-        "accession": "000576657ARLUSH",
-        "procedure": "XR TIBIA FIBULA 2 VIEWS RIGHT",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:32:22.272148",
-        "time_finished": "2025-11-24T04:32:32.027593",
-        "duration_seconds": 9.755445
-      },
-      {
-        "accession": "X002063930WTX",
-        "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
-        "study_type": "CT AP",
-        "rvu": 1.68,
-        "time_performed": "2025-11-24T04:32:59.949746",
-        "time_finished": "2025-11-24T04:34:40.057379",
-        "duration_seconds": 100.107633
-      },
-      {
-        "accession": "SSH2511240000581CST",
-        "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-        "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T04:34:53.156912",
-        "time_finished": "2025-11-24T04:40:32.436705",
-        "duration_seconds": 339.279793
-      },
-      {
-        "accession": "62-XR-25-055199DL",
-        "procedure": "XR ABDOMEN 2 VIEWS SUPINE ERECT",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:40:46.420114",
-        "time_finished": "2025-11-24T04:40:54.213257",
-        "duration_seconds": 7.793143
-      },
-      {
-        "accession": "56690151BP",
-        "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:41:03.172391",
-        "time_finished": "2025-11-24T04:41:12.483650",
-        "duration_seconds": 9.311259
-      },
-      {
-        "accession": "SSH2511240000687CST",
-        "procedure": "CT HEAD WITHOUT IV CONTRAST",
-        "study_type": "CT Brain",
-        "rvu": 0.9,
-        "time_performed": "2025-11-24T04:41:22.107591",
-        "time_finished": "2025-11-24T04:45:30.155972",
-        "duration_seconds": 248.048381
-      },
-      {
-        "accession": "SSH2511240000563CST",
-        "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-        "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T04:45:43.213341",
-        "time_finished": "2025-11-24T04:48:20.612181",
-        "duration_seconds": 157.39884
-      },
-      {
-        "accession": "4002532800414NMCH",
-        "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T04:48:26.303320",
-        "time_finished": "2025-11-24T04:49:13.240129",
-        "duration_seconds": 46.936809
-      },
-      {
-        "accession": "56691976BP",
-        "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
-        "study_type": "CT AP",
-        "rvu": 1.68,
-        "time_performed": "2025-11-24T05:00:37.589100",
-        "time_finished": "2025-11-24T05:02:34.795010",
-        "duration_seconds": 117.20591
-      },
-      {
-        "accession": "00414XR250061418ABZ1",
-        "procedure": "XR CHEST 1 VIEW",
-        "study_type": "XR",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T05:02:46.144880",
-        "time_finished": "2025-11-24T05:03:21.538878",
-        "duration_seconds": 35.393998
-      },
-      {
-        "accession": "56690115BP",
-        "procedure": "CT MAXILLOFACIAL WITH IV CONTRAST",
-        "study_type": "CT",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T05:03:37.440448",
-        "time_finished": "2025-11-24T05:09:07.619658",
-        "duration_seconds": 330.17921
-      },
-      {
-        "accession": "56690116BP",
-        "procedure": "CT HEAD WITHOUT IV CONTRAST",
-        "study_type": "CT Brain",
-        "rvu": 0.9,
-        "time_performed": "2025-11-24T05:09:18.426978",
-        "time_finished": "2025-11-24T05:12:17.336134",
-        "duration_seconds": 178.909156
-      },
-      {
-        "accession": "56690117BP",
-        "procedure": "CT CHEST ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
-        "study_type": "CT Chest",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T05:14:26.846634",
-        "time_finished": "2025-11-24T05:15:26.390773",
-        "duration_seconds": 59.544139
-      },
-      {
-        "accession": "00414CT250069950ABZ1",
-        "procedure": "CT HEAD WITHOUT IV CONTRAST",
-        "study_type": "CT Brain",
-        "rvu": 0.9,
-        "time_performed": "2025-11-24T05:15:36.270898",
-        "time_finished": "2025-11-24T05:18:05.934157",
-        "duration_seconds": 149.663259
-      },
-      {
-        "accession": "73048910000500ER",
-        "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
-        "study_type": "CT AP",
-        "rvu": 1.68,
-        "time_performed": "2025-11-24T05:53:28.219930",
-        "time_finished": "2025-11-24T05:55:05.326276",
-        "duration_seconds": 97.106346
-      },
-      {
-        "accession": "X002063958WTX",
-        "procedure": "CT HEAD WITHOUT IV CONTRAST",
-        "study_type": "CT Brain",
-        "rvu": 0.9,
-        "time_performed": "2025-11-24T05:56:23.198125",
-        "time_finished": "2025-11-24T05:56:47.569356",
-        "duration_seconds": 24.371231
-      },
-      {
-        "accession": "02CT250012572TCR",
-        "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
-        "study_type": "CTA Brain and Neck",
-        "rvu": 3.5,
-        "time_performed": "2025-11-24T05:57:25.880824",
-        "time_finished": "2025-11-24T05:58:17.025344",
-        "duration_seconds": 51.14452
-      }
-    ]
+    "shift_start": "2025-11-24T08:01:07.142670",
+    "shift_end": "2025-11-24T18:30:13.914540",
+    "records": []
   },
-  "shifts": []
+  "shifts": [
+    {
+      "shift_start": "2025-11-24T03:44:56.280392",
+      "shift_end": "2025-11-24T08:01:07.142409",
+      "records": [
+        {
+          "accession": "00414CT250069946ABZ1",
+          "procedure": "CT THORACIC SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T03:44:59.515029",
+          "time_finished": "2025-11-24T03:45:59.347544",
+          "duration_seconds": 59.832515
+        },
+        {
+          "accession": "00414CT250069947ABZ1",
+          "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "rvu": 2.0,
+          "time_performed": "2025-11-24T03:46:08.814785",
+          "time_finished": "2025-11-24T03:46:38.788975",
+          "duration_seconds": 29.97419
+        },
+        {
+          "accession": "00414CT250069943ABZ1",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T03:49:55.382883",
+          "time_finished": "2025-11-24T03:52:59.335160",
+          "duration_seconds": 183.952277
+        },
+        {
+          "accession": "00414CT250069948ABZ1",
+          "procedure": "CT NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "study_type": "CTA Neck",
+          "rvu": 1.75,
+          "time_performed": "2025-11-24T03:57:07.624177",
+          "time_finished": "2025-11-24T03:58:18.058669",
+          "duration_seconds": 70.434492
+        },
+        {
+          "accession": "SSH2511240000301CST",
+          "procedure": "CT LUMBAR SPINE WITH IV CONTRAST",
+          "study_type": "CT LUMBAR SPINE WITH IV CONTRAST",
+          "rvu": 2.0,
+          "time_performed": "2025-11-24T04:02:10.643847",
+          "time_finished": "2025-11-24T04:05:10.981750",
+          "duration_seconds": 180.337903
+        },
+        {
+          "accession": "SSH2511240000305CST",
+          "procedure": "CT THORACIC SPINE WITH IV CONTRAST",
+          "study_type": "CT THORACIC SPINE WITH IV CONTRAST",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T04:05:40.302925",
+          "time_finished": "2025-11-24T04:07:01.514574",
+          "duration_seconds": 81.211649
+        },
+        {
+          "accession": "A01266011DU",
+          "procedure": "XR RIBS UNILATERAL WITH CHEST",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:07:25.489454",
+          "time_finished": "2025-11-24T04:07:37.282956",
+          "duration_seconds": 11.793502
+        },
+        {
+          "accession": "00416XR250038730ABZ3",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:12:23.996488",
+          "time_finished": "2025-11-24T04:12:47.588166",
+          "duration_seconds": 23.591678
+        },
+        {
+          "accession": "205692320251124OK",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:13:01.273763",
+          "time_finished": "2025-11-24T04:13:24.229516",
+          "duration_seconds": 22.955753
+        },
+        {
+          "accession": "205692520251124OK",
+          "procedure": "XR ELBOW 1-2 VIEWS RIGHT",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:13:30.999135",
+          "time_finished": "2025-11-24T04:13:44.737024",
+          "duration_seconds": 13.737889
+        },
+        {
+          "accession": "4002532701471NMCH",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T04:16:33.161143",
+          "time_finished": "2025-11-24T04:17:36.227025",
+          "duration_seconds": 63.065882
+        },
+        {
+          "accession": "SSH2511240000600CST",
+          "procedure": "CT NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "study_type": "CTA Neck",
+          "rvu": 1.75,
+          "time_performed": "2025-11-24T04:17:48.182521",
+          "time_finished": "2025-11-24T04:19:37.137415",
+          "duration_seconds": 108.954894
+        },
+        {
+          "accession": "02CT250012572TCR",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-24T04:25:17.124475",
+          "time_finished": "2025-11-24T04:25:35.473816",
+          "duration_seconds": 18.349341
+        },
+        {
+          "accession": "000576655ARLUSH",
+          "procedure": "XR KNEE 3 VIEWS RIGHT",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:25:50.943889",
+          "time_finished": "2025-11-24T04:32:10.736911",
+          "duration_seconds": 379.793022
+        },
+        {
+          "accession": "000576657ARLUSH",
+          "procedure": "XR TIBIA FIBULA 2 VIEWS RIGHT",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:32:22.272148",
+          "time_finished": "2025-11-24T04:32:32.027593",
+          "duration_seconds": 9.755445
+        },
+        {
+          "accession": "X002063930WTX",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T04:32:59.949746",
+          "time_finished": "2025-11-24T04:34:40.057379",
+          "duration_seconds": 100.107633
+        },
+        {
+          "accession": "SSH2511240000581CST",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T04:34:53.156912",
+          "time_finished": "2025-11-24T04:40:32.436705",
+          "duration_seconds": 339.279793
+        },
+        {
+          "accession": "62-XR-25-055199DL",
+          "procedure": "XR ABDOMEN 2 VIEWS SUPINE ERECT",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:40:46.420114",
+          "time_finished": "2025-11-24T04:40:54.213257",
+          "duration_seconds": 7.793143
+        },
+        {
+          "accession": "56690151BP",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:41:03.172391",
+          "time_finished": "2025-11-24T04:41:12.483650",
+          "duration_seconds": 9.311259
+        },
+        {
+          "accession": "SSH2511240000687CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T04:41:22.107591",
+          "time_finished": "2025-11-24T04:45:30.155972",
+          "duration_seconds": 248.048381
+        },
+        {
+          "accession": "SSH2511240000563CST",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T04:45:43.213341",
+          "time_finished": "2025-11-24T04:48:20.612181",
+          "duration_seconds": 157.39884
+        },
+        {
+          "accession": "4002532800414NMCH",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T04:48:26.303320",
+          "time_finished": "2025-11-24T04:49:13.240129",
+          "duration_seconds": 46.936809
+        },
+        {
+          "accession": "56691976BP",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T05:00:37.589100",
+          "time_finished": "2025-11-24T05:02:34.795010",
+          "duration_seconds": 117.20591
+        },
+        {
+          "accession": "00414XR250061418ABZ1",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T05:02:46.144880",
+          "time_finished": "2025-11-24T05:03:21.538878",
+          "duration_seconds": 35.393998
+        },
+        {
+          "accession": "56690115BP",
+          "procedure": "CT MAXILLOFACIAL WITH IV CONTRAST",
+          "study_type": "CT",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T05:03:37.440448",
+          "time_finished": "2025-11-24T05:09:07.619658",
+          "duration_seconds": 330.17921
+        },
+        {
+          "accession": "56690116BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T05:09:18.426978",
+          "time_finished": "2025-11-24T05:12:17.336134",
+          "duration_seconds": 178.909156
+        },
+        {
+          "accession": "56690117BP",
+          "procedure": "CT CHEST ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T05:14:26.846634",
+          "time_finished": "2025-11-24T05:15:26.390773",
+          "duration_seconds": 59.544139
+        },
+        {
+          "accession": "00414CT250069950ABZ1",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T05:15:36.270898",
+          "time_finished": "2025-11-24T05:18:05.934157",
+          "duration_seconds": 149.663259
+        },
+        {
+          "accession": "73048910000500ER",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T05:53:28.219930",
+          "time_finished": "2025-11-24T05:55:05.326276",
+          "duration_seconds": 97.106346
+        },
+        {
+          "accession": "X002063958WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T05:56:23.198125",
+          "time_finished": "2025-11-24T05:56:47.569356",
+          "duration_seconds": 24.371231
+        },
+        {
+          "accession": "02CT250012572TCR",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-24T05:57:25.880824",
+          "time_finished": "2025-11-24T05:58:17.025344",
+          "duration_seconds": 51.14452
+        },
+        {
+          "accession": "X002063961WTX",
+          "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:06:50.124961",
+          "time_finished": "2025-11-24T06:08:01.093269",
+          "duration_seconds": 70.968308
+        },
+        {
+          "accession": "X002063960WTX",
+          "procedure": "CT THORACIC SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:08:11.556479",
+          "time_finished": "2025-11-24T06:08:52.480139",
+          "duration_seconds": 40.92366
+        },
+        {
+          "accession": "X002063959WTX",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:09:03.218642",
+          "time_finished": "2025-11-24T06:09:30.320633",
+          "duration_seconds": 27.101991
+        },
+        {
+          "accession": "SSH2511240000775CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T06:09:44.613282",
+          "time_finished": "2025-11-24T06:10:25.593991",
+          "duration_seconds": 40.980709
+        },
+        {
+          "accession": "316643520251124CRE",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T06:10:49.187931",
+          "time_finished": "2025-11-24T06:11:27.428764",
+          "duration_seconds": 38.240833
+        },
+        {
+          "accession": "316643720251124CRE",
+          "procedure": "CT PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:14:38.386134",
+          "time_finished": "2025-11-24T06:15:59.732091",
+          "duration_seconds": 81.345957
+        },
+        {
+          "accession": "4002532701501NMCH",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:17:09.953816",
+          "time_finished": "2025-11-24T06:20:35.724425",
+          "duration_seconds": 205.770609
+        },
+        {
+          "accession": "320CT25020107ELP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:20:38.426014",
+          "time_finished": "2025-11-24T06:21:58.520727",
+          "duration_seconds": 80.094713
+        },
+        {
+          "accession": "SKM2511240000877CST",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:22:12.632151",
+          "time_finished": "2025-11-24T06:23:21.295170",
+          "duration_seconds": 68.663019
+        },
+        {
+          "accession": "56692069BP",
+          "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
+          "study_type": "XR",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:23:32.538560",
+          "time_finished": "2025-11-24T06:23:44.787057",
+          "duration_seconds": 12.248497
+        },
+        {
+          "accession": "X002063964WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:24:06.131998",
+          "time_finished": "2025-11-24T06:24:36.797443",
+          "duration_seconds": 30.665445
+        },
+        {
+          "accession": "56695534BP",
+          "procedure": "CT CHEST ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT CAP",
+          "rvu": 3.06,
+          "time_performed": "2025-11-24T06:24:50.444847",
+          "time_finished": "2025-11-24T06:28:04.777305",
+          "duration_seconds": 194.332458
+        },
+        {
+          "accession": "X002063949WTX",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:28:13.947678",
+          "time_finished": "2025-11-24T06:37:34.589716",
+          "duration_seconds": 560.642038
+        },
+        {
+          "accession": "X002063934WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T06:37:48.371153",
+          "time_finished": "2025-11-24T06:39:05.481107",
+          "duration_seconds": 77.109954
+        },
+        {
+          "accession": "2025112401611DR",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:39:33.057497",
+          "time_finished": "2025-11-24T06:39:45.690813",
+          "duration_seconds": 12.633316
+        },
+        {
+          "accession": "56692085BP",
+          "procedure": "XR HAND 3 OR MORE VIEWS RIGHT",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:42:38.889238",
+          "time_finished": "2025-11-24T06:42:48.432964",
+          "duration_seconds": 9.543726
+        },
+        {
+          "accession": "X002063957WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:43:07.403047",
+          "time_finished": "2025-11-24T06:43:29.450991",
+          "duration_seconds": 22.047944
+        },
+        {
+          "accession": "316644020251124CRE",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:43:40.447272",
+          "time_finished": "2025-11-24T06:44:48.262714",
+          "duration_seconds": 67.815442
+        },
+        {
+          "accession": "V003254412WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T06:45:39.813824",
+          "time_finished": "2025-11-24T06:49:04.265207",
+          "duration_seconds": 204.451383
+        },
+        {
+          "accession": "X002063967WTX",
+          "procedure": "XR FEMUR 2 VIEWS LEFT",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:49:17.513927",
+          "time_finished": "2025-11-24T06:49:27.865601",
+          "duration_seconds": 10.351674
+        },
+        {
+          "accession": "X002063956WTX",
+          "procedure": "XR PELVIS 1-2 VIEWS",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:49:37.326211",
+          "time_finished": "2025-11-24T06:49:48.693021",
+          "duration_seconds": 11.36681
+        },
+        {
+          "accession": "V003254414WTX",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:50:08.457849",
+          "time_finished": "2025-11-24T06:50:34.821064",
+          "duration_seconds": 26.363215
+        },
+        {
+          "accession": "V003254415WTX",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:50:48.450236",
+          "time_finished": "2025-11-24T06:51:45.198137",
+          "duration_seconds": 56.747901
+        },
+        {
+          "accession": "440CT25018179ELP",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:52:01.018676",
+          "time_finished": "2025-11-24T06:53:00.417163",
+          "duration_seconds": 59.398487
+        },
+        {
+          "accession": "390936920251124JC",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:53:19.342788",
+          "time_finished": "2025-11-24T06:54:50.206519",
+          "duration_seconds": 90.863731
+        },
+        {
+          "accession": "55087085BR",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T06:55:02.946964",
+          "time_finished": "2025-11-24T06:56:53.255803",
+          "duration_seconds": 110.308839
+        },
+        {
+          "accession": "55087115BR",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T06:57:03.506554",
+          "time_finished": "2025-11-24T06:57:51.664955",
+          "duration_seconds": 48.158401
+        },
+        {
+          "accession": "2025112401611DR",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:58:02.634717",
+          "time_finished": "2025-11-24T06:58:27.847613",
+          "duration_seconds": 25.212896
+        },
+        {
+          "accession": "62-XR-25-055202DL",
+          "procedure": "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)",
+          "study_type": "XR Chest",
+          "rvu": 0.6,
+          "time_performed": "2025-11-24T06:58:41.201637",
+          "time_finished": "2025-11-24T06:59:03.124527",
+          "duration_seconds": 21.92289
+        },
+        {
+          "accession": "14824510002900PM",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T06:59:14.826126",
+          "time_finished": "2025-11-24T07:04:12.085539",
+          "duration_seconds": 297.259413
+        },
+        {
+          "accession": "55087103BR",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:04:42.471084",
+          "time_finished": "2025-11-24T07:04:56.298336",
+          "duration_seconds": 13.827252
+        },
+        {
+          "accession": "55087104BR",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T07:05:06.569126",
+          "time_finished": "2025-11-24T07:05:41.068545",
+          "duration_seconds": 34.499419
+        },
+        {
+          "accession": "X002063950WTX",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T07:05:55.671780",
+          "time_finished": "2025-11-24T07:06:47.670159",
+          "duration_seconds": 51.998379
+        },
+        {
+          "accession": "440CT25018181ELP",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T07:07:02.169365",
+          "time_finished": "2025-11-24T07:08:40.514723",
+          "duration_seconds": 98.345358
+        },
+        {
+          "accession": "62-CT-25-032853DL",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T07:08:58.697952",
+          "time_finished": "2025-11-24T07:10:22.505089",
+          "duration_seconds": 83.807137
+        },
+        {
+          "accession": "315080620251124MMC",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-24T07:10:39.799006",
+          "time_finished": "2025-11-24T07:11:15.962898",
+          "duration_seconds": 36.163892
+        },
+        {
+          "accession": "4002532701501NMCH",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-24T07:11:30.892431",
+          "time_finished": "2025-11-24T07:11:46.425075",
+          "duration_seconds": 15.532644
+        },
+        {
+          "accession": "A01265958DU",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:11:58.258626",
+          "time_finished": "2025-11-24T07:12:29.332431",
+          "duration_seconds": 31.073805
+        },
+        {
+          "accession": "SBH2511240001169CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:40:06.613747",
+          "time_finished": "2025-11-24T07:40:33.959101",
+          "duration_seconds": 27.345354
+        },
+        {
+          "accession": "V003254416WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:41:02.197533",
+          "time_finished": "2025-11-24T07:42:27.712476",
+          "duration_seconds": 85.514943
+        },
+        {
+          "accession": "40XR250002494RC",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:42:53.567349",
+          "time_finished": "2025-11-24T07:43:10.786901",
+          "duration_seconds": 17.219552
+        },
+        {
+          "accession": "40CT250001557RC",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:43:23.919609",
+          "time_finished": "2025-11-24T07:43:54.148311",
+          "duration_seconds": 30.228702
+        },
+        {
+          "accession": "RAD20251124-0003PRMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:44:26.691006",
+          "time_finished": "2025-11-24T07:44:50.382486",
+          "duration_seconds": 23.69148
+        },
+        {
+          "accession": "RAD20251124-0005PRMC",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:45:03.295627",
+          "time_finished": "2025-11-24T07:45:12.188097",
+          "duration_seconds": 8.89247
+        },
+        {
+          "accession": "AHS27150748SH1",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:46:43.865467",
+          "time_finished": "2025-11-24T07:47:15.491851",
+          "duration_seconds": 31.626384
+        },
+        {
+          "accession": "00414CT250069954ABZ1",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:47:27.292986",
+          "time_finished": "2025-11-24T07:48:43.116921",
+          "duration_seconds": 75.823935
+        },
+        {
+          "accession": "X002063969WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:48:55.654450",
+          "time_finished": "2025-11-24T07:49:24.523551",
+          "duration_seconds": 28.869101
+        },
+        {
+          "accession": "SAH2511240001275CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:49:45.501230",
+          "time_finished": "2025-11-24T07:50:03.527377",
+          "duration_seconds": 18.026147
+        },
+        {
+          "accession": "56690210BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:50:14.469113",
+          "time_finished": "2025-11-24T07:51:53.344757",
+          "duration_seconds": 98.875644
+        },
+        {
+          "accession": "390CT25016404ELP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:52:06.345972",
+          "time_finished": "2025-11-24T07:55:22.748353",
+          "duration_seconds": 196.402381
+        },
+        {
+          "accession": "SAH2511240001276CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:55:38.103822",
+          "time_finished": "2025-11-24T07:56:22.120730",
+          "duration_seconds": 44.016908
+        },
+        {
+          "accession": "SSH2511240001088CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T07:56:36.930005",
+          "time_finished": "2025-11-24T07:57:59.953863",
+          "duration_seconds": 83.023858
+        },
+        {
+          "accession": "2025112401735DMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-24T07:58:14.537294",
+          "time_finished": "2025-11-24T07:59:45.187781",
+          "duration_seconds": 90.650487
+        },
+        {
+          "accession": "62-CT-25-032856DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-24T08:00:01.032577",
+          "time_finished": "2025-11-24T08:00:52.289311",
+          "duration_seconds": 51.256734
+        }
+      ]
+    }
+  ]
 }

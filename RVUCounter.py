@@ -114,7 +114,7 @@ def find_elements_by_automation_id(window, automation_ids: List[str]) -> Dict[st
                     text_content = element.window_text()
                 except:
                     text_content = ""
-                
+
                 found_elements[automation_id] = {
                     'element': element,
                     'text': text_content.strip() if text_content else '',
@@ -124,7 +124,7 @@ def find_elements_by_automation_id(window, automation_ids: List[str]) -> Dict[st
                     return
         except:
             pass
-        
+
         try:
             children = element.children()
             for child in children:
@@ -218,23 +218,56 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     if classification_match_name:
         return classification_match_name, classification_match_rvu
     
+    # Check for modality keywords and use "Other" types as fallback before partial matching
+    modality_fallbacks = {
+        "ct": ("CT Other", rvu_table.get("CT Other", 1.0)),
+        "mri": ("MRI Other", rvu_table.get("MRI Other", 1.75)),
+        "mr ": ("MRI Other", rvu_table.get("MRI Other", 1.75)),
+        "us ": ("US Other", rvu_table.get("US Other", 0.68)),
+        "ultrasound": ("US Other", rvu_table.get("US Other", 0.68)),
+        "xr ": ("XR Other", rvu_table.get("XR Other", 0.3)),
+        "x-ray": ("XR Other", rvu_table.get("XR Other", 0.3)),
+        "nm ": ("NM Other", rvu_table.get("NM Other", 1.0)),
+        "nuclear": ("NM Other", rvu_table.get("NM Other", 1.0)),
+    }
+    
+    # Check for modality keywords (case-insensitive)
+    for keyword, (study_type, rvu) in modality_fallbacks.items():
+        if keyword in procedure_lower:
+            # Only use as fallback if the study_type exists in rvu_table
+            if study_type in rvu_table:
+                logger.info(f"Using modality fallback '{study_type}' for procedure containing '{keyword}': {procedure_text}")
+            return study_type, rvu
+    
     # Try exact match first
     for study_type, rvu in rvu_table.items():
         if study_type.lower() == procedure_lower:
             return study_type, rvu
     
-    # Try partial matches (most specific first)
+    # Try partial matches (most specific first), but exclude "Other" types initially
     matches = []
+    other_matches = []
     for study_type, rvu in rvu_table.items():
         study_lower = study_type.lower()
         if study_lower in procedure_lower or procedure_lower in study_lower:
             # Score by length (longer = more specific)
             score = len(study_type)
-            matches.append((score, study_type, rvu))
+            if " other" in study_lower or study_lower.endswith(" other"):
+                # Store "Other" types separately as fallbacks
+                other_matches.append((score, study_type, rvu))
+            else:
+                matches.append((score, study_type, rvu))
     
+    # Return most specific non-"Other" match if found
     if matches:
         matches.sort(reverse=True)  # Highest score first
         return matches[0][1], matches[0][2]
+    
+    # If no specific match, try "Other" types as fallback
+    if other_matches:
+        other_matches.sort(reverse=True)  # Highest score first
+        logger.info(f"Using 'Other' type fallback '{other_matches[0][1]}' for: {procedure_text}")
+        return other_matches[0][1], other_matches[0][2]
     
     # Try keyword matching
     keywords = {
@@ -246,8 +279,8 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         "pet": ("PET CT", 3.6),
         "ultrasound": ("US Other", 0.68),
         "us ": ("US Other", 0.68),
-        "x-ray": ("XR", 0.3),
-        "xr ": ("XR", 0.3),
+        "x-ray": ("XR Other", 0.3),
+        "xr ": ("XR Other", 0.3),
         "nuclear": ("NM Other", 1.0),
         "nm ": ("NM Other", 1.0),
     }
@@ -267,8 +300,8 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             "us": ("US Other", 0.68),
             "nm": ("NM Other", 1.0),
             "pe": ("PET CT", 3.6),  # PET
-            "xr": ("XR", 0.3),
-            "x-": ("XR", 0.3),
+            "xr": ("XR Other", 0.3),
+            "x-": ("XR Other", 0.3),
         }
         
         if first_two in generic_defaults:
@@ -516,7 +549,7 @@ class StudyTracker:
         self.seen_accessions: set = set()
         self.min_seconds = min_seconds
     
-    def add_study(self, accession: str, procedure: str, timestamp: datetime, rvu_table: dict = None, classification_rules: dict = None, direct_lookups: dict = None):
+    def add_study(self, accession: str, procedure: str, timestamp: datetime, rvu_table: dict = None, classification_rules: dict = None, direct_lookups: dict = None, patient_class: str = ""):
         """Add or update an active study."""
         if not accession:
             return
@@ -524,18 +557,21 @@ class StudyTracker:
         if accession in self.active_studies:
             # Update existing study
             self.active_studies[accession]["last_seen"] = timestamp
+            if patient_class:
+                self.active_studies[accession]["patient_class"] = patient_class
         else:
             # New study - use direct lookups, classification rules if provided
             study_type, rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
             self.active_studies[accession] = {
                 "accession": accession,
                 "procedure": procedure,
+                "patient_class": patient_class,
                 "study_type": study_type,
                 "rvu": rvu,
                 "start_time": timestamp,
                 "last_seen": timestamp,
             }
-            logger.info(f"Added study: {accession} - {study_type} ({rvu} RVU)")
+            logger.info(f"Added study: {accession} - {study_type} ({rvu} RVU) - Patient Class: {patient_class}")
     
     def check_completed(self, current_time: datetime, current_accession: str = "") -> List[dict]:
         """Check for studies that have disappeared (completed)."""
@@ -624,10 +660,11 @@ class RVUCounterApp:
         self.is_running = False
         self.current_window = None
         self.refresh_interval = 1000  # 1 second
-        
+            
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
         self.current_procedure = ""
+        self.current_patient_class = ""
         self.current_study_type = ""
         self.current_study_rvu = 0.0
         
@@ -638,7 +675,7 @@ class RVUCounterApp:
         
         # Create UI
         self.create_ui()
-        
+            
         # Load shift start if auto-start enabled (after UI is created)
         if self.data_manager.data["settings"].get("auto_start", False):
             if self.data_manager.data["current_shift"].get("shift_start"):
@@ -649,6 +686,7 @@ class RVUCounterApp:
                     self.start_btn.config(text="Stop Shift")
                     self.root.title("RVU Counter - Running")
                     self.update_shift_start_label()
+                    self.update_recent_studies_label()
                     # Update display to show correct counters
                     self.update_display()
                     logger.info(f"Auto-resumed shift started at {self.shift_start}")
@@ -662,6 +700,7 @@ class RVUCounterApp:
                     self.start_btn.config(text="Stop Shift")
                     self.root.title("RVU Counter - Running")
                     self.update_shift_start_label()
+                    self.update_recent_studies_label()
                     self.update_display()
         else:
                 # No existing shift, start a new one
@@ -672,6 +711,7 @@ class RVUCounterApp:
                 self.start_btn.config(text="Stop Shift")
                 self.root.title("RVU Counter - Running")
                 self.update_shift_start_label()
+                self.update_recent_studies_label()
                 self.update_display()
         
         self.setup_refresh()
@@ -680,6 +720,10 @@ class RVUCounterApp:
     
     def create_ui(self):
         """Create the user interface."""
+        # Create style for red label frame
+        style = ttk.Style()
+        style.configure("Red.TLabelframe.Label", foreground="red")
+        
         # Main frame
         main_frame = ttk.Frame(self.root, padding="5")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -763,11 +807,11 @@ class RVUCounterApp:
         self.settings_btn.pack(side=tk.LEFT, padx=2)
         
         # Recent studies frame
-        recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
-        recent_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        self.recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
+        self.recent_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
         # Canvas with scrollbar for recent studies
-        canvas_frame = ttk.Frame(recent_frame)
+        canvas_frame = ttk.Frame(self.recent_frame)
         canvas_frame.pack(fill=tk.BOTH, expand=True)
         
         canvas = tk.Canvas(canvas_frame, height=100, highlightthickness=0, bd=0)  # No border/highlight
@@ -802,6 +846,9 @@ class RVUCounterApp:
         
         self.debug_accession_label = ttk.Label(debug_frame, text="Accession: -", font=("Consolas", 8), foreground="gray")
         self.debug_accession_label.pack(anchor=tk.W)
+        
+        self.debug_patient_class_label = ttk.Label(debug_frame, text="Patient Class: -", font=("Consolas", 8), foreground="gray")
+        self.debug_patient_class_label.pack(anchor=tk.W)
         
         self.debug_procedure_label = ttk.Label(debug_frame, text="Procedure: -", font=("Consolas", 8), foreground="gray")
         self.debug_procedure_label.pack(anchor=tk.W)
@@ -881,11 +928,14 @@ class RVUCounterApp:
             procedure = ""
             
             # Try to use cached elements if available
+            patient_class = ""
             if self.cached_elements.get("labelAccession") and self.cached_elements.get("labelProcDescription"):
                 try:
                     # Validate cached elements are still valid
                     accession = self.cached_elements["labelAccession"].window_text().strip()
                     procedure = self.cached_elements["labelProcDescription"].window_text().strip()
+                    if self.cached_elements.get("labelPatientClass"):
+                        patient_class = self.cached_elements["labelPatientClass"].window_text().strip()
                 except:
                     # Elements invalid, clear cache and re-search
                     self.cached_elements = {}
@@ -895,7 +945,7 @@ class RVUCounterApp:
                 # Perform search for only the specific elements we need
                 elements = find_elements_by_automation_id(
                     window,
-                    ["labelProcDescription", "labelAccession"]
+                    ["labelProcDescription", "labelAccession", "labelPatientClass"]
                 )
                 # Cache element references if found
                 if elements.get("labelAccession") and elements.get("labelProcDescription"):
@@ -903,22 +953,30 @@ class RVUCounterApp:
                         "labelAccession": elements.get("labelAccession", {}).get("element"),
                         "labelProcDescription": elements.get("labelProcDescription", {}).get("element"),
                     }
+                    # Cache patient class if found
+                    if elements.get("labelPatientClass"):
+                        self.cached_elements["labelPatientClass"] = elements.get("labelPatientClass", {}).get("element")
+                    
                     # Get text from newly found elements
                     try:
                         accession = elements.get("labelAccession", {}).get("text", "").strip()
                         procedure = elements.get("labelProcDescription", {}).get("text", "").strip()
+                        patient_class = elements.get("labelPatientClass", {}).get("text", "").strip() if elements.get("labelPatientClass") else ""
                     except:
                         accession = ""
                         procedure = ""
+                        patient_class = ""
                 else:
                     # Elements not found - that's fine, just use empty values
                     # Don't cache "not found" state, always check next time
                     accession = ""
                     procedure = ""
+                    patient_class = ""
             
             # Update debug display
             self.current_accession = accession
             self.current_procedure = procedure
+            self.current_patient_class = patient_class
             
             # Check if procedure is "n/a" (case-insensitive)
             is_na = procedure and procedure.strip().lower() in ["n/a", "na", "none", ""]
@@ -956,6 +1014,7 @@ class RVUCounterApp:
                         study_record = {
                             "accession": completed_study["accession"],
                             "procedure": completed_study["procedure"],
+                            "patient_class": completed_study.get("patient_class", ""),
                             "study_type": completed_study["study_type"],
                             "rvu": completed_study["rvu"],
                             "time_performed": completed_study["start_time"].isoformat(),
@@ -980,6 +1039,7 @@ class RVUCounterApp:
                 study_record = {
                     "accession": study["accession"],
                     "procedure": study["procedure"],
+                    "patient_class": study.get("patient_class", ""),
                     "study_type": study["study_type"],
                     "rvu": study["rvu"],
                     "time_performed": study["start_time"].isoformat(),  # Time study was started
@@ -1010,7 +1070,7 @@ class RVUCounterApp:
             
             # If study is already active, update it (don't ignore)
             if accession in self.tracker.active_studies:
-                self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups)
+                self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
                 return
             
             # If study was already completed in this shift, ignore it
@@ -1019,7 +1079,7 @@ class RVUCounterApp:
                 return
             
             # New study - add it
-            self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups)
+            self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
             self.tracker.mark_seen(accession)
             
             if self.is_running:
@@ -1031,6 +1091,7 @@ class RVUCounterApp:
             # Clear debug on error
             self.current_accession = ""
             self.current_procedure = ""
+            self.current_patient_class = ""
             self.current_study_type = ""
             self.update_debug_display()
     
@@ -1053,6 +1114,7 @@ class RVUCounterApp:
             self.root.title("RVU Counter - Stopped")
             self.shift_start = None
             self.update_shift_start_label()
+            self.update_recent_studies_label()
             self.data_manager.save()
             logger.info("Shift stopped")
         else:
@@ -1075,6 +1137,7 @@ class RVUCounterApp:
             # Force widget rebuild by setting last_record_count to -1 (different from 0)
             self.last_record_count = -1
             self.update_shift_start_label()
+            self.update_recent_studies_label()
             self.data_manager.save()
             logger.info(f"Shift started at {self.shift_start}")
             self.update_display()
@@ -1177,8 +1240,18 @@ class RVUCounterApp:
         widget.bind('<Enter>', on_enter)
         widget.bind('<Leave>', on_leave)
     
+    def update_recent_studies_label(self):
+        """Update the Recent Studies label based on shift status."""
+        if self.is_running and self.shift_start:
+            self.recent_frame.config(text="Recent Studies", style="TLabelframe")
+        else:
+            self.recent_frame.config(text="Temporary Recent - No shift started", style="Red.TLabelframe")
+    
     def update_display(self):
         """Update the display with current statistics."""
+        # Update recent studies label based on shift status
+        self.update_recent_studies_label()
+        
         # Only rebuild widgets if record count changed
         current_count = len(self.data_manager.data["current_shift"]["records"])
         rebuild_widgets = (current_count != self.last_record_count)
@@ -1305,6 +1378,7 @@ class RVUCounterApp:
         if is_na or not self.current_procedure:
             self.debug_accession_label.config(text="")
             self.debug_procedure_label.config(text="")
+            self.debug_patient_class_label.config(text="")
             self.debug_study_type_label.config(text="")
             self.debug_study_rvu_label.config(text="")
         else:
@@ -1312,6 +1386,7 @@ class RVUCounterApp:
             # Truncate procedure to fit
             procedure_display = self.current_procedure[:35] + "..." if len(self.current_procedure) > 35 else self.current_procedure
             self.debug_procedure_label.config(text=f"Procedure: {procedure_display if procedure_display else '-'}")
+            self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
                 study_type_display = self.current_study_type[:13] + "..." if len(self.current_study_type) > 13 else self.current_study_type
