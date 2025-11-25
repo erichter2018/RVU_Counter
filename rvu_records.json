@@ -1,104 +1,68 @@
 {
   "records": [],
   "current_shift": {
-    "shift_start": "2025-11-24T08:01:07.142670",
-    "shift_end": "2025-11-24T23:48:33.758031",
+    "shift_start": "2025-11-25T08:04:44.884912",
+    "shift_end": "2025-11-25T08:08:34.737230",
     "records": [
       {
-        "accession": "45629370000600CBMC, 45629370000700CBMC",
-        "procedure": "Multiple XR (2 studies)",
-        "patient_class": "Outpatient",
-        "study_type": "Multiple XR",
-        "rvu": 0.6,
-        "time_performed": "2025-11-24T21:38:22.859824",
-        "time_finished": "2025-11-24T21:38:38.037307",
-        "duration_seconds": 15.177483,
-        "is_multi_accession": true,
-        "accession_count": 2,
-        "individual_procedures": [
-          "XR HUMERUS",
-          "XR SHOULDER 2 OR MORE VIEWS"
-        ]
+        "accession": "62-MR-25-004512DL",
+        "procedure": "MR BRAIN WITHOUT IV CONTRAST",
+        "patient_class": "Inpatient",
+        "study_type": "MRI Other",
+        "rvu": 1.75,
+        "time_performed": "2025-11-25T08:04:53.984722",
+        "time_finished": "2025-11-25T08:05:08.084808",
+        "duration_seconds": 14.100086
       },
       {
-        "accession": "45629150000100CBMC",
-        "procedure": "CT ABDOMEN WITHOUT IV CONTRAST",
-        "patient_class": "Outpatient",
-        "study_type": "CT Other",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T22:01:21.433591",
-        "time_finished": "2025-11-24T22:01:25.111366",
-        "duration_seconds": 3.677775
-      },
-      {
-        "accession": "45629320000100CBMC",
-        "procedure": "XR WRIST 3 OR MORE VIEWS",
+        "accession": "AHS27180277LLHS",
+        "procedure": "XR HAND 3 OR MORE VIEWS LEFT",
         "patient_class": "Outpatient",
         "study_type": "XR Other",
         "rvu": 0.3,
-        "time_performed": "2025-11-24T22:01:55.204212",
-        "time_finished": "2025-11-24T22:01:59.121301",
-        "duration_seconds": 3.917089
+        "time_performed": "2025-11-25T08:05:22.271352",
+        "time_finished": "2025-11-25T08:05:30.330747",
+        "duration_seconds": 8.059395
       },
       {
-        "accession": "45630290001500CBMC",
-        "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+        "accession": "AHS26893554LLHS",
+        "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
         "patient_class": "Outpatient",
-        "study_type": "CT Chest",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T22:06:36.760558",
-        "time_finished": "2025-11-24T22:07:11.625862",
-        "duration_seconds": 34.865304
+        "study_type": "CT AP",
+        "rvu": 1.68,
+        "time_performed": "2025-11-25T08:05:46.513059",
+        "time_finished": "2025-11-25T08:06:08.194456",
+        "duration_seconds": 21.681397
       },
       {
-        "accession": "AHS27181178LLHS",
-        "procedure": "US LOWER EXTREMITY ARTERIES BILATERAL",
-        "patient_class": "Inpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-24T22:52:50.599661",
-        "time_finished": "2025-11-24T22:53:55.750369",
-        "duration_seconds": 65.150708
-      },
-      {
-        "accession": "AHS27181178LLHS",
-        "procedure": "US LOWER EXTREMITY ARTERIES BILATERAL",
-        "patient_class": "Inpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-24T23:13:44.834315",
-        "time_finished": "2025-11-24T23:14:32.213507",
-        "duration_seconds": 47.379192
-      },
-      {
-        "accession": "001923435MLC",
-        "procedure": "XR KNEE 1-2 VIEWS LEFT",
-        "patient_class": "Outpatient",
-        "study_type": "XR Other",
-        "rvu": 0.3,
-        "time_performed": "2025-11-24T23:15:14.750968",
-        "time_finished": "2025-11-24T23:15:30.891229",
-        "duration_seconds": 16.140261
-      },
-      {
-        "accession": "02XR250018429TCR",
-        "procedure": "XR CHEST 2 VIEWS",
-        "patient_class": "Outpatient",
+        "accession": "62-XR-25-055354DL",
+        "procedure": "XR CHEST 1 VIEW",
+        "patient_class": "Pre-admit",
         "study_type": "XR Chest",
         "rvu": 0.3,
-        "time_performed": "2025-11-24T23:15:46.334580",
-        "time_finished": "2025-11-24T23:16:01.460685",
-        "duration_seconds": 15.126105
+        "time_performed": "2025-11-25T08:06:22.376837",
+        "time_finished": "2025-11-25T08:07:15.793013",
+        "duration_seconds": 53.416176
       },
       {
-        "accession": "45629150000100CBMC",
-        "procedure": "CT ABDOMEN WITHOUT IV CONTRAST",
+        "accession": "AHS27179862LLHS",
+        "procedure": "XR BONE AGE HAND",
         "patient_class": "Outpatient",
-        "study_type": "CT Other",
-        "rvu": 1.0,
-        "time_performed": "2025-11-24T23:16:26.759157",
-        "time_finished": "2025-11-24T23:16:55.002247",
-        "duration_seconds": 28.24309
+        "study_type": "XR Other",
+        "rvu": 0.3,
+        "time_performed": "2025-11-25T08:07:28.956849",
+        "time_finished": "2025-11-25T08:07:36.012088",
+        "duration_seconds": 7.055239
+      },
+      {
+        "accession": "4002532800624NMCH",
+        "procedure": "XR FEMUR LEFT",
+        "patient_class": "Inpatient",
+        "study_type": "XR Other",
+        "rvu": 0.3,
+        "time_performed": "2025-11-25T08:07:48.173459",
+        "time_finished": "2025-11-25T08:07:57.243821",
+        "duration_seconds": 9.070362
       }
     ]
   },

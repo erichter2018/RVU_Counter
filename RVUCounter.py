@@ -1293,10 +1293,6 @@ class RVUCounterApp:
                 self.current_study_rvu = 0.0
             
             self.update_debug_display()
-            
-            # Only process if shift is running
-            if not self.is_running:
-                return
         
             current_time = datetime.now()
             
@@ -1433,8 +1429,14 @@ class RVUCounterApp:
             self.shift_start = None
             self.update_shift_start_label()
             self.update_recent_studies_label()
+            # Clear the recent studies display (data is preserved in file)
+            for widget in self.study_widgets:
+                widget.destroy()
+            self.study_widgets.clear()
             self.data_manager.save()
             logger.info("Shift stopped")
+            # Update counters to zero but don't rebuild recent studies list
+            self._update_counters_only()
         else:
             # End previous shift if it exists
             if self.data_manager.data["current_shift"].get("shift_start"):
@@ -1619,9 +1621,32 @@ class RVUCounterApp:
     def update_recent_studies_label(self):
         """Update the Recent Studies label based on shift status."""
         if self.is_running and self.shift_start:
-            self.recent_frame.config(text="Recent Studies", style="TLabelframe")
+            self.recent_frame.config(text="Recent Studies")
         else:
             self.recent_frame.config(text="Temporary Recent - No shift started", style="Red.TLabelframe")
+    
+    def _update_counters_only(self):
+        """Update just the counter displays to zero (used when shift ends)."""
+        self.update_recent_studies_label()
+        settings = self.data_manager.data["settings"]
+        
+        # Set all counters to 0
+        if settings.get("show_total", True):
+            self.total_label.config(text="0.0")
+            self.total_comp_label.config(text="")
+        if settings.get("show_avg", True):
+            self.avg_label.config(text="0.0")
+            self.avg_comp_label.config(text="")
+        if settings.get("show_last_hour", True):
+            self.last_hour_label.config(text="0.0")
+            self.last_hour_comp_label.config(text="")
+        if settings.get("show_last_full_hour", True):
+            self.last_full_hour_label.config(text="0.0")
+            self.last_full_hour_label_text.config(text="Hour:")
+            self.last_full_hour_comp_label.config(text="")
+        if settings.get("show_projected", True):
+            self.projected_label.config(text="0.0")
+            self.projected_comp_label.config(text="")
     
     def update_display(self):
         """Update the display with current statistics."""
@@ -2284,6 +2309,8 @@ class StatisticsWindow:
                        value="by_modality", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Patient Class", variable=self.view_mode,
                        value="by_patient_class", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="By Study Type", variable=self.view_mode,
+                       value="by_study_type", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
                        value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         
@@ -2339,9 +2366,10 @@ class StatisticsWindow:
                 shift_copy["date"] = "Unknown"
             shifts.append(shift_copy)
         
-        # Add current shift if it has data
+        # Add current shift only if it's actually running (has shift_start but NO shift_end)
         current_shift = self.data_manager.data.get("current_shift", {})
-        if current_shift.get("records"):
+        shift_is_active = current_shift.get("shift_start") and not current_shift.get("shift_end")
+        if current_shift.get("records") and shift_is_active:
             shifts.append({
                 "date": "current",
                 "shift_start": current_shift.get("shift_start", ""),
@@ -2562,6 +2590,8 @@ class StatisticsWindow:
             self._display_by_modality(records)
         elif view_mode == "by_patient_class":
             self._display_by_patient_class(records)
+        elif view_mode == "by_study_type":
+            self._display_by_study_type(records)
         else:  # summary
             self._display_summary(records)
         
@@ -2584,11 +2614,11 @@ class StatisticsWindow:
         self.tree.heading("avg_rvu", text="Avg/Study")
         self.tree.heading("top_modality", text="Top Modality")
         
-        self.tree.column("hour", width=120, anchor=tk.W)
+        self.tree.column("hour", width=120, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
         self.tree.column("rvu", width=80, anchor=tk.CENTER)
         self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("top_modality", width=120, anchor=tk.W)
+        self.tree.column("top_modality", width=120, anchor=tk.CENTER)
         
         # Group by hour
         hour_data = {}
@@ -2665,7 +2695,7 @@ class StatisticsWindow:
         self.tree.heading("pct_studies", text="% Studies")
         self.tree.heading("pct_rvu", text="% RVU")
         
-        self.tree.column("modality", width=100, anchor=tk.W)
+        self.tree.column("modality", width=100, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
         self.tree.column("rvu", width=80, anchor=tk.CENTER)
         self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
@@ -2730,7 +2760,7 @@ class StatisticsWindow:
         self.tree.heading("pct_studies", text="% Studies")
         self.tree.heading("pct_rvu", text="% RVU")
         
-        self.tree.column("patient_class", width=120, anchor=tk.W)
+        self.tree.column("patient_class", width=120, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
         self.tree.column("rvu", width=80, anchor=tk.CENTER)
         self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
@@ -2786,6 +2816,73 @@ class StatisticsWindow:
                 "100%"
             ))
     
+    def _display_by_study_type(self, records: List[dict]):
+        """Display data broken down by study type."""
+        # Configure columns
+        self.tree["columns"] = ("study_type", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
+        self.tree.heading("study_type", text="Study Type")
+        self.tree.heading("studies", text="Studies")
+        self.tree.heading("rvu", text="RVU")
+        self.tree.heading("avg_rvu", text="Avg/Study")
+        self.tree.heading("pct_studies", text="% Studies")
+        self.tree.heading("pct_rvu", text="% RVU")
+        
+        self.tree.column("study_type", width=150, anchor=tk.CENTER)
+        self.tree.column("studies", width=80, anchor=tk.CENTER)
+        self.tree.column("rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        
+        # Group by study type
+        type_data = {}
+        total_studies = 0
+        total_rvu = 0
+        
+        for record in records:
+            # Handle missing study_type (historical data may not have it)
+            study_type = record.get("study_type", "").strip()
+            if not study_type:
+                study_type = "(Unknown)"
+            rvu = record.get("rvu", 0)
+            
+            if study_type not in type_data:
+                type_data[study_type] = {"studies": 0, "rvu": 0}
+            
+            type_data[study_type]["studies"] += 1
+            type_data[study_type]["rvu"] += rvu
+            total_studies += 1
+            total_rvu += rvu
+        
+        # Sort by RVU (highest first) and display
+        for study_type in sorted(type_data.keys(), key=lambda k: type_data[k]["rvu"], reverse=True):
+            data = type_data[study_type]
+            avg_rvu = data["rvu"] / data["studies"] if data["studies"] > 0 else 0
+            pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
+            pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+            
+            self.tree.insert("", tk.END, values=(
+                study_type,
+                data["studies"],
+                f"{data['rvu']:.1f}",
+                f"{avg_rvu:.2f}",
+                f"{pct_studies:.1f}%",
+                f"{pct_rvu:.1f}%"
+            ))
+        
+        # Add totals row
+        if type_data:
+            self.tree.insert("", tk.END, values=("─" * 12, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
+            total_avg = total_rvu / total_studies if total_studies > 0 else 0
+            self.tree.insert("", tk.END, values=(
+                "TOTAL",
+                total_studies,
+                f"{total_rvu:.1f}",
+                f"{total_avg:.2f}",
+                "100%",
+                "100%"
+            ))
+    
     def _display_summary(self, records: List[dict]):
         """Display summary statistics."""
         # Configure columns
@@ -2793,8 +2890,8 @@ class StatisticsWindow:
         self.tree.heading("metric", text="Metric")
         self.tree.heading("value", text="Value")
         
-        self.tree.column("metric", width=250, anchor=tk.W)
-        self.tree.column("value", width=150, anchor=tk.E)
+        self.tree.column("metric", width=250, anchor=tk.CENTER)
+        self.tree.column("value", width=150, anchor=tk.CENTER)
         
         total_studies = len(records)
         total_rvu = sum(r.get("rvu", 0) for r in records)
