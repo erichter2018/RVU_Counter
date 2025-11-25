@@ -49,6 +49,56 @@
         "time_performed": "2025-11-24T22:06:36.760558",
         "time_finished": "2025-11-24T22:07:11.625862",
         "duration_seconds": 34.865304
+      },
+      {
+        "accession": "AHS27181178LLHS",
+        "procedure": "US LOWER EXTREMITY ARTERIES BILATERAL",
+        "patient_class": "Inpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-24T22:52:50.599661",
+        "time_finished": "2025-11-24T22:53:55.750369",
+        "duration_seconds": 65.150708
+      },
+      {
+        "accession": "AHS27181178LLHS",
+        "procedure": "US LOWER EXTREMITY ARTERIES BILATERAL",
+        "patient_class": "Inpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-24T23:13:44.834315",
+        "time_finished": "2025-11-24T23:14:32.213507",
+        "duration_seconds": 47.379192
+      },
+      {
+        "accession": "001923435MLC",
+        "procedure": "XR KNEE 1-2 VIEWS LEFT",
+        "patient_class": "Outpatient",
+        "study_type": "XR Other",
+        "rvu": 0.3,
+        "time_performed": "2025-11-24T23:15:14.750968",
+        "time_finished": "2025-11-24T23:15:30.891229",
+        "duration_seconds": 16.140261
+      },
+      {
+        "accession": "02XR250018429TCR",
+        "procedure": "XR CHEST 2 VIEWS",
+        "patient_class": "Outpatient",
+        "study_type": "XR Chest",
+        "rvu": 0.3,
+        "time_performed": "2025-11-24T23:15:46.334580",
+        "time_finished": "2025-11-24T23:16:01.460685",
+        "duration_seconds": 15.126105
+      },
+      {
+        "accession": "45629150000100CBMC",
+        "procedure": "CT ABDOMEN WITHOUT IV CONTRAST",
+        "patient_class": "Outpatient",
+        "study_type": "CT Other",
+        "rvu": 1.0,
+        "time_performed": "2025-11-24T23:16:26.759157",
+        "time_finished": "2025-11-24T23:16:55.002247",
+        "duration_seconds": 28.24309
       }
     ]
   },

@@ -11,6 +11,7 @@ from pywinauto import Desktop
 import json
 import logging
 import os
+import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
@@ -56,84 +57,88 @@ RVU_TABLE = {
 }
 
 
+# Global cached desktop object - creating Desktop() is slow
+_cached_desktop = None
+
 def find_powerscribe_window():
     """Find PowerScribe 360 window by title."""
-    desktop = Desktop(backend="uia")
+    global _cached_desktop
     
-    possible_titles = [
-        "PowerScribe 360 | Reporting",
-        "PowerScribe 360",
-        "PowerScribe",
-        "Reporting",
-        "PowerScribe 360 - Reporting"
-    ]
+    # Reuse cached Desktop object
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
     
-    for title in possible_titles:
+    # Try exact title first (fastest)
+    try:
+        windows = desktop.windows(title="PowerScribe 360 | Reporting", visible_only=True)
+        if windows:
+            return windows[0]
+    except:
+        pass
+    
+    # Try other common titles
+    for title in ["PowerScribe 360", "PowerScribe 360 - Reporting"]:
         try:
-            windows = desktop.windows(title_re=title, visible_only=True)
+            windows = desktop.windows(title=title, visible_only=True)
             for window in windows:
                 try:
-                    window_text = window.window_text()
-                    if "RVU Counter" not in window_text:
+                    if "RVU Counter" not in window.window_text():
                         return window
                 except:
                     continue
         except:
             continue
     
-    # Fallback search
-    try:
-        all_windows = desktop.windows(visible_only=True)
-        for window in all_windows:
-            try:
-                window_text = window.window_text().lower()
-                if ("powerscribe" in window_text or "reporting" in window_text) and "rvu counter" not in window_text:
-                    return window
-            except:
-                continue
-    except:
-        pass
-    
     return None
 
 
-def find_elements_by_automation_id(window, automation_ids: List[str]) -> Dict[str, any]:
-    """Find elements by Automation ID."""
-    found_elements = {}
-    remaining_ids = set(automation_ids)
+def find_elements_by_automation_id(window, automation_ids: List[str], cached_elements: Dict = None) -> Dict[str, any]:
+    """Find elements by Automation ID - optimized for speed.
     
-    def search_by_id(element):
-        nonlocal remaining_ids
-        if not remaining_ids:
-            return
-        
-        try:
-            automation_id = element.element_info.automation_id
-            if automation_id and automation_id in remaining_ids:
-                try:
-                    text_content = element.window_text()
-                except:
-                    text_content = ""
-
-                found_elements[automation_id] = {
-                    'element': element,
+    Uses cached elements when available (instant).
+    Falls back to descendants search if direct lookup fails.
+    """
+    found_elements = {}
+    ids_needing_search = []
+    
+    for auto_id in automation_ids:
+        # Try cache first (instant)
+        if cached_elements and auto_id in cached_elements:
+            try:
+                cached_elem = cached_elements[auto_id]['element']
+                text_content = cached_elem.window_text()
+                found_elements[auto_id] = {
+                    'element': cached_elem,
                     'text': text_content.strip() if text_content else '',
                 }
-                remaining_ids.remove(automation_id)
-                if not remaining_ids:
-                    return
-        except:
-            pass
-
+                continue  # Got it from cache, next element
+            except:
+                pass  # Cache invalid, need to search
+        
+        ids_needing_search.append(auto_id)
+    
+    # If we need to search for any elements, do a single descendants() call
+    if ids_needing_search:
         try:
-            children = element.children()
-            for child in children:
-                if remaining_ids:
-                    search_by_id(child)
+            remaining = set(ids_needing_search)
+            for element in window.descendants():
+                if not remaining:
+                    break
+                try:
+                    elem_auto_id = element.element_info.automation_id
+                    if elem_auto_id and elem_auto_id in remaining:
+                        text_content = element.window_text()
+                        found_elements[elem_auto_id] = {
+                            'element': element,
+                            'text': text_content.strip() if text_content else '',
+                        }
+                        remaining.remove(elem_auto_id)
+                except:
+                    pass
         except:
             pass
     
-    search_by_id(window)
     return found_elements
 
 
@@ -312,31 +317,73 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     return "Unknown", 0.0
 
 
+def get_app_paths():
+    """Get the correct paths for bundled app vs running as script.
+    
+    Returns:
+        tuple: (settings_dir, data_dir)
+        - settings_dir: Where bundled settings file is (read-only in bundle)
+        - data_dir: Where to store persistent data (records, window positions)
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as PyInstaller bundle
+        # Settings are bundled in _MEIPASS (temp folder)
+        settings_dir = sys._MEIPASS
+        # Data should be stored next to the .exe for persistence
+        data_dir = os.path.dirname(sys.executable)
+        logger.info(f"Running as frozen app: settings={settings_dir}, data={data_dir}")
+    else:
+        # Running as script
+        settings_dir = os.path.dirname(__file__)
+        data_dir = os.path.dirname(__file__)
+        logger.info(f"Running as script: settings={settings_dir}, data={data_dir}")
+    return settings_dir, data_dir
+
+
 class RVUData:
     """Manages data persistence with separate files for settings and records."""
     
     def __init__(self, base_dir: str = None):
-        if base_dir is None:
-            base_dir = os.path.dirname(__file__)
-        self.settings_file = os.path.join(base_dir, "rvu_settings.json")
-        self.records_file = os.path.join(base_dir, "rvu_records.json")
-        self.old_data_file = os.path.join(base_dir, "rvu_data.json")  # For migration
+        settings_dir, data_dir = get_app_paths()
         
-        # Load data from both files
+        # Bundled settings file (RVU tables, rules, rates) - read-only in bundle
+        self.settings_file = os.path.join(settings_dir, "rvu_settings.json")
+        # User settings file (preferences, window positions) - writable
+        self.user_settings_file = os.path.join(data_dir, "user_settings.json")
+        # Records file - persistent data (store next to exe or script)
+        self.records_file = os.path.join(data_dir, "rvu_records.json")
+        self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
+        
+        # Track if running as frozen app
+        self.is_frozen = getattr(sys, 'frozen', False)
+        
+        logger.info(f"Settings file: {self.settings_file}")
+        logger.info(f"User settings file: {self.user_settings_file}")
+        logger.info(f"Records file: {self.records_file}")
+        
+        # Load data from files
         self.settings_data = self.load_settings()
+        self.user_settings_data = self.load_user_settings()
         self.records_data = self.load_records()
         
         # Migrate old file if it exists
         self.migrate_old_file()
         
+        # Merge bundled settings with user settings (user settings override)
+        merged_settings = self.settings_data.get("settings", {}).copy()
+        merged_settings.update(self.user_settings_data.get("settings", {}))
+        
+        merged_window_positions = self.settings_data.get("window_positions", {}).copy()
+        merged_window_positions.update(self.user_settings_data.get("window_positions", {}))
+        
         # Merge into single data structure for compatibility
         self.data = {
-            "settings": self.settings_data.get("settings", {}),
+            "settings": merged_settings,
             "direct_lookups": self.settings_data.get("direct_lookups", {}),
             "rvu_table": self.settings_data.get("rvu_table", {}),
             "classification_rules": self.settings_data.get("classification_rules", {}),
             "compensation_rates": self.settings_data.get("compensation_rates", {}),
-            "window_positions": self.settings_data.get("window_positions", {}),
+            "window_positions": merged_window_positions,
             "records": self.records_data.get("records", []),
             "current_shift": self.records_data.get("current_shift", {
                 "shift_start": None,
@@ -377,6 +424,20 @@ class RVUData:
                 "settings": {"x": 200, "y": 200}
             }
         }
+    
+    def load_user_settings(self) -> dict:
+        """Load user-specific settings (preferences, window positions)."""
+        try:
+            if os.path.exists(self.user_settings_file):
+                with open(self.user_settings_file, 'r') as f:
+                    data = json.load(f)
+                    logger.info(f"Loaded user settings from {self.user_settings_file}")
+                    return data
+        except Exception as e:
+            logger.error(f"Error loading user settings: {e}")
+        
+        # Return empty structure - will use bundled defaults
+        return {"settings": {}, "window_positions": {}}
     
     def load_records(self) -> dict:
         """Load records, current shift, and historical shifts."""
@@ -456,6 +517,7 @@ class RVUData:
         # Update internal data structures from merged data
         if "settings" in self.data:
             self.settings_data["settings"] = self.data["settings"]
+            self.user_settings_data["settings"] = self.data["settings"]
         if "direct_lookups" in self.data:
             self.settings_data["direct_lookups"] = self.data["direct_lookups"]
         if "rvu_table" in self.data:
@@ -464,6 +526,7 @@ class RVUData:
             self.settings_data["classification_rules"] = self.data["classification_rules"]
         if "window_positions" in self.data:
             self.settings_data["window_positions"] = self.data["window_positions"]
+            self.user_settings_data["window_positions"] = self.data["window_positions"]
         
         if "records" in self.data:
             self.records_data["records"] = self.data["records"]
@@ -472,20 +535,34 @@ class RVUData:
         if "shifts" in self.data:
             self.records_data["shifts"] = self.data["shifts"]
         
-        # Save settings file
+        # Save user settings file (preferences, window positions) - always writable
         try:
-            settings_to_save = {
-                "settings": self.settings_data.get("settings", {}),
-                "direct_lookups": self.settings_data.get("direct_lookups", {}),
-                "rvu_table": self.settings_data.get("rvu_table", {}),
-                "classification_rules": self.settings_data.get("classification_rules", {}),
-                "window_positions": self.settings_data.get("window_positions", {})
+            user_settings_to_save = {
+                "settings": self.user_settings_data.get("settings", {}),
+                "window_positions": self.user_settings_data.get("window_positions", {})
             }
-            with open(self.settings_file, 'w') as f:
-                json.dump(settings_to_save, f, indent=2, default=str)
-            logger.info(f"Saved settings to {self.settings_file}")
+            with open(self.user_settings_file, 'w') as f:
+                json.dump(user_settings_to_save, f, indent=2, default=str)
+            logger.info(f"Saved user settings to {self.user_settings_file}")
         except Exception as e:
-            logger.error(f"Error saving settings: {e}")
+            logger.error(f"Error saving user settings: {e}")
+        
+        # Only save to bundled settings file if running as script (not frozen)
+        if not self.is_frozen:
+            try:
+                settings_to_save = {
+                    "settings": self.settings_data.get("settings", {}),
+                    "direct_lookups": self.settings_data.get("direct_lookups", {}),
+                    "rvu_table": self.settings_data.get("rvu_table", {}),
+                    "classification_rules": self.settings_data.get("classification_rules", {}),
+                    "compensation_rates": self.settings_data.get("compensation_rates", {}),
+                    "window_positions": self.settings_data.get("window_positions", {})
+                }
+                with open(self.settings_file, 'w') as f:
+                    json.dump(settings_to_save, f, indent=2, default=str)
+                logger.info(f"Saved settings to {self.settings_file}")
+            except Exception as e:
+                logger.error(f"Error saving settings: {e}")
         
         # Save records file
         try:
@@ -680,6 +757,14 @@ class RVUCounterApp:
         self.cached_window = None
         self.cached_elements = {}  # automation_id -> element reference
         self.last_record_count = 0  # Track when to rebuild widgets
+        self.no_report_skip_count = 0  # Skip expensive searches when no report is open
+        
+        # Background thread for PowerScribe operations
+        self._ps_lock = threading.Lock()
+        self._ps_data = {}  # Data from PowerScribe (updated by background thread)
+        self._ps_thread_running = True
+        self._ps_thread = threading.Thread(target=self._powerscribe_worker, daemon=True)
+        self._ps_thread.start()
         
         # Create UI
         self.create_ui()
@@ -978,161 +1063,182 @@ class RVUCounterApp:
         logger.info(f"Recorded multi-accession study: {len(all_accessions)} accessions - Multiple {modality} ({total_rvu:.1f} RVU) - Duration: {duration:.1f}s")
         self.update_display()
     
+    def _powerscribe_worker(self):
+        """Background thread: Continuously poll PowerScribe for data."""
+        import time
+        
+        while self._ps_thread_running:
+            try:
+                data = {
+                    'found': False,
+                    'procedure': '',
+                    'accession': '',
+                    'patient_class': '',
+                    'accession_title': '',
+                    'multiple_accessions': [],
+                    'elements': {}
+                }
+                
+                # Find window
+                window = self.cached_window
+                if not window:
+                    window = find_powerscribe_window()
+                
+                if window:
+                    # Validate window still exists
+                    try:
+                        window.window_text()
+                        self.cached_window = window
+                    except:
+                        self.cached_window = None
+                        self.cached_elements = {}
+                        window = find_powerscribe_window()
+                
+                if window:
+                    data['found'] = True
+                    
+                    # Find elements with caching
+                    elements = find_elements_by_automation_id(
+                        window,
+                        ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
+                        self.cached_elements
+                    )
+                    self.cached_elements.update(elements)
+                    
+                    data['elements'] = elements
+                    data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
+                    data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
+                    data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+                    data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
+                    
+                    # Handle multiple accessions
+                    if elements.get("listBoxAccessions"):
+                        try:
+                            listbox = elements["listBoxAccessions"]["element"]
+                            for child in listbox.children():
+                                try:
+                                    item_text = child.window_text().strip()
+                                    if item_text:
+                                        data['multiple_accessions'].append(item_text)
+                                except:
+                                    pass
+                        except:
+                            pass
+                
+                # Update shared data (thread-safe)
+                with self._ps_lock:
+                    self._ps_data = data
+                    
+            except Exception as e:
+                logger.debug(f"PowerScribe worker error: {e}")
+            
+            time.sleep(0.5)  # Poll every 500ms
+    
     def refresh_data(self):
-        """Refresh data from PowerScribe - optimized with caching."""
+        """Refresh data from PowerScribe - reads from background thread data."""
         try:
-            # Try to use cached window, only search if invalid
-            window = self.cached_window
-            if not window:
-                window = find_powerscribe_window()
-            if not window:
+            # Get data from background thread (non-blocking)
+            with self._ps_lock:
+                ps_data = self._ps_data.copy()
+            
+            if not ps_data.get('found', False):
                 self.root.title("RVU Counter - PowerScribe not found")
                 self.current_accession = ""
                 self.current_procedure = ""
                 self.current_study_type = ""
                 self.update_debug_display()
-                self.cached_window = None
-                self.cached_elements = {}
                 return
-            self.cached_window = window
             
-            # Validate cached window is still valid
-            try:
-                window.window_text()  # Test if window still exists
-            except:
-                # Window closed, clear cache and search again
-                self.cached_window = None
-                self.cached_elements = {}
-                window = find_powerscribe_window()
-                if not window:
-                    self.root.title("RVU Counter - PowerScribe not found")
-                    self.current_accession = ""
-                    self.current_procedure = ""
-                    self.current_study_type = ""
-                    self.update_debug_display()
-                    return
-                self.cached_window = window
+            self.root.title("RVU Counter")
             
-            self.current_window = window
-            
-            # Find elements - always check labelAccessionTitle to detect single vs multiple accessions
-            # This mode can change dynamically when accessions are added to a study
-            accession = ""
-            procedure = ""
-            patient_class = ""
-            multiple_accessions = []
-            
-            # Search for all needed elements including accession title for mode detection
-            elements = find_elements_by_automation_id(
-                window,
-                ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"]
-            )
-            
-            # Get procedure and patient class (these work the same in both modes)
-            procedure = elements.get("labelProcDescription", {}).get("text", "").strip()
-            patient_class = elements.get("labelPatientClass", {}).get("text", "").strip()
+            # Extract data from background thread results
+            elements = ps_data.get('elements', {})
+            procedure = ps_data.get('procedure', '')
+            patient_class = ps_data.get('patient_class', '')
+            accession_title = ps_data.get('accession_title', '')
+            accession = ps_data.get('accession', '')
+            multiple_accessions = ps_data.get('multiple_accessions', [])
             
             # Check labelAccessionTitle to determine single vs multiple accession mode
-            # "Accession" (singular) = single accession, use labelAccession
-            # "Accessions" (plural) = multiple accessions, use listBoxAccessions
-            accession_title = elements.get("labelAccessionTitle", {}).get("text", "").strip()
-            
-            
             is_multiple_mode = accession_title == "Accessions:" or accession_title == "Accessions"
             is_multi_accession_view = False  # Flag to prevent normal single-study tracking
             
-            if is_multiple_mode:
-                # MULTIPLE ACCESSIONS mode - get from listBoxAccessions children
-                if elements.get("listBoxAccessions"):
-                    listbox = elements["listBoxAccessions"]["element"]
-                    try:
-                        children = listbox.children()
-                        for child in children:
-                            try:
-                                item_text = child.window_text().strip()
-                                if item_text:
-                                    multiple_accessions.append(item_text)
-                            except:
-                                pass
-                    except:
-                        pass
+            if is_multiple_mode and multiple_accessions:
+                accession = "Multiple Accessions"
+                is_multi_accession_view = True  # Flag to prevent normal single-study tracking
                 
-                if multiple_accessions:
-                    accession = "Multiple Accessions"
-                    is_multi_accession_view = True  # Flag to prevent normal single-study tracking
+                # Check if we're transitioning from single to multi-accession
+                if not self.multi_accession_mode:
+                    # Check if ALL accessions were already completed (to prevent duplicates)
+                    ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+                    all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in multiple_accessions)
                     
-                    # Check if we're transitioning from single to multi-accession
-                    if not self.multi_accession_mode:
-                        # Check if ALL accessions were already completed (to prevent duplicates)
-                        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                        all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in multiple_accessions)
+                    if all_seen:
+                        # All accessions already completed - don't track again, but still display properly
+                        logger.info(f"Ignoring duplicate multi-accession study: all {len(multiple_accessions)} accessions already seen")
                         
-                        if all_seen:
-                            # All accessions already completed - don't track again, but still display properly
-                            logger.info(f"Ignoring duplicate multi-accession study: all {len(multiple_accessions)} accessions already seen")
-                            
-                            # Set display to show this is a completed multi-accession
-                            # Get modality from current procedure for display
-                            if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
-                                classification_rules = self.data_manager.data.get("classification_rules", {})
-                                direct_lookups = self.data_manager.data.get("direct_lookups", {})
-                                study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
-                                parts = study_type.split() if study_type else []
-                                modality = parts[0] if parts else "Studies"
-                                self.current_study_type = f"Multiple {modality} (done)"
-                                self.current_study_rvu = 0.0  # Already counted
-                        else:
-                            # Starting multi-accession mode
-                            self.multi_accession_mode = True
-                            self.multi_accession_start_time = datetime.now()
-                            self.multi_accession_data = {}
-                            self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
-                            
-                            # Check if any of the new accessions were being tracked as single
-                            # If so, migrate their data to multi-accession tracking
-                            for acc in multiple_accessions:
-                                if acc in self.tracker.active_studies:
-                                    study = self.tracker.active_studies[acc]
-                                    self.multi_accession_data[acc] = {
-                                        "procedure": study["procedure"],
-                                        "study_type": study["study_type"],
-                                        "rvu": study["rvu"],
-                                        "patient_class": study.get("patient_class", ""),
-                                    }
-                                    # Remove from active_studies to prevent completion
-                                    del self.tracker.active_studies[acc]
-                                    logger.info(f"Migrated {acc} from single to multi-accession tracking")
-                            
-                            logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
-                    
-                    # Collect procedure for current view - ONLY when procedure changes
-                    # This ensures we only collect when user clicks a different accession
-                    if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
-                        # Check if this is a NEW procedure (different from last seen)
-                        procedure_changed = (procedure != self.multi_accession_last_procedure)
-                        
-                        if procedure_changed:
+                        # Set display to show this is a completed multi-accession
+                        # Get modality from current procedure for display
+                        if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
                             classification_rules = self.data_manager.data.get("classification_rules", {})
                             direct_lookups = self.data_manager.data.get("direct_lookups", {})
                             study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
-                            
-                            # Find which accession this procedure belongs to
-                            # Assign to the first accession that doesn't have data yet
-                            for acc in multiple_accessions:
-                                if acc not in self.multi_accession_data:
-                                    self.multi_accession_data[acc] = {
-                                        "procedure": procedure,
-                                        "study_type": study_type,
-                                        "rvu": rvu,
-                                        "patient_class": patient_class,
-                                    }
-                                    logger.info(f"Collected procedure for {acc}: {procedure} ({rvu} RVU)")
-                                    break
-                            
-                            # Update last seen procedure
-                            self.multi_accession_last_procedure = procedure
-                else:
-                    accession = "Multiple (loading...)"
+                            parts = study_type.split() if study_type else []
+                            modality = parts[0] if parts else "Studies"
+                            self.current_study_type = f"Multiple {modality} (done)"
+                            self.current_study_rvu = 0.0  # Already counted
+                    else:
+                        # Starting multi-accession mode
+                        self.multi_accession_mode = True
+                        self.multi_accession_start_time = datetime.now()
+                        self.multi_accession_data = {}
+                        self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
+                        
+                        # Check if any of the new accessions were being tracked as single
+                        # If so, migrate their data to multi-accession tracking
+                        for acc in multiple_accessions:
+                            if acc in self.tracker.active_studies:
+                                study = self.tracker.active_studies[acc]
+                                self.multi_accession_data[acc] = {
+                                    "procedure": study["procedure"],
+                                    "study_type": study["study_type"],
+                                    "rvu": study["rvu"],
+                                    "patient_class": study.get("patient_class", ""),
+                                }
+                                # Remove from active_studies to prevent completion
+                                del self.tracker.active_studies[acc]
+                                logger.info(f"Migrated {acc} from single to multi-accession tracking")
+                        
+                        logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
+                
+                # Collect procedure for current view - ONLY when procedure changes
+                # This ensures we only collect when user clicks a different accession
+                if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
+                    # Check if this is a NEW procedure (different from last seen)
+                    procedure_changed = (procedure != self.multi_accession_last_procedure)
+                    
+                    if procedure_changed:
+                        classification_rules = self.data_manager.data.get("classification_rules", {})
+                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                        study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                        
+                        # Find which accession this procedure belongs to
+                        # Assign to the first accession that doesn't have data yet
+                        for acc in multiple_accessions:
+                            if acc not in self.multi_accession_data:
+                                self.multi_accession_data[acc] = {
+                                    "procedure": procedure,
+                                    "study_type": study_type,
+                                    "rvu": rvu,
+                                    "patient_class": patient_class,
+                                }
+                                logger.info(f"Collected procedure for {acc}: {procedure} ({rvu} RVU)")
+                                break
+                        
+                        # Update last seen procedure
+                        self.multi_accession_last_procedure = procedure
+            elif is_multiple_mode:
+                accession = "Multiple (loading...)"
             else:
                 # SINGLE ACCESSION mode - get from labelAccession
                 accession = elements.get("labelAccession", {}).get("text", "").strip()
