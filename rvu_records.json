@@ -3,7 +3,24 @@
   "current_shift": {
     "shift_start": "2025-11-24T08:01:07.142670",
     "shift_end": "2025-11-24T18:30:13.914540",
-    "records": []
+    "records": [
+      {
+        "accession": "45629370000600CBMC, 45629370000700CBMC",
+        "procedure": "Multiple XR (2 studies)",
+        "patient_class": "Outpatient",
+        "study_type": "Multiple XR",
+        "rvu": 0.6,
+        "time_performed": "2025-11-24T21:38:22.859824",
+        "time_finished": "2025-11-24T21:38:38.037307",
+        "duration_seconds": 15.177483,
+        "is_multi_accession": true,
+        "accession_count": 2,
+        "individual_procedures": [
+          "XR HUMERUS",
+          "XR SHOULDER 2 OR MORE VIEWS"
+        ]
+      }
+    ]
   },
   "shifts": [
     {

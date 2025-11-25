@@ -667,6 +667,13 @@ class RVUCounterApp:
         self.current_patient_class = ""
         self.current_study_type = ""
         self.current_study_rvu = 0.0
+        self.current_multiple_accessions = []  # List of accession numbers when multiple
+        
+        # Multi-accession tracking
+        self.multi_accession_data = {}  # accession -> {procedure, study_type, rvu, patient_class}
+        self.multi_accession_mode = False  # True when tracking a multi-accession study
+        self.multi_accession_start_time = None  # When we started tracking this multi-accession study
+        self.multi_accession_last_procedure = ""  # Last procedure seen in multi-accession mode
         
         # Cache for performance
         self.cached_window = None
@@ -886,6 +893,70 @@ class RVUCounterApp:
         self.refresh_data()
         self.root.after(self.refresh_interval, self.setup_refresh)
     
+    def _record_multi_accession_study(self, current_time):
+        """Record a completed multi-accession study."""
+        if not self.multi_accession_data:
+            return
+        
+        total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
+        
+        # Get modality from collected studies
+        modalities = set()
+        for d in self.multi_accession_data.values():
+            st = d["study_type"]
+            if st:
+                parts = st.split()
+                if parts:
+                    modalities.add(parts[0])
+        modality = list(modalities)[0] if modalities else "Studies"
+        
+        # Determine duration
+        if self.multi_accession_start_time:
+            duration = (current_time - self.multi_accession_start_time).total_seconds()
+        else:
+            duration = 0
+        
+        # Get all accession numbers
+        all_accessions = list(self.multi_accession_data.keys())
+        accession_str = ", ".join(all_accessions)
+        
+        # Get all procedures
+        all_procedures = [d["procedure"] for d in self.multi_accession_data.values()]
+        
+        # Get patient class from first entry
+        patient_class_val = ""
+        for d in self.multi_accession_data.values():
+            if d.get("patient_class"):
+                patient_class_val = d["patient_class"]
+                break
+        
+        study_record = {
+            "accession": accession_str,
+            "procedure": f"Multiple {modality} ({len(all_accessions)} studies)",
+            "patient_class": patient_class_val,
+            "study_type": f"Multiple {modality}",
+            "rvu": total_rvu,
+            "time_performed": self.multi_accession_start_time.isoformat() if self.multi_accession_start_time else current_time.isoformat(),
+            "time_finished": current_time.isoformat(),
+            "duration_seconds": duration,
+            "is_multi_accession": True,
+            "accession_count": len(all_accessions),
+            "individual_procedures": all_procedures,
+        }
+        
+        self.data_manager.data["current_shift"]["records"].append(study_record)
+        self.data_manager.save()
+        self.undo_used = False
+        self.undo_btn.config(state=tk.NORMAL)
+        
+        # Mark each individual accession as seen to prevent duplicates
+        for acc in all_accessions:
+            self.tracker.mark_seen(acc)
+            logger.debug(f"Marked accession as seen: {acc}")
+        
+        logger.info(f"Recorded multi-accession study: {len(all_accessions)} accessions - Multiple {modality} ({total_rvu:.1f} RVU) - Duration: {duration:.1f}s")
+        self.update_display()
+    
     def refresh_data(self):
         """Refresh data from PowerScribe - optimized with caching."""
         try:
@@ -923,69 +994,190 @@ class RVUCounterApp:
             
             self.current_window = window
             
-            # Find elements - try cached first, but always validate
+            # Find elements - always check labelAccessionTitle to detect single vs multiple accessions
+            # This mode can change dynamically when accessions are added to a study
             accession = ""
             procedure = ""
-            
-            # Try to use cached elements if available
             patient_class = ""
-            if self.cached_elements.get("labelAccession") and self.cached_elements.get("labelProcDescription"):
-                try:
-                    # Validate cached elements are still valid
-                    accession = self.cached_elements["labelAccession"].window_text().strip()
-                    procedure = self.cached_elements["labelProcDescription"].window_text().strip()
-                    if self.cached_elements.get("labelPatientClass"):
-                        patient_class = self.cached_elements["labelPatientClass"].window_text().strip()
-                except:
-                    # Elements invalid, clear cache and re-search
-                    self.cached_elements = {}
+            multiple_accessions = []
             
-            # If cache is empty or invalid, search for elements (only the ones we need)
-            if not self.cached_elements:
-                # Perform search for only the specific elements we need
-                elements = find_elements_by_automation_id(
-                    window,
-                    ["labelProcDescription", "labelAccession", "labelPatientClass"]
-                )
-                # Cache element references if found
-                if elements.get("labelAccession") and elements.get("labelProcDescription"):
-                    self.cached_elements = {
-                        "labelAccession": elements.get("labelAccession", {}).get("element"),
-                        "labelProcDescription": elements.get("labelProcDescription", {}).get("element"),
-                    }
-                    # Cache patient class if found
-                    if elements.get("labelPatientClass"):
-                        self.cached_elements["labelPatientClass"] = elements.get("labelPatientClass", {}).get("element")
-                    
-                    # Get text from newly found elements
+            # Search for all needed elements including accession title for mode detection
+            elements = find_elements_by_automation_id(
+                window,
+                ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"]
+            )
+            
+            # Get procedure and patient class (these work the same in both modes)
+            procedure = elements.get("labelProcDescription", {}).get("text", "").strip()
+            patient_class = elements.get("labelPatientClass", {}).get("text", "").strip()
+            
+            # Check labelAccessionTitle to determine single vs multiple accession mode
+            # "Accession" (singular) = single accession, use labelAccession
+            # "Accessions" (plural) = multiple accessions, use listBoxAccessions
+            accession_title = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+            
+            
+            is_multiple_mode = accession_title == "Accessions:" or accession_title == "Accessions"
+            is_multi_accession_view = False  # Flag to prevent normal single-study tracking
+            
+            if is_multiple_mode:
+                # MULTIPLE ACCESSIONS mode - get from listBoxAccessions children
+                if elements.get("listBoxAccessions"):
+                    listbox = elements["listBoxAccessions"]["element"]
                     try:
-                        accession = elements.get("labelAccession", {}).get("text", "").strip()
-                        procedure = elements.get("labelProcDescription", {}).get("text", "").strip()
-                        patient_class = elements.get("labelPatientClass", {}).get("text", "").strip() if elements.get("labelPatientClass") else ""
+                        children = listbox.children()
+                        for child in children:
+                            try:
+                                item_text = child.window_text().strip()
+                                if item_text:
+                                    multiple_accessions.append(item_text)
+                            except:
+                                pass
                     except:
-                        accession = ""
-                        procedure = ""
-                        patient_class = ""
+                        pass
+                
+                if multiple_accessions:
+                    accession = "Multiple Accessions"
+                    is_multi_accession_view = True  # Flag to prevent normal single-study tracking
+                    
+                    # Check if we're transitioning from single to multi-accession
+                    if not self.multi_accession_mode:
+                        # Check if ALL accessions were already completed (to prevent duplicates)
+                        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+                        all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in multiple_accessions)
+                        
+                        if all_seen:
+                            # All accessions already completed - don't track again, but still display properly
+                            logger.info(f"Ignoring duplicate multi-accession study: all {len(multiple_accessions)} accessions already seen")
+                            
+                            # Set display to show this is a completed multi-accession
+                            # Get modality from current procedure for display
+                            if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
+                                classification_rules = self.data_manager.data.get("classification_rules", {})
+                                direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                                study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                                parts = study_type.split() if study_type else []
+                                modality = parts[0] if parts else "Studies"
+                                self.current_study_type = f"Multiple {modality} (done)"
+                                self.current_study_rvu = 0.0  # Already counted
+                        else:
+                            # Starting multi-accession mode
+                            self.multi_accession_mode = True
+                            self.multi_accession_start_time = datetime.now()
+                            self.multi_accession_data = {}
+                            self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
+                            
+                            # Check if any of the new accessions were being tracked as single
+                            # If so, migrate their data to multi-accession tracking
+                            for acc in multiple_accessions:
+                                if acc in self.tracker.active_studies:
+                                    study = self.tracker.active_studies[acc]
+                                    self.multi_accession_data[acc] = {
+                                        "procedure": study["procedure"],
+                                        "study_type": study["study_type"],
+                                        "rvu": study["rvu"],
+                                        "patient_class": study.get("patient_class", ""),
+                                    }
+                                    # Remove from active_studies to prevent completion
+                                    del self.tracker.active_studies[acc]
+                                    logger.info(f"Migrated {acc} from single to multi-accession tracking")
+                            
+                            logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
+                    
+                    # Collect procedure for current view - ONLY when procedure changes
+                    # This ensures we only collect when user clicks a different accession
+                    if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
+                        # Check if this is a NEW procedure (different from last seen)
+                        procedure_changed = (procedure != self.multi_accession_last_procedure)
+                        
+                        if procedure_changed:
+                            classification_rules = self.data_manager.data.get("classification_rules", {})
+                            direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                            study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                            
+                            # Find which accession this procedure belongs to
+                            # Assign to the first accession that doesn't have data yet
+                            for acc in multiple_accessions:
+                                if acc not in self.multi_accession_data:
+                                    self.multi_accession_data[acc] = {
+                                        "procedure": procedure,
+                                        "study_type": study_type,
+                                        "rvu": rvu,
+                                        "patient_class": patient_class,
+                                    }
+                                    logger.info(f"Collected procedure for {acc}: {procedure} ({rvu} RVU)")
+                                    break
+                            
+                            # Update last seen procedure
+                            self.multi_accession_last_procedure = procedure
                 else:
-                    # Elements not found - that's fine, just use empty values
-                    # Don't cache "not found" state, always check next time
-                    accession = ""
-                    procedure = ""
-                    patient_class = ""
+                    accession = "Multiple (loading...)"
+            else:
+                # SINGLE ACCESSION mode - get from labelAccession
+                accession = elements.get("labelAccession", {}).get("text", "").strip()
+                
+                # If we were in multi-accession mode but now we're not, record and reset
+                if self.multi_accession_mode and self.multi_accession_data:
+                    # Record the multi-accession study before exiting
+                    current_time = datetime.now()
+                    self._record_multi_accession_study(current_time)
+                
+                # Reset multi-accession tracking
+                if self.multi_accession_mode:
+                    self.multi_accession_mode = False
+                    self.multi_accession_data = {}
+                    self.multi_accession_start_time = None
+                    self.multi_accession_last_procedure = ""
             
-            # Update debug display
+            # Update state
             self.current_accession = accession
             self.current_procedure = procedure
             self.current_patient_class = patient_class
+            self.current_multiple_accessions = multiple_accessions
             
             # Check if procedure is "n/a" (case-insensitive)
             is_na = procedure and procedure.strip().lower() in ["n/a", "na", "none", ""]
             
-            if procedure and not is_na:
+            # Determine study type and RVU for display
+            # Skip if already set for duplicate multi-accession
+            if is_multi_accession_view and not self.multi_accession_mode and self.current_study_type.startswith("Multiple"):
+                # Already set for duplicate multi-accession - keep it
+                pass
+            elif self.multi_accession_mode and multiple_accessions:
+                # Multi-accession mode display
+                collected_count = len(self.multi_accession_data)
+                total_count = len(multiple_accessions)
+                
+                if collected_count < total_count:
+                    # Incomplete - show current procedure info but mark as incomplete
+                    if procedure and not is_na:
+                        classification_rules = self.data_manager.data.get("classification_rules", {})
+                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                        study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                        self.current_study_type = f"incomplete ({collected_count}/{total_count})"
+                        self.current_study_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
+                    else:
+                        self.current_study_type = f"incomplete ({collected_count}/{total_count})"
+                        self.current_study_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
+                else:
+                    # Complete - show "Multiple {modality}"
+                    total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
+                    # Get modality from first study type
+                    modalities = set()
+                    for d in self.multi_accession_data.values():
+                        st = d["study_type"]
+                        if st:
+                            # Extract modality (first word usually)
+                            parts = st.split()
+                            if parts:
+                                modalities.add(parts[0])
+                    modality = list(modalities)[0] if modalities else "Studies"
+                    self.current_study_type = f"Multiple {modality}"
+                    self.current_study_rvu = total_rvu
+            elif procedure and not is_na:
                 classification_rules = self.data_manager.data.get("classification_rules", {})
                 direct_lookups = self.data_manager.data.get("direct_lookups", {})
                 study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
-                # Store type and RVU separately for display
                 self.current_study_type = study_type
                 self.current_study_rvu = rvu
                 logger.debug(f"Set current_study_type={study_type}, current_study_rvu={rvu}")
@@ -1001,36 +1193,55 @@ class RVUCounterApp:
         
             current_time = datetime.now()
             
-            # If procedure changed to "n/a", immediately complete all active studies
-            if is_na and self.tracker.active_studies:
-                logger.info("Procedure changed to N/A - completing all active studies")
-                # Mark all active studies as completed immediately
-                for acc, study in list(self.tracker.active_studies.items()):
-                    duration = (current_time - study["start_time"]).total_seconds()
-                    if duration >= self.tracker.min_seconds:
-                        completed_study = study.copy()
-                        completed_study["end_time"] = current_time
-                        completed_study["duration"] = duration
-                        study_record = {
-                            "accession": completed_study["accession"],
-                            "procedure": completed_study["procedure"],
-                            "patient_class": completed_study.get("patient_class", ""),
-                            "study_type": completed_study["study_type"],
-                            "rvu": completed_study["rvu"],
-                            "time_performed": completed_study["start_time"].isoformat(),
-                            "time_finished": completed_study["end_time"].isoformat(),
-                            "duration_seconds": completed_study["duration"],
-                        }
-                        self.data_manager.data["current_shift"]["records"].append(study_record)
-                        self.data_manager.save()
-                        self.undo_used = False
-                        self.undo_btn.config(state=tk.NORMAL)
-                        logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
-                # Clear all active studies
-                self.tracker.active_studies.clear()
-                self.update_display()
-                return  # Return after handling N/A case
+            # If procedure changed to "n/a", complete multi-accession study or all active studies
+            if is_na:
+                # First, handle multi-accession study completion
+                if self.multi_accession_mode and self.multi_accession_data:
+                    self._record_multi_accession_study(current_time)
+                    
+                    # Reset multi-accession tracking
+                    self.multi_accession_mode = False
+                    self.multi_accession_data = {}
+                    self.multi_accession_start_time = None
+                    self.multi_accession_last_procedure = ""
+                    return
+                
+                # Handle regular single-accession studies
+                if self.tracker.active_studies:
+                    logger.info("Procedure changed to N/A - completing all active studies")
+                    # Mark all active studies as completed immediately
+                    for acc, study in list(self.tracker.active_studies.items()):
+                        duration = (current_time - study["start_time"]).total_seconds()
+                        if duration >= self.tracker.min_seconds:
+                            completed_study = study.copy()
+                            completed_study["end_time"] = current_time
+                            completed_study["duration"] = duration
+                            study_record = {
+                                "accession": completed_study["accession"],
+                                "procedure": completed_study["procedure"],
+                                "patient_class": completed_study.get("patient_class", ""),
+                                "study_type": completed_study["study_type"],
+                                "rvu": completed_study["rvu"],
+                                "time_performed": completed_study["start_time"].isoformat(),
+                                "time_finished": completed_study["end_time"].isoformat(),
+                                "duration_seconds": completed_study["duration"],
+                            }
+                            self.data_manager.data["current_shift"]["records"].append(study_record)
+                            self.data_manager.save()
+                            self.undo_used = False
+                            self.undo_btn.config(state=tk.NORMAL)
+                            logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
+                    # Clear all active studies
+                    self.tracker.active_studies.clear()
+                    self.update_display()
+                    return  # Return after handling N/A case
         
+            # Skip normal study tracking when viewing a multi-accession study
+            # Multi-accession studies are handled separately above
+            # Also skip if we're viewing a multi-accession that we're ignoring as duplicate
+            if self.multi_accession_mode or is_multi_accession_view:
+                return
+            
             # Check for completed studies FIRST (before checking if we should ignore)
             # This handles studies that have disappeared
             completed = self.tracker.check_completed(current_time, accession)
@@ -1329,14 +1540,20 @@ class RVUCounterApp:
                 )
                 delete_btn.pack(side=tk.LEFT, padx=(2, 5))
                 
-                # Study text label (show actual procedure name, not normalized type, no accession)
-                procedure_name = record.get('procedure', record.get('study_type', 'Unknown'))
-                study_type = record.get('study_type', 'Unknown')
+                # Study text label (show actual procedure name, or "Multiple XR" for multi-accession)
+                is_multi = record.get('is_multi_accession', False)
+                if is_multi:
+                    # Multi-accession study - show "Multiple {modality}"
+                    procedure_name = record.get('study_type', 'Multiple Studies')
+                    study_type = procedure_name
+                else:
+                    procedure_name = record.get('procedure', record.get('study_type', 'Unknown'))
+                    study_type = record.get('study_type', 'Unknown')
                 
-                # Check if study starts with CT, MR, US, XR, or NM (case-insensitive)
+                # Check if study starts with CT, MR, US, XR, NM, or Multiple (case-insensitive)
                 procedure_upper = procedure_name.upper().strip()
                 study_type_upper = study_type.upper().strip()
-                valid_prefixes = ['CT', 'MR', 'US', 'XR', 'NM']
+                valid_prefixes = ['CT', 'MR', 'US', 'XR', 'NM', 'MULTIPLE']
                 starts_with_valid = any(procedure_upper.startswith(prefix) or study_type_upper.startswith(prefix) for prefix in valid_prefixes)
                 
                 # Truncate long procedure names to fit narrow window
@@ -1377,24 +1594,71 @@ class RVUCounterApp:
         
         if is_na or not self.current_procedure:
             self.debug_accession_label.config(text="")
-            self.debug_procedure_label.config(text="")
+            self.debug_procedure_label.config(text="", foreground="gray")
             self.debug_patient_class_label.config(text="")
             self.debug_study_type_label.config(text="")
             self.debug_study_rvu_label.config(text="")
         else:
-            self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
-            # Truncate procedure to fit
-            procedure_display = self.current_procedure[:35] + "..." if len(self.current_procedure) > 35 else self.current_procedure
-            self.debug_procedure_label.config(text=f"Procedure: {procedure_display if procedure_display else '-'}")
+            # Handle multi-accession display
+            if self.current_multiple_accessions:
+                # Multi-accession - either active or duplicate
+                # Show accession numbers
+                acc_display = ", ".join(self.current_multiple_accessions[:2])
+                if len(self.current_multiple_accessions) > 2:
+                    acc_display += f" (+{len(self.current_multiple_accessions) - 2})"
+                self.debug_accession_label.config(text=f"Accession: {acc_display}")
+                
+                if self.multi_accession_mode:
+                    # Active multi-accession tracking
+                    collected_count = len(self.multi_accession_data)
+                    total_count = len(self.current_multiple_accessions)
+                    
+                    if collected_count < total_count:
+                        # Incomplete - show in red
+                        self.debug_procedure_label.config(text=f"Procedure: incomplete ({collected_count}/{total_count})", foreground="red")
+                    else:
+                        # Complete - show "Multiple" with modality
+                        modalities = set()
+                        for d in self.multi_accession_data.values():
+                            st = d["study_type"]
+                            if st:
+                                parts = st.split()
+                                if parts:
+                                    modalities.add(parts[0])
+                        modality = list(modalities)[0] if modalities else "Studies"
+                        self.debug_procedure_label.config(text=f"Procedure: Multiple {modality}", foreground="gray")
+                else:
+                    # Duplicate multi-accession - already completed, extract modality from study type
+                    if self.current_study_type.startswith("Multiple"):
+                        self.debug_procedure_label.config(text=f"Procedure: {self.current_study_type}", foreground="gray")
+                    else:
+                        # Get modality from current procedure
+                        classification_rules = self.data_manager.data.get("classification_rules", {})
+                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                        study_type, _ = match_study_type(self.current_procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                        parts = study_type.split() if study_type else []
+                        modality = parts[0] if parts else "Studies"
+                        self.debug_procedure_label.config(text=f"Procedure: Multiple {modality} (done)", foreground="gray")
+            else:
+                self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
+                # Truncate procedure to fit
+                procedure_display = self.current_procedure[:35] + "..." if len(self.current_procedure) > 35 else self.current_procedure
+                self.debug_procedure_label.config(text=f"Procedure: {procedure_display if procedure_display else '-'}", foreground="gray")
+            
             self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
+            
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
                 study_type_display = self.current_study_type[:13] + "..." if len(self.current_study_type) > 13 else self.current_study_type
-                self.debug_study_type_label.config(text=f"Study Type: {study_type_display}")
+                # Check if incomplete (starts with "incomplete") - show in red
+                if self.current_study_type.startswith("incomplete"):
+                    self.debug_study_type_label.config(text=f"Study Type: {study_type_display}", foreground="red")
+                else:
+                    self.debug_study_type_label.config(text=f"Study Type: {study_type_display}", foreground="gray")
                 rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
                 self.debug_study_rvu_label.config(text=f"{rvu_value:.1f} RVU")
             else:
-                self.debug_study_type_label.config(text=f"Study Type: -")
+                self.debug_study_type_label.config(text=f"Study Type: -", foreground="gray")
                 self.debug_study_rvu_label.config(text="")
 
     def _format_hour_label(self, dt: datetime) -> str:

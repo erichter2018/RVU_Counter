@@ -6,7 +6,7 @@
     "show_last_hour": true,
     "show_last_full_hour": true,
     "show_projected": true,
-    "min_study_seconds": 5,
+    "min_study_seconds": 1,
     "ignore_duplicate_accessions": true
   },
   "direct_lookups": {
