@@ -13,7 +13,8 @@
     "show_comp_projected": true,
     "role": "Partner",
     "min_study_seconds": 1,
-    "ignore_duplicate_accessions": true
+    "ignore_duplicate_accessions": true,
+    "dark_mode": false
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -361,8 +362,8 @@
       "y": -289
     },
     "statistics": {
-      "x": 5299,
-      "y": -274
+      "x": 5249,
+      "y": -264
     }
   }
 }

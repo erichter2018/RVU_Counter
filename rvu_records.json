@@ -1,68 +1,38 @@
 {
   "records": [],
   "current_shift": {
-    "shift_start": "2025-11-25T08:04:44.884912",
-    "shift_end": "2025-11-25T08:08:34.737230",
+    "shift_start": null,
+    "shift_end": null,
     "records": [
       {
-        "accession": "62-MR-25-004512DL",
-        "procedure": "MR BRAIN WITHOUT IV CONTRAST",
-        "patient_class": "Inpatient",
-        "study_type": "MRI Other",
-        "rvu": 1.75,
-        "time_performed": "2025-11-25T08:04:53.984722",
-        "time_finished": "2025-11-25T08:05:08.084808",
-        "duration_seconds": 14.100086
-      },
-      {
-        "accession": "AHS27180277LLHS",
-        "procedure": "XR HAND 3 OR MORE VIEWS LEFT",
+        "accession": "356905220251124LH",
+        "procedure": "XR CHEST 2 VIEWS",
         "patient_class": "Outpatient",
-        "study_type": "XR Other",
-        "rvu": 0.3,
-        "time_performed": "2025-11-25T08:05:22.271352",
-        "time_finished": "2025-11-25T08:05:30.330747",
-        "duration_seconds": 8.059395
-      },
-      {
-        "accession": "AHS26893554LLHS",
-        "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
-        "patient_class": "Outpatient",
-        "study_type": "CT AP",
-        "rvu": 1.68,
-        "time_performed": "2025-11-25T08:05:46.513059",
-        "time_finished": "2025-11-25T08:06:08.194456",
-        "duration_seconds": 21.681397
-      },
-      {
-        "accession": "62-XR-25-055354DL",
-        "procedure": "XR CHEST 1 VIEW",
-        "patient_class": "Pre-admit",
         "study_type": "XR Chest",
         "rvu": 0.3,
-        "time_performed": "2025-11-25T08:06:22.376837",
-        "time_finished": "2025-11-25T08:07:15.793013",
-        "duration_seconds": 53.416176
+        "time_performed": "2025-11-25T09:36:09.426817",
+        "time_finished": "2025-11-25T09:36:22.504460",
+        "duration_seconds": 13.077643
       },
       {
-        "accession": "AHS27179862LLHS",
-        "procedure": "XR BONE AGE HAND",
+        "accession": "324XR25062397ELP",
+        "procedure": "XR CLAVICLE RIGHT",
         "patient_class": "Outpatient",
         "study_type": "XR Other",
         "rvu": 0.3,
-        "time_performed": "2025-11-25T08:07:28.956849",
-        "time_finished": "2025-11-25T08:07:36.012088",
-        "duration_seconds": 7.055239
+        "time_performed": "2025-11-25T09:36:36.627380",
+        "time_finished": "2025-11-25T09:36:47.679321",
+        "duration_seconds": 11.051941
       },
       {
-        "accession": "4002532800624NMCH",
-        "procedure": "XR FEMUR LEFT",
-        "patient_class": "Inpatient",
-        "study_type": "XR Other",
-        "rvu": 0.3,
-        "time_performed": "2025-11-25T08:07:48.173459",
-        "time_finished": "2025-11-25T08:07:57.243821",
-        "duration_seconds": 9.070362
+        "accession": "AHS26799264LLHS",
+        "procedure": "MR ABDOMEN WITHOUT THEN WITH IV CONTRAST",
+        "patient_class": "Outpatient",
+        "study_type": "MRI Other",
+        "rvu": 1.75,
+        "time_performed": "2025-11-25T09:37:06.903880",
+        "time_finished": "2025-11-25T09:37:13.951830",
+        "duration_seconds": 7.04795
       }
     ]
   },

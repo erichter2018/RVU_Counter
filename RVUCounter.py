@@ -800,9 +800,12 @@ class RVUCounterApp:
     
     def create_ui(self):
         """Create the user interface."""
-        # Create style for red label frame
-        style = ttk.Style()
-        style.configure("Red.TLabelframe.Label", foreground="red")
+        # Create style
+        self.style = ttk.Style()
+        self.style.configure("Red.TLabelframe.Label", foreground="red")
+        
+        # Apply theme based on settings
+        self.apply_theme()
         
         # Main frame
         main_frame = ttk.Frame(self.root, padding="5")
@@ -890,21 +893,21 @@ class RVUCounterApp:
         self.projected_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.projected_value_frame = projected_value_frame
         
-        # Buttons frame
+        # Buttons frame - centered
         buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill=tk.X, pady=5)
+        buttons_frame.pack(pady=5)
         
-        self.stats_btn = ttk.Button(buttons_frame, text="Statistics", command=self.open_statistics, width=12)
-        self.stats_btn.pack(side=tk.LEFT, padx=2)
+        self.stats_btn = ttk.Button(buttons_frame, text="Statistics", command=self.open_statistics, width=8)
+        self.stats_btn.pack(side=tk.LEFT, padx=3)
         
-        self.undo_btn = ttk.Button(buttons_frame, text="Undo", command=self.undo_last, width=12, state=tk.DISABLED)
-        self.undo_btn.pack(side=tk.LEFT, padx=2)
+        self.undo_btn = ttk.Button(buttons_frame, text="Undo", command=self.undo_last, width=6, state=tk.DISABLED)
+        self.undo_btn.pack(side=tk.LEFT, padx=3)
         
         # Track if undo has been used
         self.undo_used = False
         
-        self.settings_btn = ttk.Button(buttons_frame, text="Settings", command=self.open_settings, width=12)
-        self.settings_btn.pack(side=tk.LEFT, padx=2)
+        self.settings_btn = ttk.Button(buttons_frame, text="Settings", command=self.open_settings, width=8)
+        self.settings_btn.pack(side=tk.LEFT, padx=3)
         
         # Recent studies frame
         self.recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
@@ -914,7 +917,8 @@ class RVUCounterApp:
         canvas_frame = ttk.Frame(self.recent_frame)
         canvas_frame.pack(fill=tk.BOTH, expand=True)
         
-        canvas = tk.Canvas(canvas_frame, height=100, highlightthickness=0, bd=0)  # No border/highlight
+        canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
+        canvas = tk.Canvas(canvas_frame, height=100, highlightthickness=0, bd=0, bg=canvas_bg)
         scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
         self.studies_scrollable_frame = ttk.Frame(canvas)
         
@@ -1421,20 +1425,27 @@ class RVUCounterApp:
     def start_shift(self):
         """Start a new shift."""
         if self.is_running:
-            # Stop current shift
+            # Stop current shift - archive it immediately
             self.is_running = False
             self.data_manager.data["current_shift"]["shift_end"] = datetime.now().isoformat()
+            # Archive the shift to historical shifts
+            self.data_manager.end_current_shift()
+            # Clear current_shift completely so new studies are truly temporary
+            self.data_manager.data["current_shift"]["shift_start"] = None
+            self.data_manager.data["current_shift"]["shift_end"] = None
+            self.data_manager.data["current_shift"]["records"] = []
+            
             self.start_btn.config(text="Start Shift")
             self.root.title("RVU Counter - Stopped")
             self.shift_start = None
             self.update_shift_start_label()
             self.update_recent_studies_label()
-            # Clear the recent studies display (data is preserved in file)
+            # Clear the recent studies display (data is preserved in archived shift)
             for widget in self.study_widgets:
                 widget.destroy()
             self.study_widgets.clear()
             self.data_manager.save()
-            logger.info("Shift stopped")
+            logger.info("Shift stopped and archived")
             # Update counters to zero but don't rebuild recent studies list
             self._update_counters_only()
         else:
@@ -1744,14 +1755,24 @@ class RVUCounterApp:
                 study_frame = ttk.Frame(self.studies_scrollable_frame)
                 study_frame.pack(fill=tk.X, pady=1, padx=0)  # No horizontal padding
                 
-                # X button to delete (on the left)
-                delete_btn = ttk.Button(
+                # X button to delete (on the left) - use tk.Button for smaller size
+                colors = self.theme_colors
+                delete_btn = tk.Button(
                     study_frame, 
                     text="×", 
-                    width=2,
+                    font=("Arial", 7),
+                    width=1,
+                    height=1,
+                    padx=1,
+                    pady=0,
+                    bg=colors["delete_btn_bg"],
+                    fg=colors["delete_btn_fg"],
+                    activebackground=colors["button_active_bg"],
+                    activeforeground=colors["fg"],
+                    relief=tk.FLAT,
                     command=lambda idx=actual_index: self.delete_study_by_index(idx)
                 )
-                delete_btn.pack(side=tk.LEFT, padx=(2, 5))
+                delete_btn.pack(side=tk.LEFT, padx=(1, 3))
                 
                 # Study text label (show actual procedure name, or "Multiple XR" for multi-accession)
                 is_multi = record.get('is_multi_accession', False)
@@ -1889,6 +1910,137 @@ class RVUCounterApp:
         """Open statistics modal."""
         StatisticsWindow(self.root, self.data_manager, self)
     
+    def apply_theme(self):
+        """Apply light or dark theme based on settings."""
+        dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+        
+        # Use 'clam' theme for both modes to ensure consistent layout
+        # (Windows native theme ignores background colors and has different sizing)
+        self.style.theme_use('clam')
+        
+        if dark_mode:
+            # Dark mode colors
+            bg_color = "#1e1e1e"  # Almost black
+            fg_color = "#e0e0e0"  # Slightly off white
+            entry_bg = "#2d2d2d"
+            entry_fg = "#e0e0e0"
+            select_bg = "#4a4a4a"
+            button_bg = "#3d3d3d"
+            button_fg = "#e0e0e0"
+            button_active_bg = "#4a4a4a"
+            treeview_bg = "#252525"
+            treeview_fg = "#e0e0e0"
+            canvas_bg = "#1e1e1e"
+            comp_color = "#4ec94e"  # Lighter green for dark mode
+            delete_btn_bg = "#3d3d3d"
+            delete_btn_fg = "#aaaaaa"
+            border_color = "#555555"
+        else:
+            # Light mode colors
+            bg_color = "#f0f0f0"
+            fg_color = "black"
+            entry_bg = "white"
+            entry_fg = "black"
+            select_bg = "#0078d7"
+            button_bg = "#e1e1e1"
+            button_fg = "black"
+            button_active_bg = "#d0d0d0"
+            treeview_bg = "white"
+            treeview_fg = "black"
+            canvas_bg = "#f0f0f0"
+            comp_color = "dark green"
+            delete_btn_bg = "#f0f0f0"
+            delete_btn_fg = "gray"
+            border_color = "#acacac"
+        
+        # Store current theme colors for new widgets
+        self.theme_colors = {
+            "bg": bg_color,
+            "fg": fg_color,
+            "button_bg": button_bg,
+            "button_fg": button_fg,
+            "button_active_bg": button_active_bg,
+            "entry_bg": entry_bg,
+            "entry_fg": entry_fg,
+            "comp_color": comp_color,
+            "canvas_bg": canvas_bg,
+            "delete_btn_bg": delete_btn_bg,
+            "delete_btn_fg": delete_btn_fg,
+            "border_color": border_color,
+            "dark_mode": dark_mode
+        }
+        
+        # Configure root window
+        self.root.configure(bg=bg_color)
+        
+        # Configure ttk styles
+        self.style.configure(".", background=bg_color, foreground=fg_color)
+        self.style.configure("TFrame", background=bg_color)
+        self.style.configure("TLabel", background=bg_color, foreground=fg_color)
+        self.style.configure("TLabelframe", background=bg_color, bordercolor=border_color)
+        self.style.configure("TLabelframe.Label", background=bg_color, foreground=fg_color)
+        self.style.configure("TButton", background=button_bg, foreground=button_fg, bordercolor=border_color, padding=(5, 2))
+        self.style.map("TButton", 
+                       background=[("active", button_active_bg), ("pressed", button_active_bg)],
+                       foreground=[("active", fg_color), ("pressed", fg_color)])
+        self.style.configure("TCheckbutton", background=bg_color, foreground=fg_color)
+        self.style.map("TCheckbutton", background=[("active", bg_color)])
+        self.style.configure("TRadiobutton", background=bg_color, foreground=fg_color)
+        self.style.map("TRadiobutton", background=[("active", bg_color)])
+        self.style.configure("TEntry", fieldbackground=entry_bg, foreground=entry_fg, bordercolor=border_color)
+        self.style.configure("Treeview", background=treeview_bg, foreground=treeview_fg, fieldbackground=treeview_bg)
+        self.style.configure("Treeview.Heading", background=button_bg, foreground=fg_color)
+        self.style.map("Treeview", background=[("selected", select_bg)])
+        self.style.configure("TScrollbar", background=button_bg, troughcolor=bg_color, bordercolor=border_color)
+        self.style.configure("TPanedwindow", background=bg_color)
+        
+        # Keep red style for temporary recent studies label
+        self.style.configure("Red.TLabelframe.Label", foreground="red", background=bg_color)
+        
+        # Update tk widgets (non-ttk) if they exist
+        self._update_tk_widget_colors()
+    
+    def _update_tk_widget_colors(self):
+        """Update colors for tk (non-ttk) widgets."""
+        colors = getattr(self, 'theme_colors', None)
+        if not colors:
+            return
+            
+        bg_color = colors["bg"]
+        fg_color = colors["fg"]
+        comp_color = colors["comp_color"]
+        canvas_bg = colors["canvas_bg"]
+        
+        # Update compensation labels (tk.Label)
+        for label in [
+            getattr(self, 'total_comp_label', None),
+            getattr(self, 'avg_comp_label', None),
+            getattr(self, 'last_hour_comp_label', None),
+            getattr(self, 'last_full_hour_comp_label', None),
+            getattr(self, 'projected_comp_label', None),
+        ]:
+            if label:
+                label.configure(bg=bg_color, fg=comp_color)
+        
+        # Update canvas
+        canvas = getattr(self, 'studies_canvas', None)
+        if canvas:
+            canvas.configure(bg=canvas_bg)
+    
+    def get_theme_colors(self):
+        """Get current theme colors for use by other windows."""
+        return getattr(self, 'theme_colors', {
+            "bg": "#f0f0f0",
+            "fg": "black",
+            "button_bg": "#e1e1e1",
+            "button_fg": "black",
+            "button_active_bg": "#d0d0d0",
+            "delete_btn_bg": "#f0f0f0",
+            "delete_btn_fg": "gray",
+            "canvas_bg": "#f0f0f0",
+            "dark_mode": False
+        })
+    
     def start_drag(self, event):
         """Start dragging window."""
         self.drag_start_x = event.x
@@ -1953,7 +2105,21 @@ class SettingsWindow:
         self.window.bind("<Configure>", self.on_settings_window_move)
         self.window.protocol("WM_DELETE_WINDOW", self.on_settings_closing)
         
+        # Apply theme
+        self.apply_theme()
+        
         self.create_settings_ui()
+    
+    def apply_theme(self):
+        """Apply theme to settings window."""
+        dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+        
+        if dark_mode:
+            bg_color = "#1e1e1e"
+        else:
+            bg_color = "SystemButtonFace"
+        
+        self.window.configure(bg=bg_color)
     
     def create_settings_ui(self):
         """Create settings UI."""
@@ -1965,6 +2131,10 @@ class SettingsWindow:
         # Auto-start
         self.auto_start_var = tk.BooleanVar(value=settings["auto_start"])
         ttk.Checkbutton(main_frame, text="Auto-resume shift on launch", variable=self.auto_start_var).pack(anchor=tk.W, pady=2)
+        
+        # Dark mode
+        self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
+        ttk.Checkbutton(main_frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
         
         # Two-column frame for counters and compensation
         columns_frame = ttk.Frame(main_frame)
@@ -2089,6 +2259,7 @@ class SettingsWindow:
         """Save settings."""
         try:
             self.data_manager.data["settings"]["auto_start"] = self.auto_start_var.get()
+            self.data_manager.data["settings"]["dark_mode"] = self.dark_mode_var.get()
             self.data_manager.data["settings"]["show_total"] = self.show_total_var.get()
             self.data_manager.data["settings"]["show_avg"] = self.show_avg_var.get()
             self.data_manager.data["settings"]["show_last_hour"] = self.show_last_hour_var.get()
@@ -2107,6 +2278,8 @@ class SettingsWindow:
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
             
             self.data_manager.save()
+            self.app.apply_theme()
+            self.app._update_tk_widget_colors()
             self.app.update_display()
             self.window.destroy()
             logger.info("Settings saved")
@@ -2224,6 +2397,9 @@ class StatisticsWindow:
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.bind("<Configure>", self.on_configure)
         
+        # Apply theme
+        self.apply_theme()
+        
         # Create UI
         self.create_ui()
     
@@ -2282,16 +2458,17 @@ class StatisticsWindow:
         shifts_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
         # Scrollable list of shifts
-        shifts_canvas = tk.Canvas(shifts_frame, width=180, highlightthickness=0)
-        shifts_scrollbar = ttk.Scrollbar(shifts_frame, orient="vertical", command=shifts_canvas.yview)
-        self.shifts_list_frame = ttk.Frame(shifts_canvas)
+        canvas_bg = getattr(self, 'theme_canvas_bg', 'SystemButtonFace')
+        self.shifts_canvas = tk.Canvas(shifts_frame, width=180, highlightthickness=0, bg=canvas_bg)
+        shifts_scrollbar = ttk.Scrollbar(shifts_frame, orient="vertical", command=self.shifts_canvas.yview)
+        self.shifts_list_frame = ttk.Frame(self.shifts_canvas)
         
         self.shifts_list_frame.bind("<Configure>", 
-            lambda e: shifts_canvas.configure(scrollregion=shifts_canvas.bbox("all")))
-        shifts_canvas.create_window((0, 0), window=self.shifts_list_frame, anchor="nw")
-        shifts_canvas.configure(yscrollcommand=shifts_scrollbar.set)
+            lambda e: self.shifts_canvas.configure(scrollregion=self.shifts_canvas.bbox("all")))
+        self.shifts_canvas.create_window((0, 0), window=self.shifts_list_frame, anchor="nw")
+        self.shifts_canvas.configure(yscrollcommand=shifts_scrollbar.set)
         
-        shifts_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.shifts_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         shifts_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # === RIGHT PANEL (Main Content) ===
@@ -2424,8 +2601,11 @@ class StatisticsWindow:
             
             # Delete button (subtle, small)
             if not shift.get("is_current"):
+                colors = self.app.get_theme_colors()
                 del_btn = tk.Button(shift_frame, text="×", font=("Arial", 8), 
-                                   fg="gray", relief=tk.FLAT, width=2, height=1,
+                                   fg=colors["delete_btn_fg"], bg=colors["delete_btn_bg"],
+                                   activeforeground=colors["fg"], activebackground=colors["button_bg"],
+                                   relief=tk.FLAT, width=2, height=1,
                                    command=lambda idx=i: self.confirm_delete_shift(idx))
                 del_btn.pack(side=tk.LEFT)
     
@@ -2975,6 +3155,21 @@ class StatisticsWindow:
             self.data_manager.save()
         except Exception as e:
             logger.error(f"Error saving statistics window position: {e}")
+    
+    def apply_theme(self):
+        """Apply theme to statistics window."""
+        dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+        
+        if dark_mode:
+            bg_color = "#1e1e1e"
+            canvas_bg = "#252525"
+        else:
+            bg_color = "SystemButtonFace"
+            canvas_bg = "SystemButtonFace"
+        
+        self.window.configure(bg=bg_color)
+        self.theme_bg = bg_color
+        self.theme_canvas_bg = canvas_bg
     
     def on_closing(self):
         """Handle window closing."""
