@@ -138,7 +138,7 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
                     pass
         except:
             pass
-    
+        
     return found_elements
 
 
@@ -738,7 +738,7 @@ class RVUCounterApp:
         self.is_running = False
         self.current_window = None
         self.refresh_interval = 1000  # 1 second
-            
+        
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
         self.current_procedure = ""
@@ -768,12 +768,17 @@ class RVUCounterApp:
         
         # Create UI
         self.create_ui()
-            
-        # Load shift start if auto-start enabled (after UI is created)
+        
+        # Auto-resume shift if enabled and shift was running (no shift_end means it was interrupted)
         if self.data_manager.data["settings"].get("auto_start", False):
-            if self.data_manager.data["current_shift"].get("shift_start"):
+            current_shift = self.data_manager.data["current_shift"]
+            shift_start = current_shift.get("shift_start")
+            shift_end = current_shift.get("shift_end")
+            
+            # Only resume if there's a shift_start but NO shift_end (app crashed while running)
+            if shift_start and not shift_end:
                 try:
-                    self.shift_start = datetime.fromisoformat(self.data_manager.data["current_shift"]["shift_start"])
+                    self.shift_start = datetime.fromisoformat(shift_start)
                     self.is_running = True
                     # Update button and UI to reflect running state
                     self.start_btn.config(text="Stop Shift")
@@ -782,30 +787,12 @@ class RVUCounterApp:
                     self.update_recent_studies_label()
                     # Update display to show correct counters
                     self.update_display()
-                    logger.info(f"Auto-resumed shift started at {self.shift_start}")
+                    logger.info(f"Auto-resumed shift from {self.shift_start} (app was interrupted)")
                 except Exception as e:
-                    logger.error(f"Error parsing shift_start: {e}")
-                    # If parsing fails, start a new shift
-                    self.shift_start = datetime.now()
-                    self.is_running = True
-                    self.data_manager.data["current_shift"]["shift_start"] = self.shift_start.isoformat()
-                    self.data_manager.save()
-                    self.start_btn.config(text="Stop Shift")
-                    self.root.title("RVU Counter - Running")
-                    self.update_shift_start_label()
-                    self.update_recent_studies_label()
-                    self.update_display()
-        else:
-                # No existing shift, start a new one
-                self.shift_start = datetime.now()
-                self.is_running = True
-                self.data_manager.data["current_shift"]["shift_start"] = self.shift_start.isoformat()
-                self.data_manager.save()
-                self.start_btn.config(text="Stop Shift")
-                self.root.title("RVU Counter - Running")
-                self.update_shift_start_label()
-                self.update_recent_studies_label()
-                self.update_display()
+                    logger.error(f"Error parsing shift_start for auto-resume: {e}")
+            # If shift_end exists, the shift was properly stopped - don't auto-resume
+            elif shift_start and shift_end:
+                logger.info("Auto-resume skipped: shift was properly stopped")
         
         self.setup_refresh()
         
@@ -825,14 +812,14 @@ class RVUCounterApp:
         main_frame.bind("<Button-1>", self.start_drag)
         main_frame.bind("<B1-Motion>", self.on_drag)
         
-        # Counters frame with shift start time
-        counters_label_frame = ttk.Frame(main_frame)
-        counters_label_frame.pack(fill=tk.X, pady=(5, 0))
+        # Top bar with Start/Stop Shift button and shift start time
+        top_bar_frame = ttk.Frame(main_frame)
+        top_bar_frame.pack(fill=tk.X, pady=(5, 0))
         
-        counters_title_label = ttk.Label(counters_label_frame, text="Counters", font=("Arial", 10, "bold"))
-        counters_title_label.pack(side=tk.LEFT)
+        self.start_btn = ttk.Button(top_bar_frame, text="Start Shift", command=self.start_shift, width=12)
+        self.start_btn.pack(side=tk.LEFT)
         
-        self.shift_start_label = ttk.Label(counters_label_frame, text="", font=("Arial", 8), foreground="gray")
+        self.shift_start_label = ttk.Label(top_bar_frame, text="", font=("Arial", 8), foreground="gray")
         self.shift_start_label.pack(side=tk.LEFT, padx=(10, 0))
         
         counters_frame = ttk.LabelFrame(main_frame, padding="5")
@@ -907,8 +894,8 @@ class RVUCounterApp:
         buttons_frame = ttk.Frame(main_frame)
         buttons_frame.pack(fill=tk.X, pady=5)
         
-        self.start_btn = ttk.Button(buttons_frame, text="Start Shift", command=self.start_shift, width=12)
-        self.start_btn.pack(side=tk.LEFT, padx=2)
+        self.stats_btn = ttk.Button(buttons_frame, text="Statistics", command=self.open_statistics, width=12)
+        self.stats_btn.pack(side=tk.LEFT, padx=2)
         
         self.undo_btn = ttk.Button(buttons_frame, text="Undo", command=self.undo_last, width=12, state=tk.DISABLED)
         self.undo_btn.pack(side=tk.LEFT, padx=2)
@@ -1277,15 +1264,8 @@ class RVUCounterApp:
                 
                 if collected_count < total_count:
                     # Incomplete - show current procedure info but mark as incomplete
-                    if procedure and not is_na:
-                        classification_rules = self.data_manager.data.get("classification_rules", {})
-                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
-                        study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
-                        self.current_study_type = f"incomplete ({collected_count}/{total_count})"
-                        self.current_study_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
-                    else:
-                        self.current_study_type = f"incomplete ({collected_count}/{total_count})"
-                        self.current_study_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
+                    self.current_study_type = f"incomplete ({collected_count}/{total_count})"
+                    self.current_study_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
                 else:
                     # Complete - show "Multiple {modality}"
                     total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
@@ -1361,7 +1341,7 @@ class RVUCounterApp:
                     # Clear all active studies
                     self.tracker.active_studies.clear()
                     self.update_display()
-                    return  # Return after handling N/A case
+                return  # Return after handling N/A case
         
             # Skip normal study tracking when viewing a multi-accession study
             # Multi-accession studies are handled separately above
@@ -1880,6 +1860,10 @@ class RVUCounterApp:
         """Open settings modal."""
         SettingsWindow(self.root, self.data_manager, self)
     
+    def open_statistics(self):
+        """Open statistics modal."""
+        StatisticsWindow(self.root, self.data_manager, self)
+    
     def start_drag(self, event):
         """Start dragging window."""
         self.drag_start_x = event.x
@@ -2172,6 +2156,738 @@ class SettingsWindow:
             except:
                 pass
         self.save_settings_position()
+        self.window.destroy()
+
+
+class StatisticsWindow:
+    """Statistics modal window for detailed stats."""
+    
+    def __init__(self, parent, data_manager: RVUData, app: RVUCounterApp):
+        self.parent = parent
+        self.data_manager = data_manager
+        self.app = app
+        
+        # Create modal window
+        self.window = tk.Toplevel(parent)
+        self.window.title("Statistics")
+        self.window.transient(parent)
+        self.window.grab_set()
+        
+        # Make window larger for detailed stats
+        self.window.geometry("1200x700")
+        self.window.minsize(800, 500)
+        
+        # Restore saved position or center on screen
+        positions = self.data_manager.data.get("window_positions", {})
+        if "statistics" in positions:
+            pos = positions["statistics"]
+            self.window.geometry(f"1200x700+{pos['x']}+{pos['y']}")
+        else:
+            # Center on screen
+            parent.update_idletasks()
+            screen_width = parent.winfo_screenwidth()
+            screen_height = parent.winfo_screenheight()
+            x = (screen_width - 1200) // 2
+            y = (screen_height - 700) // 2
+            self.window.geometry(f"1200x700+{x}+{y}")
+        
+        # Track position for saving
+        self.last_saved_x = self.window.winfo_x()
+        self.last_saved_y = self.window.winfo_y()
+        
+        # Bind window events
+        self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.window.bind("<Configure>", self.on_configure)
+        
+        # Create UI
+        self.create_ui()
+    
+    def create_ui(self):
+        """Create the statistics UI."""
+        # State variables
+        self.selected_period = tk.StringVar(value="current_shift")
+        self.view_mode = tk.StringVar(value="by_hour")
+        self.selected_shift_index = None  # For shift list selection
+        
+        main_frame = ttk.Frame(self.window, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create horizontal paned window (left panel + main content)
+        paned = ttk.PanedWindow(main_frame, orient=tk.HORIZONTAL)
+        paned.pack(fill=tk.BOTH, expand=True)
+        
+        # === LEFT PANEL (Selection) ===
+        left_panel = ttk.Frame(paned, padding="5")
+        paned.add(left_panel, weight=0)
+        
+        # Shift Analysis Section
+        shift_frame = ttk.LabelFrame(left_panel, text="Shift Analysis", padding="8")
+        shift_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Current shift radio - disable if no shift is running
+        self.current_shift_radio = ttk.Radiobutton(shift_frame, text="Current Shift", variable=self.selected_period, 
+                       value="current_shift", command=self.refresh_data)
+        self.current_shift_radio.pack(anchor=tk.W, pady=2)
+        
+        # Disable current shift option if no shift is running
+        if not self.app.is_running:
+            self.current_shift_radio.config(state=tk.DISABLED)
+            self.selected_period.set("prior_shift")  # Default to prior shift instead
+        
+        ttk.Radiobutton(shift_frame, text="Prior Shift", variable=self.selected_period,
+                       value="prior_shift", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        
+        # Historical Section
+        history_frame = ttk.LabelFrame(left_panel, text="Historical", padding="8")
+        history_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Radiobutton(history_frame, text="Last Work Week", variable=self.selected_period,
+                       value="last_work_week", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="Last 2 Work Weeks", variable=self.selected_period,
+                       value="last_2_weeks", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="Last Month", variable=self.selected_period,
+                       value="last_month", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="Last 3 Months", variable=self.selected_period,
+                       value="last_3_months", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="Last Year", variable=self.selected_period,
+                       value="last_year", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        
+        # Shifts List Section (with delete capability)
+        shifts_frame = ttk.LabelFrame(left_panel, text="All Shifts", padding="8")
+        shifts_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        
+        # Scrollable list of shifts
+        shifts_canvas = tk.Canvas(shifts_frame, width=180, highlightthickness=0)
+        shifts_scrollbar = ttk.Scrollbar(shifts_frame, orient="vertical", command=shifts_canvas.yview)
+        self.shifts_list_frame = ttk.Frame(shifts_canvas)
+        
+        self.shifts_list_frame.bind("<Configure>", 
+            lambda e: shifts_canvas.configure(scrollregion=shifts_canvas.bbox("all")))
+        shifts_canvas.create_window((0, 0), window=self.shifts_list_frame, anchor="nw")
+        shifts_canvas.configure(yscrollcommand=shifts_scrollbar.set)
+        
+        shifts_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        shifts_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # === RIGHT PANEL (Main Content) ===
+        right_panel = ttk.Frame(paned, padding="5")
+        paned.add(right_panel, weight=1)
+        
+        # View mode toggle
+        view_frame = ttk.Frame(right_panel)
+        view_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        ttk.Label(view_frame, text="View By:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(view_frame, text="By Hour", variable=self.view_mode,
+                       value="by_hour", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="By Modality", variable=self.view_mode,
+                       value="by_modality", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="By Patient Class", variable=self.view_mode,
+                       value="by_patient_class", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
+                       value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        
+        # Period label
+        self.period_label = ttk.Label(right_panel, text="", font=("Arial", 12, "bold"))
+        self.period_label.pack(anchor=tk.W, pady=(0, 10))
+        
+        # Data table frame
+        table_frame = ttk.Frame(right_panel)
+        table_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create Treeview for data display
+        self.tree = ttk.Treeview(table_frame, show="headings")
+        tree_scrollbar_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        tree_scrollbar_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=tree_scrollbar_y.set, xscrollcommand=tree_scrollbar_x.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+        tree_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Summary frame at bottom
+        summary_frame = ttk.LabelFrame(right_panel, text="Summary", padding="10")
+        summary_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        self.summary_label = ttk.Label(summary_frame, text="", font=("Arial", 10))
+        self.summary_label.pack(anchor=tk.W)
+        
+        # Bottom button row
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        ttk.Button(button_frame, text="Refresh", command=self.refresh_data, width=12).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="Close", command=self.on_closing, width=12).pack(side=tk.RIGHT, padx=2)
+        
+        # Initial data load
+        self.populate_shifts_list()
+        self.refresh_data()
+    
+    def get_all_shifts(self) -> List[dict]:
+        """Get all shifts from records, sorted by date (newest first)."""
+        shifts = []
+        
+        # Get historical shifts from the "shifts" array
+        historical_shifts = self.data_manager.data.get("shifts", [])
+        for shift in historical_shifts:
+            shift_copy = shift.copy()
+            # Extract date from shift_start for display
+            try:
+                start = datetime.fromisoformat(shift.get("shift_start", ""))
+                shift_copy["date"] = start.strftime("%Y-%m-%d")
+            except:
+                shift_copy["date"] = "Unknown"
+            shifts.append(shift_copy)
+        
+        # Add current shift if it has data
+        current_shift = self.data_manager.data.get("current_shift", {})
+        if current_shift.get("records"):
+            shifts.append({
+                "date": "current",
+                "shift_start": current_shift.get("shift_start", ""),
+                "shift_end": current_shift.get("shift_end", ""),
+                "records": current_shift.get("records", []),
+                "is_current": True
+            })
+        
+        # Sort by shift_start (newest first)
+        def sort_key(s):
+            if s.get("is_current"):
+                return datetime.max
+            try:
+                return datetime.fromisoformat(s.get("shift_start", ""))
+            except:
+                return datetime.min
+        
+        shifts.sort(key=sort_key, reverse=True)
+        return shifts
+    
+    def populate_shifts_list(self):
+        """Populate the shifts list in left panel."""
+        # Clear existing
+        for widget in self.shifts_list_frame.winfo_children():
+            widget.destroy()
+        
+        shifts = self.get_all_shifts()
+        
+        for i, shift in enumerate(shifts):
+            shift_frame = ttk.Frame(self.shifts_list_frame)
+            shift_frame.pack(fill=tk.X, pady=1)
+            
+            # Format shift label
+            if shift.get("is_current"):
+                label_text = "Current Shift"
+            else:
+                try:
+                    start = datetime.fromisoformat(shift.get("shift_start", ""))
+                    label_text = start.strftime("%m/%d %I:%M%p")
+                except:
+                    label_text = shift.get("date", "Unknown")
+            
+            # Study count
+            records = shift.get("records", [])
+            count = len(records)
+            total_rvu = sum(r.get("rvu", 0) for r in records)
+            
+            # Shift button (clickable)
+            btn = ttk.Button(shift_frame, text=f"{label_text} ({count})", width=18,
+                           command=lambda idx=i: self.select_shift(idx))
+            btn.pack(side=tk.LEFT, padx=(0, 2))
+            
+            # Delete button (subtle, small)
+            if not shift.get("is_current"):
+                del_btn = tk.Button(shift_frame, text="×", font=("Arial", 8), 
+                                   fg="gray", relief=tk.FLAT, width=2, height=1,
+                                   command=lambda idx=i: self.confirm_delete_shift(idx))
+                del_btn.pack(side=tk.LEFT)
+    
+    def select_shift(self, shift_index: int):
+        """Select a specific shift from the list."""
+        self.selected_shift_index = shift_index
+        self.selected_period.set("specific_shift")
+        self.refresh_data()
+    
+    def confirm_delete_shift(self, shift_index: int):
+        """Confirm and delete a shift."""
+        shifts = self.get_all_shifts()
+        if shift_index >= len(shifts):
+            return
+        
+        shift = shifts[shift_index]
+        if shift.get("is_current"):
+            return  # Can't delete current shift from here
+        
+        # Format confirmation message
+        try:
+            start = datetime.fromisoformat(shift.get("shift_start", ""))
+            date_str = start.strftime("%B %d, %Y at %I:%M %p")
+        except:
+            date_str = shift.get("date", "Unknown date")
+        
+        records = shift.get("records", [])
+        rvu = sum(r.get("rvu", 0) for r in records)
+        
+        result = messagebox.askyesno(
+            "Delete Shift?",
+            f"Delete shift from {date_str}?\n\n"
+            f"This will remove {len(records)} studies ({rvu:.1f} RVU).\n\n"
+            "This action cannot be undone.",
+            parent=self.window
+        )
+        
+        if result:
+            self.delete_shift(shift_index)
+    
+    def delete_shift(self, shift_index: int):
+        """Delete a shift from records."""
+        shifts = self.get_all_shifts()
+        if shift_index >= len(shifts):
+            return
+        
+        shift = shifts[shift_index]
+        if shift.get("is_current"):
+            return
+        
+        shift_start = shift.get("shift_start")
+        
+        # Find and remove from the shifts array
+        historical_shifts = self.data_manager.data.get("shifts", [])
+        for i, s in enumerate(historical_shifts):
+            if s.get("shift_start") == shift_start:
+                historical_shifts.pop(i)
+                self.data_manager.save()
+                logger.info(f"Deleted shift starting {shift_start}")
+                break
+        
+        # Refresh UI
+        self.populate_shifts_list()
+        self.refresh_data()
+    
+    def get_records_for_period(self) -> Tuple[List[dict], str]:
+        """Get records for the selected period. Returns (records, period_description)."""
+        period = self.selected_period.get()
+        now = datetime.now()
+        
+        if period == "current_shift":
+            records = self.data_manager.data.get("current_shift", {}).get("records", [])
+            return records, "Current Shift"
+        
+        elif period == "prior_shift":
+            shifts = self.get_all_shifts()
+            # Find the first non-current shift
+            for shift in shifts:
+                if not shift.get("is_current"):
+                    return shift.get("records", []), f"Prior Shift ({shift.get('date', '')})"
+            return [], "Prior Shift (none found)"
+        
+        elif period == "specific_shift":
+            shifts = self.get_all_shifts()
+            if self.selected_shift_index is not None and self.selected_shift_index < len(shifts):
+                shift = shifts[self.selected_shift_index]
+                if shift.get("is_current"):
+                    return shift.get("records", []), "Current Shift"
+                try:
+                    start = datetime.fromisoformat(shift.get("shift_start", ""))
+                    desc = start.strftime("%B %d, %Y %I:%M %p")
+                except:
+                    desc = shift.get("date", "")
+                return shift.get("records", []), f"Shift: {desc}"
+            return [], "No shift selected"
+        
+        elif period == "last_work_week":
+            # Work week: Monday night to next Monday morning (7 on, 7 off)
+            # Find the most recent Monday that started a work week
+            records = self._get_records_in_range(now - timedelta(days=14), now)
+            return records, "Last Work Week"
+        
+        elif period == "last_2_weeks":
+            records = self._get_records_in_range(now - timedelta(days=28), now)
+            return records, "Last 2 Work Weeks"
+        
+        elif period == "last_month":
+            records = self._get_records_in_range(now - timedelta(days=30), now)
+            return records, "Last Month"
+        
+        elif period == "last_3_months":
+            records = self._get_records_in_range(now - timedelta(days=90), now)
+            return records, "Last 3 Months"
+        
+        elif period == "last_year":
+            records = self._get_records_in_range(now - timedelta(days=365), now)
+            return records, "Last Year"
+        
+        return [], "Unknown period"
+    
+    def _get_records_in_range(self, start: datetime, end: datetime) -> List[dict]:
+        """Get all records within a date range."""
+        records = []
+        
+        # Check current shift
+        current_shift = self.data_manager.data.get("current_shift", {})
+        for record in current_shift.get("records", []):
+            try:
+                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                if start <= rec_time <= end:
+                    records.append(record)
+            except:
+                pass
+        
+        # Check historical shifts from the "shifts" array
+        historical_shifts = self.data_manager.data.get("shifts", [])
+        for shift in historical_shifts:
+            for record in shift.get("records", []):
+                try:
+                    rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                    if start <= rec_time <= end:
+                        records.append(record)
+                except:
+                    pass
+        
+        return records
+    
+    def refresh_data(self):
+        """Refresh the data display based on current selections."""
+        records, period_desc = self.get_records_for_period()
+        self.period_label.config(text=period_desc)
+        
+        view_mode = self.view_mode.get()
+        
+        # Clear existing tree
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        if view_mode == "by_hour":
+            self._display_by_hour(records)
+        elif view_mode == "by_modality":
+            self._display_by_modality(records)
+        elif view_mode == "by_patient_class":
+            self._display_by_patient_class(records)
+        else:  # summary
+            self._display_summary(records)
+        
+        # Update summary
+        total_studies = len(records)
+        total_rvu = sum(r.get("rvu", 0) for r in records)
+        avg_rvu = total_rvu / total_studies if total_studies > 0 else 0
+        
+        self.summary_label.config(
+            text=f"Total: {total_studies} studies  |  {total_rvu:.1f} RVU  |  Avg: {avg_rvu:.2f} RVU/study"
+        )
+    
+    def _display_by_hour(self, records: List[dict]):
+        """Display data broken down by hour."""
+        # Configure columns
+        self.tree["columns"] = ("hour", "studies", "rvu", "avg_rvu", "top_modality")
+        self.tree.heading("hour", text="Hour")
+        self.tree.heading("studies", text="Studies")
+        self.tree.heading("rvu", text="RVU")
+        self.tree.heading("avg_rvu", text="Avg/Study")
+        self.tree.heading("top_modality", text="Top Modality")
+        
+        self.tree.column("hour", width=120, anchor=tk.W)
+        self.tree.column("studies", width=80, anchor=tk.CENTER)
+        self.tree.column("rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("top_modality", width=120, anchor=tk.W)
+        
+        # Group by hour
+        hour_data = {}
+        all_modalities = {}
+        for record in records:
+            try:
+                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                hour = rec_time.hour
+            except:
+                continue
+            
+            if hour not in hour_data:
+                hour_data[hour] = {"studies": 0, "rvu": 0, "modalities": {}}
+            
+            hour_data[hour]["studies"] += 1
+            hour_data[hour]["rvu"] += record.get("rvu", 0)
+            
+            # Track modality
+            study_type = record.get("study_type", "Unknown")
+            modality = study_type.split()[0] if study_type else "Unknown"
+            hour_data[hour]["modalities"][modality] = hour_data[hour]["modalities"].get(modality, 0) + 1
+            all_modalities[modality] = all_modalities.get(modality, 0) + 1
+        
+        # Calculate totals
+        total_studies = sum(d["studies"] for d in hour_data.values())
+        total_rvu = sum(d["rvu"] for d in hour_data.values())
+        
+        # Sort by hour and display
+        for hour in sorted(hour_data.keys()):
+            data = hour_data[hour]
+            # Format hour
+            hour_12 = hour % 12 or 12
+            am_pm = "AM" if hour < 12 else "PM"
+            next_hour = (hour + 1) % 24
+            next_12 = next_hour % 12 or 12
+            next_am_pm = "AM" if next_hour < 12 else "PM"
+            hour_str = f"{hour_12}{am_pm}-{next_12}{next_am_pm}"
+            
+            avg_rvu = data["rvu"] / data["studies"] if data["studies"] > 0 else 0
+            
+            # Top modality
+            modalities = data["modalities"]
+            top_mod = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
+            
+            self.tree.insert("", tk.END, values=(
+                hour_str,
+                data["studies"],
+                f"{data['rvu']:.1f}",
+                f"{avg_rvu:.2f}",
+                top_mod
+            ))
+        
+        # Add totals row
+        if hour_data:
+            self.tree.insert("", tk.END, values=("─" * 10, "─" * 6, "─" * 6, "─" * 6, "─" * 10))
+            total_avg = total_rvu / total_studies if total_studies > 0 else 0
+            top_overall = max(all_modalities.keys(), key=lambda k: all_modalities[k]) if all_modalities else "N/A"
+            self.tree.insert("", tk.END, values=(
+                "TOTAL",
+                total_studies,
+                f"{total_rvu:.1f}",
+                f"{total_avg:.2f}",
+                top_overall
+            ))
+    
+    def _display_by_modality(self, records: List[dict]):
+        """Display data broken down by modality."""
+        # Configure columns
+        self.tree["columns"] = ("modality", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
+        self.tree.heading("modality", text="Modality")
+        self.tree.heading("studies", text="Studies")
+        self.tree.heading("rvu", text="RVU")
+        self.tree.heading("avg_rvu", text="Avg/Study")
+        self.tree.heading("pct_studies", text="% Studies")
+        self.tree.heading("pct_rvu", text="% RVU")
+        
+        self.tree.column("modality", width=100, anchor=tk.W)
+        self.tree.column("studies", width=80, anchor=tk.CENTER)
+        self.tree.column("rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        
+        # Group by modality
+        modality_data = {}
+        total_studies = 0
+        total_rvu = 0
+        
+        for record in records:
+            study_type = record.get("study_type", "Unknown")
+            modality = study_type.split()[0] if study_type else "Unknown"
+            rvu = record.get("rvu", 0)
+            
+            if modality not in modality_data:
+                modality_data[modality] = {"studies": 0, "rvu": 0}
+            
+            modality_data[modality]["studies"] += 1
+            modality_data[modality]["rvu"] += rvu
+            total_studies += 1
+            total_rvu += rvu
+        
+        # Sort by RVU (highest first) and display
+        for modality in sorted(modality_data.keys(), key=lambda k: modality_data[k]["rvu"], reverse=True):
+            data = modality_data[modality]
+            avg_rvu = data["rvu"] / data["studies"] if data["studies"] > 0 else 0
+            pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
+            pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+            
+            self.tree.insert("", tk.END, values=(
+                modality,
+                data["studies"],
+                f"{data['rvu']:.1f}",
+                f"{avg_rvu:.2f}",
+                f"{pct_studies:.1f}%",
+                f"{pct_rvu:.1f}%"
+            ))
+        
+        # Add totals row
+        if modality_data:
+            self.tree.insert("", tk.END, values=("─" * 8, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
+            total_avg = total_rvu / total_studies if total_studies > 0 else 0
+            self.tree.insert("", tk.END, values=(
+                "TOTAL",
+                total_studies,
+                f"{total_rvu:.1f}",
+                f"{total_avg:.2f}",
+                "100%",
+                "100%"
+            ))
+    
+    def _display_by_patient_class(self, records: List[dict]):
+        """Display data broken down by patient class."""
+        # Configure columns
+        self.tree["columns"] = ("patient_class", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
+        self.tree.heading("patient_class", text="Patient Class")
+        self.tree.heading("studies", text="Studies")
+        self.tree.heading("rvu", text="RVU")
+        self.tree.heading("avg_rvu", text="Avg/Study")
+        self.tree.heading("pct_studies", text="% Studies")
+        self.tree.heading("pct_rvu", text="% RVU")
+        
+        self.tree.column("patient_class", width=120, anchor=tk.W)
+        self.tree.column("studies", width=80, anchor=tk.CENTER)
+        self.tree.column("rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
+        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        
+        # Group by patient class
+        class_data = {}
+        total_studies = 0
+        total_rvu = 0
+        
+        for record in records:
+            # Handle missing patient_class (historical data may not have it)
+            patient_class = record.get("patient_class", "").strip()
+            if not patient_class:
+                patient_class = "(Unknown)"
+            rvu = record.get("rvu", 0)
+            
+            if patient_class not in class_data:
+                class_data[patient_class] = {"studies": 0, "rvu": 0}
+            
+            class_data[patient_class]["studies"] += 1
+            class_data[patient_class]["rvu"] += rvu
+            total_studies += 1
+            total_rvu += rvu
+        
+        # Sort by RVU (highest first) and display
+        for patient_class in sorted(class_data.keys(), key=lambda k: class_data[k]["rvu"], reverse=True):
+            data = class_data[patient_class]
+            avg_rvu = data["rvu"] / data["studies"] if data["studies"] > 0 else 0
+            pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
+            pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+            
+            self.tree.insert("", tk.END, values=(
+                patient_class,
+                data["studies"],
+                f"{data['rvu']:.1f}",
+                f"{avg_rvu:.2f}",
+                f"{pct_studies:.1f}%",
+                f"{pct_rvu:.1f}%"
+            ))
+        
+        # Add totals row
+        if class_data:
+            self.tree.insert("", tk.END, values=("─" * 10, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
+            total_avg = total_rvu / total_studies if total_studies > 0 else 0
+            self.tree.insert("", tk.END, values=(
+                "TOTAL",
+                total_studies,
+                f"{total_rvu:.1f}",
+                f"{total_avg:.2f}",
+                "100%",
+                "100%"
+            ))
+    
+    def _display_summary(self, records: List[dict]):
+        """Display summary statistics."""
+        # Configure columns
+        self.tree["columns"] = ("metric", "value")
+        self.tree.heading("metric", text="Metric")
+        self.tree.heading("value", text="Value")
+        
+        self.tree.column("metric", width=250, anchor=tk.W)
+        self.tree.column("value", width=150, anchor=tk.E)
+        
+        total_studies = len(records)
+        total_rvu = sum(r.get("rvu", 0) for r in records)
+        avg_rvu = total_rvu / total_studies if total_studies > 0 else 0
+        
+        # Calculate time span
+        if records:
+            times = []
+            for r in records:
+                try:
+                    times.append(datetime.fromisoformat(r.get("time_performed", "")))
+                except:
+                    pass
+            if times:
+                time_span = max(times) - min(times)
+                hours = time_span.total_seconds() / 3600
+                rvu_per_hour = total_rvu / hours if hours > 0 else 0
+                studies_per_hour = total_studies / hours if hours > 0 else 0
+            else:
+                hours = 0
+                rvu_per_hour = 0
+                studies_per_hour = 0
+        else:
+            hours = 0
+            rvu_per_hour = 0
+            studies_per_hour = 0
+        
+        # Modality breakdown
+        modalities = {}
+        for r in records:
+            st = r.get("study_type", "Unknown")
+            mod = st.split()[0] if st else "Unknown"
+            modalities[mod] = modalities.get(mod, 0) + 1
+        
+        top_modality = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
+        
+        # Insert summary rows
+        self.tree.insert("", tk.END, values=("Total Studies", str(total_studies)))
+        self.tree.insert("", tk.END, values=("Total RVU", f"{total_rvu:.1f}"))
+        self.tree.insert("", tk.END, values=("Average RVU per Study", f"{avg_rvu:.2f}"))
+        self.tree.insert("", tk.END, values=("", ""))  # Spacer
+        self.tree.insert("", tk.END, values=("Time Span", f"{hours:.1f} hours"))
+        self.tree.insert("", tk.END, values=("Studies per Hour", f"{studies_per_hour:.1f}"))
+        self.tree.insert("", tk.END, values=("RVU per Hour", f"{rvu_per_hour:.1f}"))
+        self.tree.insert("", tk.END, values=("", ""))  # Spacer
+        self.tree.insert("", tk.END, values=("Top Modality", f"{top_modality} ({modalities.get(top_modality, 0)} studies)"))
+        self.tree.insert("", tk.END, values=("Unique Modalities", str(len(modalities))))
+    
+    def on_configure(self, event):
+        """Handle window configuration changes (move/resize)."""
+        if event.widget == self.window:
+            x = self.window.winfo_x()
+            y = self.window.winfo_y()
+            
+            # Only save if position actually changed
+            if x != self.last_saved_x or y != self.last_saved_y:
+                # Debounce position saving
+                if hasattr(self, '_save_timer'):
+                    try:
+                        self.window.after_cancel(self._save_timer)
+                    except:
+                        pass
+                self._save_timer = self.window.after(500, lambda: self.save_position(x, y))
+    
+    def save_position(self, x=None, y=None):
+        """Save statistics window position."""
+        try:
+            if x is None:
+                x = self.window.winfo_x()
+            if y is None:
+                y = self.window.winfo_y()
+            
+            if "window_positions" not in self.data_manager.data:
+                self.data_manager.data["window_positions"] = {}
+            self.data_manager.data["window_positions"]["statistics"] = {
+                "x": x,
+                "y": y
+            }
+            self.last_saved_x = x
+            self.last_saved_y = y
+            self.data_manager.save()
+        except Exception as e:
+            logger.error(f"Error saving statistics window position: {e}")
+    
+    def on_closing(self):
+        """Handle window closing."""
+        # Cancel any pending save timer
+        if hasattr(self, '_save_timer'):
+            try:
+                self.window.after_cancel(self._save_timer)
+            except:
+                pass
+        self.save_position()
         self.window.destroy()
 
 
