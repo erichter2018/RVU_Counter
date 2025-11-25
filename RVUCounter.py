@@ -714,8 +714,9 @@ class RVUCounterApp:
     def __init__(self, root):
         self.root = root
         self.root.title("RVU Counter")
-        self.root.geometry("240x500")  # 40% narrower (400 * 0.6 = 240)
-        self.root.resizable(False, False)
+        self.root.geometry("240x500")  # Default size
+        self.root.minsize(200, 350)  # Minimum size
+        self.root.resizable(True, True)
         self.root.attributes("-topmost", True)  # Keep window on top
         
         # Window dragging state
@@ -725,10 +726,12 @@ class RVUCounterApp:
         # Data management
         self.data_manager = RVUData()
         
-        # Load saved window position or use default (after data_manager is initialized)
+        # Load saved window position and size or use default (after data_manager is initialized)
         window_pos = self.data_manager.data.get("window_positions", {}).get("main", None)
         if window_pos:
-            self.root.geometry(f"240x500+{window_pos['x']}+{window_pos['y']}")
+            width = window_pos.get('width', 240)
+            height = window_pos.get('height', 500)
+            self.root.geometry(f"{width}x{height}+{window_pos['x']}+{window_pos['y']}")
         self.tracker = StudyTracker(
             min_seconds=self.data_manager.data["settings"]["min_study_seconds"]
         )
@@ -826,18 +829,19 @@ class RVUCounterApp:
         self.shift_start_label.pack(side=tk.LEFT, padx=(10, 0))
         
         counters_frame = ttk.LabelFrame(main_frame, padding="5")
-        counters_frame.pack(fill=tk.X, pady=(0, 5))
+        counters_frame.pack(fill=tk.X, pady=(0, 5))  # Fill X for full-width border
         
-        # Use grid for aligned columns
-        counters_frame.columnconfigure(1, weight=1)
+        # Inner frame to center the content
+        counters_inner = ttk.Frame(counters_frame)
+        counters_inner.pack(expand=True)  # Centers horizontally
         
-        # Counter labels with aligned columns
+        # Counter labels with aligned columns (inside centered inner frame)
         row = 0
         
         # Total
-        self.total_label_text = ttk.Label(counters_frame, text="Total wRVU:", font=("Arial", 10), anchor=tk.E)
+        self.total_label_text = ttk.Label(counters_inner, text="Total wRVU:", font=("Arial", 10), anchor=tk.E)
         self.total_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        total_value_frame = ttk.Frame(counters_frame)
+        total_value_frame = ttk.Frame(counters_inner)
         total_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.total_label.pack(side=tk.LEFT)
@@ -847,9 +851,9 @@ class RVUCounterApp:
         row += 1
         
         # Average per hour
-        self.avg_label_text = ttk.Label(counters_frame, text="Avg/Hour:", font=("Arial", 10), anchor=tk.E)
+        self.avg_label_text = ttk.Label(counters_inner, text="Avg/Hour:", font=("Arial", 10), anchor=tk.E)
         self.avg_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        avg_value_frame = ttk.Frame(counters_frame)
+        avg_value_frame = ttk.Frame(counters_inner)
         avg_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.avg_label.pack(side=tk.LEFT)
@@ -859,9 +863,9 @@ class RVUCounterApp:
         row += 1
         
         # Last hour
-        self.last_hour_label_text = ttk.Label(counters_frame, text="Last Hour:", font=("Arial", 10), anchor=tk.E)
+        self.last_hour_label_text = ttk.Label(counters_inner, text="Last Hour:", font=("Arial", 10), anchor=tk.E)
         self.last_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        last_hour_value_frame = ttk.Frame(counters_frame)
+        last_hour_value_frame = ttk.Frame(counters_inner)
         last_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.last_hour_label.pack(side=tk.LEFT)
@@ -871,9 +875,9 @@ class RVUCounterApp:
         row += 1
         
         # Last full hour - format: "8pm-9pm Hour: x.x"
-        self.last_full_hour_label_text = ttk.Label(counters_frame, text="Hour:", font=("Arial", 10), anchor=tk.E, width=14)
+        self.last_full_hour_label_text = ttk.Label(counters_inner, text="Hour:", font=("Arial", 10), anchor=tk.E, width=14)
         self.last_full_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        last_full_hour_value_frame = ttk.Frame(counters_frame)
+        last_full_hour_value_frame = ttk.Frame(counters_inner)
         last_full_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.last_full_hour_label.pack(side=tk.LEFT)
@@ -883,9 +887,9 @@ class RVUCounterApp:
         row += 1
         
         # Projected
-        self.projected_label_text = ttk.Label(counters_frame, text="Projected This Hour:", font=("Arial", 10), anchor=tk.E)
+        self.projected_label_text = ttk.Label(counters_inner, text="Projected This Hour:", font=("Arial", 10), anchor=tk.E)
         self.projected_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
-        projected_value_frame = ttk.Frame(counters_frame)
+        projected_value_frame = ttk.Frame(counters_inner)
         projected_value_frame.grid(row=row, column=1, sticky=tk.W)
         self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
         self.projected_label.pack(side=tk.LEFT)
@@ -969,6 +973,13 @@ class RVUCounterApp:
         
         # Store study widgets for deletion (initialized in create_ui)
         self.study_widgets = []
+        
+        # Store debug_frame reference for resizing
+        self.debug_frame = debug_frame
+        
+        # Bind resize event to recalculate truncation
+        self.root.bind("<Configure>", self._on_window_resize)
+        self._last_width = 240  # Track width for resize detection
         
         # Set initial title
         if self.is_running:
@@ -1745,7 +1756,11 @@ class RVUCounterApp:
                 widget.destroy()
             self.study_widgets.clear()
             
-            records = self.data_manager.data["current_shift"]["records"][-6:]  # Last 6 studies
+            # Calculate how many studies can fit based on canvas height
+            canvas_height = self.studies_canvas.winfo_height()
+            row_height = 18  # Approximate height per study row
+            max_studies = max(3, canvas_height // row_height)  # At least 3
+            records = self.data_manager.data["current_shift"]["records"][-max_studies:]
             # Display in reverse order (most recent first)
             for i, record in enumerate(reversed(records)):
                 # Calculate actual index in full records list
@@ -1790,25 +1805,23 @@ class RVUCounterApp:
                 valid_prefixes = ['CT', 'MR', 'US', 'XR', 'NM', 'MULTIPLE']
                 starts_with_valid = any(procedure_upper.startswith(prefix) or study_type_upper.startswith(prefix) for prefix in valid_prefixes)
                 
-                # Truncate long procedure names to fit narrow window
-                # With font size 8, need shorter length to accommodate RVU on the right
-                max_length = 23
-                if len(procedure_name) > max_length:
-                    procedure_name = procedure_name[:max_length-3] + "..."
+                # Dynamic truncation based on window width
+                frame_width = self.root.winfo_width()
+                max_chars = self._calculate_max_chars(frame_width)
+                display_name = self._truncate_text(procedure_name, max_chars)
                 
-                # Create separate labels for procedure name and RVU
-                procedure_label = ttk.Label(study_frame, text=procedure_name, font=("Consolas", 8))
-                # Color dark red if study doesn't start with valid prefixes
+                # Procedure label - left-aligned
+                procedure_label = ttk.Label(study_frame, text=display_name, font=("Consolas", 8))
                 if not starts_with_valid:
                     procedure_label.config(foreground="#8B0000")  # Dark red
-                procedure_label.pack(side=tk.LEFT, padx=(0, 2))  # Minimal right padding
+                procedure_label.pack(side=tk.LEFT)
                 
-                # RVU label (right-justified)
+                # RVU label - stays on the far right
                 rvu_text = f"{record['rvu']:.1f} RVU"
                 rvu_label = ttk.Label(study_frame, text=rvu_text, font=("Consolas", 8))
                 if not starts_with_valid:
                     rvu_label.config(foreground="#8B0000")  # Dark red
-                rvu_label.pack(side=tk.RIGHT, padx=(0, 0))  # No padding - flush to edge
+                rvu_label.pack(side=tk.RIGHT)
                 
                 self.study_widgets.append(study_frame)
             
@@ -1816,8 +1829,10 @@ class RVUCounterApp:
             self.studies_canvas.update_idletasks()
             self.studies_canvas.yview_moveto(0)
             
-            if len(self.data_manager.data["current_shift"]["records"]) > 10:
-                more_label = ttk.Label(self.studies_scrollable_frame, text=f"... {len(self.data_manager.data['current_shift']['records']) - 10} more", font=("Consolas", 7), foreground="gray")
+            total_records = len(self.data_manager.data["current_shift"]["records"])
+            if total_records > max_studies:
+                more_count = total_records - max_studies
+                more_label = ttk.Label(self.studies_scrollable_frame, text=f"... {more_count} more", font=("Consolas", 7), foreground="gray")
                 more_label.pack()
                 self.study_widgets.append(more_label)
     
@@ -1875,15 +1890,20 @@ class RVUCounterApp:
                         self.debug_procedure_label.config(text=f"Procedure: Multiple {modality} (done)", foreground="gray")
             else:
                 self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
-                # Truncate procedure to fit
-                procedure_display = self.current_procedure[:35] + "..." if len(self.current_procedure) > 35 else self.current_procedure
-                self.debug_procedure_label.config(text=f"Procedure: {procedure_display if procedure_display else '-'}", foreground="gray")
+                # Dynamic truncation based on window width
+                frame_width = self.root.winfo_width()
+                max_chars = self._calculate_max_chars(frame_width) - 11  # Account for "Procedure: " prefix
+                procedure_display = self._truncate_text(self.current_procedure, max(10, max_chars)) if self.current_procedure else '-'
+                self.debug_procedure_label.config(text=f"Procedure: {procedure_display}", foreground="gray")
             
             self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
             
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                study_type_display = self.current_study_type[:13] + "..." if len(self.current_study_type) > 13 else self.current_study_type
+                # Dynamic truncation - account for "Study Type: " prefix and RVU on right
+                frame_width = self.root.winfo_width()
+                max_chars = self._calculate_max_chars(frame_width) - 20  # Account for prefix and RVU
+                study_type_display = self._truncate_text(self.current_study_type, max(8, max_chars))
                 # Check if incomplete (starts with "incomplete") - show in red
                 if self.current_study_type.startswith("incomplete"):
                     self.debug_study_type_label.config(text=f"Study Type: {study_type_display}", foreground="red")
@@ -2041,6 +2061,41 @@ class RVUCounterApp:
             "dark_mode": False
         })
     
+    def _on_window_resize(self, event):
+        """Handle window resize to update truncation and study count."""
+        if event.widget == self.root:
+            new_width = event.width
+            new_height = event.height
+            # Only update if size actually changed significantly
+            width_changed = abs(new_width - self._last_width) > 5
+            height_changed = abs(new_height - getattr(self, '_last_height', 500)) > 15
+            if width_changed or height_changed:
+                self._last_width = new_width
+                self._last_height = new_height
+                # Force rebuild of study widgets with new truncation/count
+                self.last_record_count = -1
+                self.update_display()
+    
+    def _calculate_max_chars(self, available_width: int, font_size: int = 8) -> int:
+        """Calculate max characters that fit in available width."""
+        # Use default width if window not yet laid out (winfo returns 1)
+        if available_width < 100:
+            available_width = 240  # Default window width
+        # Approximate character width for Consolas font
+        # At font size 8, each character is roughly 6-7 pixels wide
+        char_width = font_size * 0.75
+        # Reserve space for: delete button (~20px), RVU label (~60px), padding (~15px)
+        reserved = 95
+        usable_width = max(available_width - reserved, 50)
+        max_chars = int(usable_width / char_width)
+        return max(10, min(max_chars, 100))  # Clamp between 10 and 100
+    
+    def _truncate_text(self, text: str, max_chars: int) -> str:
+        """Truncate text with ... if needed, no trailing space."""
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars-3] + "..."
+    
     def start_drag(self, event):
         """Start dragging window."""
         self.drag_start_x = event.x
@@ -2057,13 +2112,15 @@ class RVUCounterApp:
         self._position_save_timer = self.root.after(500, self.save_window_position)
     
     def save_window_position(self):
-        """Save the main window position."""
+        """Save the main window position and size."""
         try:
             if "window_positions" not in self.data_manager.data:
                 self.data_manager.data["window_positions"] = {}
             self.data_manager.data["window_positions"]["main"] = {
                 "x": self.root.winfo_x(),
-                "y": self.root.winfo_y()
+                "y": self.root.winfo_y(),
+                "width": self.root.winfo_width(),
+                "height": self.root.winfo_height()
             }
             self.data_manager.save()
         except Exception as e:
