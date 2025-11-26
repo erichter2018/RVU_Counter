@@ -128,7 +128,7 @@ def find_mosaic_window():
                             return window
                     except:
                         # If we can't check automation ID, still return it if it matches
-                        return window
+                    return window
             except:
                 continue
     except:
@@ -159,13 +159,13 @@ def find_mosaic_webview_element(main_window):
                 automation_id = child.element_info.automation_id
                 if automation_id == "webView":
                     return child
-            except:
+                    except:
                 continue
     except:
         pass
     
-    return None
-
+                        return None
+                
 
 def get_mosaic_elements(webview_element, depth=0, max_depth=20):
     """Recursively get all UI elements from WebView2."""
@@ -202,13 +202,12 @@ def get_mosaic_elements(webview_element, depth=0, max_depth=20):
         # Recursively get children
         try:
             children = webview_element.children()
-            for child in children:
+                    for child in children:
                 elements.extend(get_mosaic_elements(child, depth + 1, max_depth))
-        except:
-            pass
-            
-    except:
-        pass
+                except:
+                    pass
+            except:
+                pass
     
     return elements
 
@@ -660,6 +659,7 @@ class RVUData:
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
                 "data_source": "PowerScribe",  # "PowerScribe" or "Mosaic"
+                "show_time": False,  # Show time information in recent studies
             },
             "direct_lookups": {},
             "rvu_table": RVU_TABLE.copy(),
@@ -1054,8 +1054,8 @@ class RVUCounterApp:
     """Main application class."""
     
     def __init__(self, root):
-        self.root = root
-        self.root.title("RVU Counter")
+            self.root = root
+            self.root.title("RVU Counter")
         self.root.geometry("240x500")  # Default size
         self.root.minsize(200, 350)  # Minimum size
         self.root.resizable(True, True)
@@ -1087,7 +1087,7 @@ class RVUCounterApp:
         self.projected_shift_end: Optional[datetime] = None
         self.is_running = False
         self.current_window = None
-        self.refresh_interval = 1000  # 1 second
+            self.refresh_interval = 1000  # 1 second
             
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
@@ -1116,8 +1116,14 @@ class RVUCounterApp:
         self._ps_thread = threading.Thread(target=self._powerscribe_worker, daemon=True)
         self._ps_thread.start()
         
-        # Create UI
-        self.create_ui()
+            # Create UI
+            self.create_ui()
+            
+        # Initialize time labels list for time display updates
+        self.time_labels = []
+        
+        # Start timer to update time display every 5 seconds if show_time is enabled
+        self._update_time_display()
         
         # Auto-resume shift if enabled and shift was running (no shift_end means it was interrupted)
         if self.data_manager.data["settings"].get("auto_start", False):
@@ -1134,7 +1140,7 @@ class RVUCounterApp:
                     projected_end = current_shift.get("projected_shift_end")
                     if effective_start:
                         self.effective_shift_start = datetime.fromisoformat(effective_start)
-                    else:
+        else:
                         # Fall back to calculating it
                         minutes_into_hour = self.shift_start.minute
                         if minutes_into_hour <= 15:
@@ -1210,7 +1216,7 @@ class RVUCounterApp:
         self.total_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         total_value_frame = ttk.Frame(counters_inner)
         total_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.total_label.pack(side=tk.LEFT)
         self.total_comp_label = tk.Label(total_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.total_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1222,7 +1228,7 @@ class RVUCounterApp:
         self.avg_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         avg_value_frame = ttk.Frame(counters_inner)
         avg_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.avg_label.pack(side=tk.LEFT)
         self.avg_comp_label = tk.Label(avg_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.avg_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1234,7 +1240,7 @@ class RVUCounterApp:
         self.last_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         last_hour_value_frame = ttk.Frame(counters_inner)
         last_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.last_hour_label.pack(side=tk.LEFT)
         self.last_hour_comp_label = tk.Label(last_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.last_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1251,7 +1257,7 @@ class RVUCounterApp:
         self.last_full_hour_label_text.pack(side=tk.LEFT, padx=(2, 0))
         last_full_hour_value_frame = ttk.Frame(counters_inner)
         last_full_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.last_full_hour_label.pack(side=tk.LEFT)
         self.last_full_hour_comp_label = tk.Label(last_full_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.last_full_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1263,7 +1269,7 @@ class RVUCounterApp:
         self.projected_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         projected_value_frame = ttk.Frame(counters_inner)
         projected_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.projected_label.pack(side=tk.LEFT)
         self.projected_comp_label = tk.Label(projected_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.projected_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1275,7 +1281,7 @@ class RVUCounterApp:
         self.projected_shift_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         projected_shift_value_frame = ttk.Frame(counters_inner)
         projected_shift_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.projected_shift_label = ttk.Label(projected_shift_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.projected_shift_label = ttk.Label(projected_shift_value_frame, text="0.0", font=("Arial", 8), anchor=tk.W)
         self.projected_shift_label.pack(side=tk.LEFT)
         self.projected_shift_comp_label = tk.Label(projected_shift_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.projected_shift_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -1471,7 +1477,7 @@ class RVUCounterApp:
                 }
                 
                 if data_source == "PowerScribe":
-                    # Find PowerScribe window
+                # Find PowerScribe window
                     window = self.cached_window
                     if not window:
                         window = find_powerscribe_window()
@@ -1546,7 +1552,7 @@ class RVUCounterApp:
                                         proc = acc_data.get('procedure', '')
                                         if proc:
                                             data['multiple_accessions'].append(f"{acc} ({proc})")
-                                        else:
+                    else:
                                             data['multiple_accessions'].append(acc)
                                     
                                     # Set first as primary
@@ -1705,7 +1711,7 @@ class RVUCounterApp:
                     # For multiple accessions, show "Multiple studies" instead of first procedure
                     if len(mosaic_accession_procedures) > 1:
                         procedure = "Multiple studies"
-                    else:
+                            else:
                         # Single accession - get the procedure
                         first_procedure = None
                         for acc_data in mosaic_accession_procedures:
@@ -1754,7 +1760,7 @@ class RVUCounterApp:
                             study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
                             self.current_study_type = study_type
                             self.current_study_rvu = rvu
-                        else:
+                else:
                             self.current_study_type = ""
                             self.current_study_rvu = 0.0
                 
@@ -1935,8 +1941,8 @@ class RVUCounterApp:
                     self.multi_accession_data = {}
                     self.multi_accession_start_time = None
                     self.multi_accession_last_procedure = ""
-                    return
-            
+            return
+        
             # Handle regular single-accession studies
             if is_na and self.tracker.active_studies:
                 logger.info("Procedure changed to N/A - completing all active studies")
@@ -2217,7 +2223,7 @@ class RVUCounterApp:
             removed = records.pop()
             self.data_manager.save()
             self.undo_used = True
-            self.undo_btn.config(state=tk.DISABLED)
+                self.undo_btn.config(state=tk.DISABLED)
             logger.info(f"Undid study: {removed['accession']}")
             self.update_display()
     
@@ -2468,10 +2474,13 @@ class RVUCounterApp:
         # Update recent studies label based on shift status
         self.update_recent_studies_label()
         
-        # Only rebuild widgets if record count changed
+        # Only rebuild widgets if record count changed or if last_record_count is -1 (forced rebuild)
         current_count = len(self.data_manager.data["current_shift"]["records"])
-        rebuild_widgets = (current_count != self.last_record_count)
-        self.last_record_count = current_count
+        rebuild_widgets = (current_count != self.last_record_count) or (self.last_record_count == -1)
+        if self.last_record_count != -1:  # Only update if not forcing rebuild
+            self.last_record_count = current_count
+        else:
+            self.last_record_count = current_count  # Reset after forced rebuild
         
         stats = self.calculate_stats()
         settings = self.data_manager.data["settings"]
@@ -2520,7 +2529,7 @@ class RVUCounterApp:
             if range_text:
                 self.last_full_hour_range_label.config(text=range_text)
                 self.last_full_hour_label_text.config(text="hour:")
-            else:
+                    else:
                 self.last_full_hour_range_label.config(text="")
                 self.last_full_hour_label_text.config(text="hour:")
             if settings.get("show_comp_last_full_hour", False):
@@ -2562,6 +2571,9 @@ class RVUCounterApp:
             for widget in self.study_widgets:
                 widget.destroy()
             self.study_widgets.clear()
+            # Clear time labels if they exist
+            if hasattr(self, 'time_labels'):
+                self.time_labels.clear()
             
             # Calculate how many studies can fit based on canvas height
             canvas_height = self.studies_canvas.winfo_height()
@@ -2573,26 +2585,37 @@ class RVUCounterApp:
                 # Calculate actual index in full records list
                 actual_index = len(self.data_manager.data["current_shift"]["records"]) - 1 - i
                 
-                # Create frame for this study
+                # Create frame for this study (vertical container)
+                # Reduce vertical padding when show_time is enabled for tighter spacing
+                show_time = self.data_manager.data["settings"].get("show_time", False)
+                study_pady = 0 if show_time else 1
                 study_frame = ttk.Frame(self.studies_scrollable_frame)
-                study_frame.pack(fill=tk.X, pady=1, padx=0)  # No horizontal padding
+                study_frame.pack(fill=tk.X, pady=study_pady, padx=0)  # No horizontal padding
+                
+                # Main row frame (horizontal) - contains delete button, procedure, and RVU
+                main_row_frame = ttk.Frame(study_frame)
+                main_row_frame.pack(fill=tk.X, pady=0, padx=0)
                 
                 # X button to delete (on the left) - use Label for precise size control
                 colors = self.theme_colors
                 delete_btn = tk.Label(
-                    study_frame, 
+                    main_row_frame, 
                     text="×", 
-                    font=("Arial", 10),
+                    font=("Arial", 7),
                     bg=colors["delete_btn_bg"],
                     fg=colors["delete_btn_fg"],
                     cursor="hand2",
                     padx=0,
-                    pady=0
+                    pady=0,
+                    width=1,
+                    anchor=tk.CENTER
                 )
-                delete_btn.bind("<Button-1>", lambda e, idx=actual_index: self.delete_study_by_index(idx))
-                delete_btn.bind("<Enter>", lambda e: delete_btn.config(bg=colors["button_active_bg"]))
-                delete_btn.bind("<Leave>", lambda e: delete_btn.config(bg=colors["delete_btn_bg"]))
-                delete_btn.pack(side=tk.LEFT, padx=(1, 3))
+                # Store the actual_index in the button itself to avoid closure issues
+                delete_btn.actual_index = actual_index
+                delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: self.delete_study_by_index(btn.actual_index))
+                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["button_active_bg"]))
+                delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
+                delete_btn.pack(side=tk.LEFT, padx=(1, 3), pady=0)
                 
                 # Study text label (show actual procedure name, or "Multiple XR" for multi-accession)
                 is_multi = record.get('is_multi_accession', False)
@@ -2616,17 +2639,70 @@ class RVUCounterApp:
                 display_name = self._truncate_text(procedure_name, max_chars)
                 
                 # Procedure label - left-aligned
-                procedure_label = ttk.Label(study_frame, text=display_name, font=("Consolas", 8))
+                procedure_label = ttk.Label(main_row_frame, text=display_name, font=("Consolas", 8))
                 if not starts_with_valid:
                     procedure_label.config(foreground="#8B0000")  # Dark red
                 procedure_label.pack(side=tk.LEFT)
                 
                 # RVU label - stays on the far right
                 rvu_text = f"{record['rvu']:.1f} RVU"
-                rvu_label = ttk.Label(study_frame, text=rvu_text, font=("Consolas", 8))
+                rvu_label = ttk.Label(main_row_frame, text=rvu_text, font=("Consolas", 8))
                 if not starts_with_valid:
                     rvu_label.config(foreground="#8B0000")  # Dark red
                 rvu_label.pack(side=tk.RIGHT)
+                
+                # Time information row (if show_time is enabled) - appears BELOW the main row, tightly spaced
+                show_time = self.data_manager.data["settings"].get("show_time", False)
+                if show_time:
+                    # Use regular tk.Frame with minimal height to reduce spacing
+                    bg_color = self.theme_colors.get("bg_color", "#f0f0f0")
+                    time_row_frame = tk.Frame(study_frame, bg=bg_color, height=12)
+                    time_row_frame.pack(fill=tk.X, pady=(0, 0), padx=0)
+                    time_row_frame.pack_propagate(False)  # Prevent frame from expanding
+                    
+                    # Add a small spacer on the left to align with procedure text (accounting for X button width)
+                    spacer_label = tk.Label(time_row_frame, text="", width=2, bg=bg_color, height=1)  # Approximate width of X button + padding
+                    spacer_label.pack(side=tk.LEFT, pady=0, padx=0)
+                    
+                    # Time ago label - left-justified, smaller font, lighter color, no padding
+                    # Use tk.Label instead of ttk.Label for less padding
+                    time_ago_text = self._format_time_ago(record.get("time_finished"))
+                    time_ago_label = tk.Label(
+                        time_row_frame, 
+                        text=time_ago_text, 
+                        font=("Consolas", 7),
+                        fg="gray",
+                        bg=bg_color,
+                        padx=0,
+                        pady=0,
+                        anchor=tk.W
+                    )
+                    time_ago_label.pack(side=tk.LEFT, pady=0, padx=0)
+                    
+                    # Duration label - right-justified, same style as RVU, no padding
+                    duration_seconds = record.get("duration_seconds", 0)
+                    duration_text = self._format_duration(duration_seconds)
+                    duration_label = tk.Label(
+                        time_row_frame,
+                        text=duration_text,
+                        font=("Consolas", 7),
+                        fg="gray",
+                        bg=bg_color,
+                        padx=0,
+                        pady=0,
+                        anchor=tk.E
+                    )
+                    duration_label.pack(side=tk.RIGHT, pady=0, padx=0)
+                    
+                    # Store labels for updating
+                    if not hasattr(self, 'time_labels'):
+                        self.time_labels = []
+                    self.time_labels.append({
+                        'time_ago_label': time_ago_label,
+                        'duration_label': duration_label,
+                        'record': record,
+                        'time_row_frame': time_row_frame
+                    })
                 
                 self.study_widgets.append(study_frame)
             
@@ -2931,6 +3007,49 @@ class RVUCounterApp:
             return text
         return text[:max_chars-3] + "..."
     
+    def _format_time_ago(self, time_finished_str: str) -> str:
+        """Format how long ago a study was finished.
+        
+        Returns format like "5 seconds ago", "2 minutes ago", "1 hour ago"
+        """
+        if not time_finished_str:
+            return ""
+        try:
+            time_finished = datetime.fromisoformat(time_finished_str)
+            now = datetime.now()
+            delta = now - time_finished
+            
+            total_seconds = int(delta.total_seconds())
+            
+            if total_seconds < 60:
+                return f"{total_seconds} second{'s' if total_seconds != 1 else ''} ago"
+            elif total_seconds < 3600:
+                minutes = total_seconds // 60
+                return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+            else:
+                hours = total_seconds // 3600
+                return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        except (ValueError, TypeError):
+            return ""
+    
+    def _format_duration(self, duration_seconds: float) -> str:
+        """Format study duration in "xxm xxs" format.
+        
+        Examples: "45s", "1m 11s", "12m 30s"
+        Shows minutes only if >= 1 minute.
+        """
+        if not duration_seconds:
+            return "0s"
+        
+        total_seconds = int(duration_seconds)
+        minutes = total_seconds // 60
+        seconds = total_seconds % 60
+        
+        if minutes >= 1:
+            return f"{minutes}m {seconds}s"
+        else:
+            return f"{seconds}s"
+    
     def start_drag(self, event):
         """Start dragging window."""
         self.drag_start_x = event.x
@@ -2987,6 +3106,25 @@ class RVUCounterApp:
         except Exception as e:
             logger.error(f"Error saving window position: {e}")
     
+    def _update_time_display(self):
+        """Update time display for recent studies every 5 seconds."""
+        if hasattr(self, 'time_labels') and self.time_labels:
+            show_time = self.data_manager.data["settings"].get("show_time", False)
+            if show_time:
+                for label_info in self.time_labels:
+                    try:
+                        record = label_info['record']
+                        time_ago_label = label_info['time_ago_label']
+                        
+                        # Update time ago
+                        time_ago_text = self._format_time_ago(record.get("time_finished"))
+                        time_ago_label.config(text=time_ago_text)
+                    except Exception as e:
+                        logger.error(f"Error updating time display: {e}")
+        
+        # Schedule next update in 5 seconds
+        self.root.after(5000, self._update_time_display)
+    
     def on_closing(self):
         """Handle window closing."""
         self.save_window_position()
@@ -3008,9 +3146,9 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"450x580+{window_pos['x']}+{window_pos['y']}")
+            self.window.geometry(f"450x620+{window_pos['x']}+{window_pos['y']}")
         else:
-            self.window.geometry("450x580")
+            self.window.geometry("450x620")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -3054,6 +3192,10 @@ class SettingsWindow:
         # Dark mode
         self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
         ttk.Checkbutton(main_frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
+        
+        # Show time checkbox
+        self.show_time_var = tk.BooleanVar(value=settings.get("show_time", False))
+        ttk.Checkbutton(main_frame, text="Show time", variable=self.show_time_var).pack(anchor=tk.W, pady=2)
         
         # Data source radio buttons (PowerScribe or Mosaic)
         data_source_frame = ttk.Frame(main_frame)
@@ -3221,6 +3363,7 @@ class SettingsWindow:
             self.data_manager.data["settings"]["shift_length_hours"] = int(self.shift_length_var.get())
             self.data_manager.data["settings"]["min_study_seconds"] = int(self.min_seconds_var.get())
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
+            self.data_manager.data["settings"]["show_time"] = self.show_time_var.get()
             
             # Update tracker min_seconds
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
@@ -3228,6 +3371,8 @@ class SettingsWindow:
             self.data_manager.save()
             self.app.apply_theme()
             self.app._update_tk_widget_colors()
+            # Force rebuild of widgets to show/hide time display when setting changes
+            self.app.last_record_count = -1
             self.app.update_display()
             self.window.destroy()
             logger.info("Settings saved")
@@ -4287,7 +4432,7 @@ class StatisticsWindow:
             self.last_saved_x = x
             self.last_saved_y = y
             self.data_manager.save()
-        except Exception as e:
+    except Exception as e:
             logger.error(f"Error saving statistics window position: {e}")
     
     def apply_theme(self):

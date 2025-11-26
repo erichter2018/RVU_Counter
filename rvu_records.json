@@ -13,6 +13,36 @@
         "time_performed": "2025-11-25T23:29:45.256349",
         "time_finished": "2025-11-25T23:30:15.477875",
         "duration_seconds": 30.221526
+      },
+      {
+        "accession": "320US25012555ELP",
+        "procedure": "US LIVER",
+        "patient_class": "Inpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-26T07:04:41.151237",
+        "time_finished": "2025-11-26T07:05:00.332132",
+        "duration_seconds": 19.180895
+      },
+      {
+        "accession": "390XR25034606ELP",
+        "procedure": "XR CHEST 1 VIEW",
+        "patient_class": "Inpatient",
+        "study_type": "XR Chest",
+        "rvu": 0.3,
+        "time_performed": "2025-11-26T07:44:28.650112",
+        "time_finished": "2025-11-26T07:44:40.721427",
+        "duration_seconds": 12.071315
+      },
+      {
+        "accession": "62-XR-25-055515DL",
+        "procedure": "XR ANKLE 3 OR MORE VIEWS RIGHT",
+        "patient_class": "Outpatient",
+        "study_type": "XR MSK",
+        "rvu": 0.3,
+        "time_performed": "2025-11-26T07:47:46.996301",
+        "time_finished": "2025-11-26T07:48:58.593933",
+        "duration_seconds": 71.597632
       }
     ],
     "effective_shift_start": "2025-11-25T22:00:00",
