@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import shutil
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
@@ -94,6 +95,227 @@ def find_powerscribe_window():
             continue
     
     return None
+
+
+def find_mosaic_window():
+    """Find Mosaic Info Hub window - it's a WinForms app with WebView2."""
+    global _cached_desktop
+    
+    # Reuse cached Desktop object
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
+    
+    try:
+        all_windows = desktop.windows(visible_only=True)
+        for window in all_windows:
+            try:
+                window_text = window.window_text().lower()
+                # Exclude test/viewer windows and RVU Counter
+                if ("rvu counter" in window_text or 
+                    "test" in window_text or 
+                    "viewer" in window_text or 
+                    "ui elements" in window_text or
+                    "diagnostic" in window_text):
+                    continue
+                
+                # Look for Mosaic Info Hub window
+                if "mosaic" in window_text and "info hub" in window_text:
+                    # Verify it has the MainForm automation ID
+                    try:
+                        automation_id = window.element_info.automation_id
+                        if automation_id == "MainForm":
+                            return window
+                    except:
+                        # If we can't check automation ID, still return it if it matches
+                        return window
+            except:
+                continue
+    except:
+        pass
+    
+    return None
+
+
+def find_mosaic_webview_element(main_window):
+    """Find the WebView2 control inside the Mosaic main window."""
+    try:
+        # The WebView2 has automation_id = "webView"
+        children = main_window.children()
+        for child in children:
+            try:
+                automation_id = child.element_info.automation_id
+                if automation_id == "webView":
+                    return child
+            except:
+                continue
+    except:
+        pass
+    
+    # Fallback: search recursively
+    try:
+        for child in main_window.descendants():
+            try:
+                automation_id = child.element_info.automation_id
+                if automation_id == "webView":
+                    return child
+            except:
+                continue
+    except:
+        pass
+    
+    return None
+
+
+def get_mosaic_elements(webview_element, depth=0, max_depth=20):
+    """Recursively get all UI elements from WebView2."""
+    elements = []
+    
+    if depth > max_depth:
+        return elements
+    
+    try:
+        try:
+            automation_id = webview_element.element_info.automation_id or ""
+        except:
+            automation_id = ""
+        
+        try:
+            name = webview_element.element_info.name or ""
+        except:
+            name = ""
+        
+        try:
+            text = webview_element.window_text() or ""
+        except:
+            text = ""
+        
+        if automation_id or name or text:
+            elements.append({
+                'depth': depth,
+                'automation_id': automation_id,
+                'name': name,
+                'text': text[:100] if text else "",
+                'element': webview_element,
+            })
+        
+        # Recursively get children
+        try:
+            children = webview_element.children()
+            for child in children:
+                elements.extend(get_mosaic_elements(child, depth + 1, max_depth))
+        except:
+            pass
+            
+    except:
+        pass
+    
+    return elements
+
+
+def extract_mosaic_data(webview_element):
+    """Extract study data from Mosaic Info Hub WebView2 content.
+    
+    Returns dict with: procedure, accession, patient_class, multiple_accessions
+    For Mosaic, patient_class is always "Unknown".
+    """
+    data = {
+        'procedure': '',
+        'accession': '',
+        'patient_class': 'Unknown',  # Mosaic doesn't provide patient class
+        'multiple_accessions': []  # List of {accession, procedure} dicts
+    }
+    
+    try:
+        # Get all elements from WebView2 with deep scan
+        all_elements = get_mosaic_elements(webview_element, max_depth=20)
+        
+        # Convert to list for easier searching
+        element_data = []
+        for elem in all_elements:
+            name = elem.get('name', '').strip()
+            if name:
+                element_data.append({
+                    'name': name,
+                    'depth': elem.get('depth', 0)
+                })
+        
+        # Find elements by label and get their values
+        for i, elem in enumerate(element_data):
+            name = elem['name']
+            
+            # Check if this element itself contains multiple accessions
+            # Format: "ACCESSION1 (PROC1), ACCESSION2 (PROC2)"
+            if name and ',' in name and '(' in name and 'accession' not in name.lower():
+                if not data['multiple_accessions']:
+                    accession_parts = name.split(',')
+                    for part in accession_parts:
+                        part = part.strip()
+                        if '(' in part and ')' in part:
+                            acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
+                            if acc_match:
+                                acc = acc_match.group(1).strip()
+                                proc = acc_match.group(2).strip()
+                                if acc and len(acc) > 5:
+                                    data['multiple_accessions'].append({
+                                        'accession': acc,
+                                        'procedure': proc
+                                    })
+                    # Set first accession as primary
+                    if data['multiple_accessions']:
+                        data['accession'] = data['multiple_accessions'][0]['accession']
+                        if not data['procedure'] and data['multiple_accessions'][0]['procedure']:
+                            data['procedure'] = data['multiple_accessions'][0]['procedure']
+            
+            # Procedure - look for CT/MR/XR etc. procedures (but skip if it's part of accession format)
+            if not data['procedure'] and not (',' in name and '(' in name):
+                if name:
+                    proc_keywords = ['CT ', 'MR ', 'XR ', 'US ', 'NM ', 'PET', 'MRI', 'ULTRASOUND']
+                    if any(keyword in name.upper() for keyword in proc_keywords):
+                        data['procedure'] = name
+            
+            # Accession - look for label "Accession(s):" and get next element(s)
+            if 'accession' in name.lower() and ':' in name:
+                for j in range(i+1, min(i+10, len(element_data))):
+                    next_elem = element_data[j]
+                    next_name = next_elem['name'].strip()
+                    
+                    # Check if it contains multiple accessions
+                    if next_name and ',' in next_name and '(' in next_name:
+                        accession_parts = next_name.split(',')
+                        for part in accession_parts:
+                            part = part.strip()
+                            if '(' in part and ')' in part:
+                                acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
+                                if acc_match:
+                                    acc = acc_match.group(1).strip()
+                                    proc = acc_match.group(2).strip()
+                                    if acc:
+                                        data['multiple_accessions'].append({
+                                            'accession': acc,
+                                            'procedure': proc
+                                        })
+                            else:
+                                if part and len(part) > 5:
+                                    data['multiple_accessions'].append({
+                                        'accession': part,
+                                        'procedure': ''
+                                    })
+                        
+                        if data['multiple_accessions']:
+                            data['accession'] = data['multiple_accessions'][0]['accession']
+                            if not data['procedure'] and data['multiple_accessions'][0]['procedure']:
+                                data['procedure'] = data['multiple_accessions'][0]['procedure']
+                        break
+                    # Single accession
+                    elif next_name and len(next_name) > 5 and ' ' not in next_name and '(' not in next_name:
+                        data['accession'] = next_name
+                        break
+        
+    except Exception as e:
+        logger.debug(f"Error extracting Mosaic data: {e}")
+    
+    return data
 
 
 def find_elements_by_automation_id(window, automation_ids: List[str], cached_elements: Dict = None) -> Dict[str, any]:
@@ -355,10 +577,8 @@ class RVUData:
     def __init__(self, base_dir: str = None):
         settings_dir, data_dir = get_app_paths()
         
-        # Bundled settings file (RVU tables, rules, rates) - read-only in bundle
-        self.settings_file = os.path.join(settings_dir, "rvu_settings.json")
-        # User settings file (preferences, window positions) - writable
-        self.user_settings_file = os.path.join(data_dir, "user_settings.json")
+        # Settings file (RVU tables, rules, rates, user preferences, window positions)
+        self.settings_file = os.path.join(data_dir, "rvu_settings.json")
         # Records file - persistent data (store next to exe or script)
         self.records_file = os.path.join(data_dir, "rvu_records.json")
         self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
@@ -367,23 +587,18 @@ class RVUData:
         self.is_frozen = getattr(sys, 'frozen', False)
         
         logger.info(f"Settings file: {self.settings_file}")
-        logger.info(f"User settings file: {self.user_settings_file}")
         logger.info(f"Records file: {self.records_file}")
         
         # Load data from files
         self.settings_data = self.load_settings()
-        self.user_settings_data = self.load_user_settings()
         self.records_data = self.load_records()
         
         # Migrate old file if it exists
         self.migrate_old_file()
         
-        # Merge bundled settings with user settings (user settings override)
-        merged_settings = self.settings_data.get("settings", {}).copy()
-        merged_settings.update(self.user_settings_data.get("settings", {}))
-        
-        merged_window_positions = self.settings_data.get("window_positions", {}).copy()
-        merged_window_positions.update(self.user_settings_data.get("window_positions", {}))
+        # Use settings directly (no need to merge separate user settings)
+        merged_settings = self.settings_data.get("settings", {})
+        merged_window_positions = self.settings_data.get("window_positions", {})
         
         # Merge into single data structure for compatibility
         self.data = {
@@ -413,7 +628,22 @@ class RVUData:
         except Exception as e:
             logger.error(f"Error loading settings: {e}")
         
-        # Default settings structure
+        # If settings file doesn't exist, try to copy from bundled version (for frozen apps)
+        if self.is_frozen:
+            try:
+                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
+                if os.path.exists(bundled_settings_file):
+                    logger.info(f"Copying bundled settings from {bundled_settings_file} to {self.settings_file}")
+                    shutil.copy2(bundled_settings_file, self.settings_file)
+                    # Now load the copied file
+                    with open(self.settings_file, 'r') as f:
+                        data = json.load(f)
+                        logger.info(f"Loaded settings from bundled file (copied to {self.settings_file})")
+                        return data
+            except Exception as e:
+                logger.error(f"Error copying bundled settings file: {e}")
+        
+        # Default settings structure (fallback if bundled file also doesn't exist)
         return {
             "settings": {
                 "auto_start": False,
@@ -427,6 +657,7 @@ class RVUData:
                 "shift_length_hours": 9,
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
+                "data_source": "PowerScribe",  # "PowerScribe" or "Mosaic"
             },
             "direct_lookups": {},
             "rvu_table": RVU_TABLE.copy(),
@@ -437,19 +668,6 @@ class RVUData:
             }
         }
     
-    def load_user_settings(self) -> dict:
-        """Load user-specific settings (preferences, window positions)."""
-        try:
-            if os.path.exists(self.user_settings_file):
-                with open(self.user_settings_file, 'r') as f:
-                    data = json.load(f)
-                    logger.info(f"Loaded user settings from {self.user_settings_file}")
-                    return data
-        except Exception as e:
-            logger.error(f"Error loading user settings: {e}")
-        
-        # Return empty structure - will use bundled defaults
-        return {"settings": {}, "window_positions": {}}
     
     def load_records(self) -> dict:
         """Load records, current shift, and historical shifts."""
@@ -529,7 +747,6 @@ class RVUData:
         # Update internal data structures from merged data
         if "settings" in self.data:
             self.settings_data["settings"] = self.data["settings"]
-            self.user_settings_data["settings"] = self.data["settings"]
         if "direct_lookups" in self.data:
             self.settings_data["direct_lookups"] = self.data["direct_lookups"]
         if "rvu_table" in self.data:
@@ -538,7 +755,6 @@ class RVUData:
             self.settings_data["classification_rules"] = self.data["classification_rules"]
         if "window_positions" in self.data:
             self.settings_data["window_positions"] = self.data["window_positions"]
-            self.user_settings_data["window_positions"] = self.data["window_positions"]
         
         if "records" in self.data:
             self.records_data["records"] = self.data["records"]
@@ -547,34 +763,21 @@ class RVUData:
         if "shifts" in self.data:
             self.records_data["shifts"] = self.data["shifts"]
         
-        # Save user settings file (preferences, window positions) - always writable
+        # Save settings file (everything - settings, RVU tables, rules, window positions)
         try:
-            user_settings_to_save = {
-                "settings": self.user_settings_data.get("settings", {}),
-                "window_positions": self.user_settings_data.get("window_positions", {})
+            settings_to_save = {
+                "settings": self.settings_data.get("settings", {}),
+                "direct_lookups": self.settings_data.get("direct_lookups", {}),
+                "rvu_table": self.settings_data.get("rvu_table", {}),
+                "classification_rules": self.settings_data.get("classification_rules", {}),
+                "compensation_rates": self.settings_data.get("compensation_rates", {}),
+                "window_positions": self.settings_data.get("window_positions", {})
             }
-            with open(self.user_settings_file, 'w') as f:
-                json.dump(user_settings_to_save, f, indent=2, default=str)
-            logger.info(f"Saved user settings to {self.user_settings_file}")
+            with open(self.settings_file, 'w') as f:
+                json.dump(settings_to_save, f, indent=2, default=str)
+            logger.info(f"Saved settings to {self.settings_file}")
         except Exception as e:
-            logger.error(f"Error saving user settings: {e}")
-        
-        # Only save to bundled settings file if running as script (not frozen)
-        if not self.is_frozen:
-            try:
-                settings_to_save = {
-                    "settings": self.settings_data.get("settings", {}),
-                    "direct_lookups": self.settings_data.get("direct_lookups", {}),
-                    "rvu_table": self.settings_data.get("rvu_table", {}),
-                    "classification_rules": self.settings_data.get("classification_rules", {}),
-                    "compensation_rates": self.settings_data.get("compensation_rates", {}),
-                    "window_positions": self.settings_data.get("window_positions", {})
-                }
-                with open(self.settings_file, 'w') as f:
-                    json.dump(settings_to_save, f, indent=2, default=str)
-                logger.info(f"Saved settings to {self.settings_file}")
-            except Exception as e:
-                logger.error(f"Error saving settings: {e}")
+            logger.error(f"Error saving settings: {e}")
         
         # Save records file
         try:
@@ -1119,11 +1322,13 @@ class RVUCounterApp:
         self.update_display()
     
     def _powerscribe_worker(self):
-        """Background thread: Continuously poll PowerScribe for data."""
+        """Background thread: Continuously poll PowerScribe or Mosaic for data."""
         import time
         
         while self._ps_thread_running:
             try:
+                data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
+                
                 data = {
                     'found': False,
                     'procedure': '',
@@ -1134,58 +1339,105 @@ class RVUCounterApp:
                     'elements': {}
                 }
                 
-                # Find window
-                window = self.cached_window
-                if not window:
-                    window = find_powerscribe_window()
-                
-                if window:
-                    # Validate window still exists
-                    try:
-                        window.window_text()
-                        self.cached_window = window
-                    except:
-                        self.cached_window = None
-                        self.cached_elements = {}
+                if data_source == "PowerScribe":
+                    # Find PowerScribe window
+                    window = self.cached_window
+                    if not window:
                         window = find_powerscribe_window()
-                
-                if window:
-                    data['found'] = True
                     
-                    # Find elements with caching
-                    elements = find_elements_by_automation_id(
-                        window,
-                        ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
-                        self.cached_elements
-                    )
-                    self.cached_elements.update(elements)
-                    
-                    data['elements'] = elements
-                    data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
-                    data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
-                    data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
-                    data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
-                    
-                    # Handle multiple accessions
-                    if elements.get("listBoxAccessions"):
+                    if window:
+                        # Validate window still exists
                         try:
-                            listbox = elements["listBoxAccessions"]["element"]
-                            for child in listbox.children():
-                                try:
-                                    item_text = child.window_text().strip()
-                                    if item_text:
-                                        data['multiple_accessions'].append(item_text)
-                                except:
-                                    pass
+                            window.window_text()
+                            self.cached_window = window
                         except:
-                            pass
+                            self.cached_window = None
+                            self.cached_elements = {}
+                            window = find_powerscribe_window()
+                    
+                    if window:
+                        data['found'] = True
+                        
+                        # Find elements with caching
+                        elements = find_elements_by_automation_id(
+                            window,
+                            ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
+                            self.cached_elements
+                        )
+                        self.cached_elements.update(elements)
+                        
+                        data['elements'] = elements
+                        data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
+                        data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
+                        data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+                        data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
+                        
+                        # Handle multiple accessions
+                        if elements.get("listBoxAccessions"):
+                            try:
+                                listbox = elements["listBoxAccessions"]["element"]
+                                for child in listbox.children():
+                                    try:
+                                        item_text = child.window_text().strip()
+                                        if item_text:
+                                            data['multiple_accessions'].append(item_text)
+                                    except:
+                                        pass
+                            except:
+                                pass
+                
+                elif data_source == "Mosaic":
+                    # Find Mosaic window
+                    main_window = find_mosaic_window()
+                    
+                    if main_window:
+                        try:
+                            # Validate window still exists
+                            main_window.window_text()
+                            data['found'] = True
+                            
+                            # Find WebView2 control
+                            webview = find_mosaic_webview_element(main_window)
+                            
+                            if webview:
+                                # Extract data from Mosaic
+                                mosaic_data = extract_mosaic_data(webview)
+                                
+                                data['procedure'] = mosaic_data.get('procedure', '')
+                                data['patient_class'] = mosaic_data.get('patient_class', 'Unknown')
+                                
+                                # Handle multiple accessions - convert to format expected by refresh_data
+                                multiple_accessions_data = mosaic_data.get('multiple_accessions', [])
+                                if multiple_accessions_data:
+                                    # Store accession/procedure pairs
+                                    for acc_data in multiple_accessions_data:
+                                        acc = acc_data.get('accession', '')
+                                        proc = acc_data.get('procedure', '')
+                                        if proc:
+                                            data['multiple_accessions'].append(f"{acc} ({proc})")
+                                        else:
+                                            data['multiple_accessions'].append(acc)
+                                    
+                                    # Set first as primary
+                                    if multiple_accessions_data:
+                                        data['accession'] = multiple_accessions_data[0].get('accession', '')
+                                        if not data['procedure'] and multiple_accessions_data[0].get('procedure'):
+                                            data['procedure'] = multiple_accessions_data[0].get('procedure', '')
+                                else:
+                                    # Single accession
+                                    data['accession'] = mosaic_data.get('accession', '')
+                                    if not data['procedure']:
+                                        data['procedure'] = mosaic_data.get('procedure', '')
+                        except Exception as e:
+                            logger.debug(f"Mosaic extraction error: {e}")
+                            data['found'] = False
                 
                 # Update shared data (thread-safe)
                 with self._ps_lock:
                     self._ps_data = data
                     
             except Exception as e:
-                logger.debug(f"PowerScribe worker error: {e}")
+                logger.debug(f"Worker error: {e}")
             
             time.sleep(0.5)  # Poll every 500ms
     
@@ -1196,8 +1448,11 @@ class RVUCounterApp:
             with self._ps_lock:
                 ps_data = self._ps_data.copy()
             
+            data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
+            source_name = "PowerScribe" if data_source == "PowerScribe" else "Mosaic"
+            
             if not ps_data.get('found', False):
-                self.root.title("RVU Counter - PowerScribe not found")
+                self.root.title(f"RVU Counter - {source_name} not found")
                 self.current_accession = ""
                 self.current_procedure = ""
                 self.current_study_type = ""
@@ -1214,11 +1469,173 @@ class RVUCounterApp:
             accession = ps_data.get('accession', '')
             multiple_accessions = ps_data.get('multiple_accessions', [])
             
-            # Check labelAccessionTitle to determine single vs multiple accession mode
-            is_multiple_mode = accession_title == "Accessions:" or accession_title == "Accessions"
-            is_multi_accession_view = False  # Flag to prevent normal single-study tracking
+            # For Mosaic: multiple accessions should be treated as separate studies
+            # For PowerScribe: use the existing multi-accession mode logic
+            mosaic_multiple_mode = False  # Track if we're in Mosaic multi-accession mode
             
-            if is_multiple_mode and multiple_accessions:
+            # Debug: log what we're getting from worker thread
+            if data_source == "Mosaic":
+                logger.info(f"Mosaic data - procedure: '{procedure}', accession: '{accession}', multiple_accessions: {multiple_accessions}")
+            
+            # For Mosaic, also check if we have multiple active studies that might indicate multi-accession
+            # This handles the case where extraction found them separately but they should be displayed together
+            if data_source == "Mosaic" and not multiple_accessions:
+                # Get all currently active Mosaic studies (check if they were recently added - within last 30 seconds)
+                current_time_check = datetime.now()
+                active_mosaic_studies = []
+                for acc, study in self.tracker.active_studies.items():
+                    if acc and study.get('patient_class') == 'Unknown':  # Mosaic studies have Unknown patient class
+                        time_since_start = (current_time_check - study['start_time']).total_seconds()
+                        if time_since_start < 30:  # Only include recently added studies (within 30 seconds)
+                            active_mosaic_studies.append(acc)
+                
+                if len(active_mosaic_studies) > 1:
+                    # We have multiple active studies - construct multiple_accessions for display
+                    multiple_accessions = []
+                    for acc in active_mosaic_studies:
+                        if acc in self.tracker.active_studies:
+                            study = self.tracker.active_studies[acc]
+                            proc = study.get('procedure', '')
+                            if proc:
+                                multiple_accessions.append(f"{acc} ({proc})")
+                            else:
+                                multiple_accessions.append(acc)
+                    logger.info(f"Mosaic: Constructed multiple_accessions from {len(active_mosaic_studies)} active studies: {multiple_accessions}")
+                    # Also update accession and procedure if not set
+                    if not accession and active_mosaic_studies:
+                        accession = active_mosaic_studies[0]
+                    # Set procedure to "Multiple studies" when we have multiple
+                    if len(active_mosaic_studies) > 1:
+                        procedure = "Multiple studies"
+                    elif not procedure and active_mosaic_studies:
+                        # Single study case - get procedure from it
+                        if active_mosaic_studies[0] in self.tracker.active_studies:
+                            study = self.tracker.active_studies[active_mosaic_studies[0]]
+                            procedure = study.get('procedure', '')
+            
+            if data_source == "Mosaic" and multiple_accessions:
+                mosaic_multiple_mode = True
+                # Mosaic provides one-to-one accession-to-procedure mapping
+                # Track each as a separate study that can complete independently
+                is_multiple_mode = False  # Don't use PowerScribe multi-accession mode
+                is_multi_accession_view = False
+                
+                # Parse multiple accessions from format "ACC (PROC)" or just "ACC"
+                # Extract accession and procedure pairs
+                mosaic_accession_procedures = []
+                logger.debug(f"Parsing Mosaic multiple accessions: {multiple_accessions}")
+                for acc_entry in multiple_accessions:
+                    if '(' in acc_entry and ')' in acc_entry:
+                        # Format: "ACC (PROC)"
+                        acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', acc_entry)
+                        if acc_match:
+                            acc = acc_match.group(1).strip()
+                            proc = acc_match.group(2).strip()
+                            mosaic_accession_procedures.append({'accession': acc, 'procedure': proc})
+                            logger.debug(f"Parsed: accession='{acc}', procedure='{proc}'")
+                    else:
+                        # Just accession, use current procedure if available
+                        mosaic_accession_procedures.append({'accession': acc_entry, 'procedure': procedure})
+                        logger.debug(f"Parsed (no proc): accession='{acc_entry}', using procedure='{procedure}'")
+                
+                logger.debug(f"Parsed {len(mosaic_accession_procedures)} accession/procedure pairs")
+                
+                # Track each accession separately (they'll complete when they disappear)
+                for acc_data in mosaic_accession_procedures:
+                    acc = acc_data['accession']
+                    proc = acc_data['procedure']
+                    
+                    # Only track if not already seen (if ignoring duplicates)
+                    ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+                    if ignore_duplicates and acc in self.tracker.seen_accessions:
+                        continue
+                    
+                    # Track as individual study
+                    if acc not in self.tracker.active_studies and proc:
+                        classification_rules = self.data_manager.data.get("classification_rules", {})
+                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                        study_type, rvu = match_study_type(proc, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                        
+                        current_time_tracking = datetime.now()
+                        self.tracker.active_studies[acc] = {
+                            "accession": acc,
+                            "procedure": proc,
+                            "study_type": study_type,
+                            "rvu": rvu,
+                            "patient_class": patient_class,
+                            "start_time": current_time_tracking,
+                            "last_seen": current_time_tracking  # Required by tracker
+                        }
+                        logger.info(f"Started tracking Mosaic study: {acc} - {proc} ({rvu} RVU)")
+                
+                # Set display to first accession/procedure and calculate study type/RVU
+                if mosaic_accession_procedures:
+                    accession = mosaic_accession_procedures[0]['accession']
+                    # For multiple accessions, show "Multiple studies" instead of first procedure
+                    if len(mosaic_accession_procedures) > 1:
+                        procedure = "Multiple studies"
+                    else:
+                        # Single accession - get the procedure
+                        first_procedure = None
+                        for acc_data in mosaic_accession_procedures:
+                            proc = acc_data.get('procedure', '')
+                            if proc:
+                                first_procedure = proc
+                                break
+                        procedure = first_procedure or procedure  # Use first valid procedure, or fallback
+                    
+                    # Always set study type and RVU for display
+                    classification_rules = self.data_manager.data.get("classification_rules", {})
+                    direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                    
+                    # If multiple accessions, show summary of all studies
+                    if len(mosaic_accession_procedures) > 1:
+                        # Calculate total RVU and determine modality from all procedures
+                        modalities = set()
+                        total_rvu = 0
+                        valid_procedures = []
+                        
+                        for acc_data in mosaic_accession_procedures:
+                            proc = acc_data.get('procedure', '')
+                            if proc:
+                                valid_procedures.append(proc)
+                                temp_st, temp_rvu = match_study_type(proc, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                                total_rvu += temp_rvu
+                                if temp_st:
+                                    parts = temp_st.split()
+                                    if parts:
+                                        modalities.add(parts[0])
+                        
+                        if valid_procedures:
+                            modality = list(modalities)[0] if modalities else "Studies"
+                            self.current_study_type = f"{len(mosaic_accession_procedures)} {modality} studies"
+                            self.current_study_rvu = total_rvu
+                            # Show "Multiple studies" for procedure when there are multiple accessions
+                            procedure = "Multiple studies"
+                        else:
+                            # No valid procedures yet - set placeholder so display shows something
+                            self.current_study_type = f"{len(mosaic_accession_procedures)} studies"
+                            self.current_study_rvu = 0.0
+                            procedure = "Multiple studies"  # Placeholder to trigger display
+                    else:
+                        # Single accession - set from first (and only) accession
+                        if procedure:
+                            study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                            self.current_study_type = study_type
+                            self.current_study_rvu = rvu
+                        else:
+                            self.current_study_type = ""
+                            self.current_study_rvu = 0.0
+                
+                # Debug: log what we're setting for display
+                logger.debug(f"Mosaic multi-accession display - procedure: '{procedure}', accession: '{accession}', study_type: '{self.current_study_type}', rvu: {self.current_study_rvu}")
+            else:
+                # PowerScribe logic: Check labelAccessionTitle to determine single vs multiple accession mode
+                is_multiple_mode = accession_title == "Accessions:" or accession_title == "Accessions"
+                is_multi_accession_view = False  # Flag to prevent normal single-study tracking
+            
+            # Only process PowerScribe multi-accession mode if not Mosaic
+            if data_source != "Mosaic" and is_multiple_mode and multiple_accessions:
                 accession = "Multiple Accessions"
                 is_multi_accession_view = True  # Flag to prevent normal single-study tracking
                 
@@ -1292,20 +1709,24 @@ class RVUCounterApp:
                         
                         # Update last seen procedure
                         self.multi_accession_last_procedure = procedure
-            elif is_multiple_mode:
+            elif data_source != "Mosaic" and is_multiple_mode:
+                # PowerScribe: Multiple accessions but list not loaded yet
                 accession = "Multiple (loading...)"
             else:
-                # SINGLE ACCESSION mode - get from labelAccession
-                accession = elements.get("labelAccession", {}).get("text", "").strip()
+                # SINGLE ACCESSION mode (PowerScribe) or Mosaic single/multiple handled above
+                if data_source == "PowerScribe":
+                    # PowerScribe: get from labelAccession
+                    accession = elements.get("labelAccession", {}).get("text", "").strip()
+                # For Mosaic, accession is already set above
                 
-                # If we were in multi-accession mode but now we're not, record and reset
-                if self.multi_accession_mode and self.multi_accession_data:
+                # If we were in multi-accession mode but now we're not (PowerScribe only), record and reset
+                if data_source == "PowerScribe" and self.multi_accession_mode and self.multi_accession_data:
                     # Record the multi-accession study before exiting
                     current_time = datetime.now()
                     self._record_multi_accession_study(current_time)
                 
-                # Reset multi-accession tracking
-                if self.multi_accession_mode:
+                # Reset multi-accession tracking (PowerScribe only)
+                if data_source == "PowerScribe" and self.multi_accession_mode:
                     self.multi_accession_mode = False
                     self.multi_accession_data = {}
                     self.multi_accession_start_time = None
@@ -1313,6 +1734,9 @@ class RVUCounterApp:
             
             # Update state
             self.current_accession = accession
+            # For Mosaic multi-accession, ensure procedure is always set
+            if data_source == "Mosaic" and multiple_accessions and not procedure:
+                procedure = "Multiple studies"  # Ensure we have something to display
             self.current_procedure = procedure
             self.current_patient_class = patient_class
             self.current_multiple_accessions = multiple_accessions
@@ -1321,8 +1745,13 @@ class RVUCounterApp:
             is_na = procedure and procedure.strip().lower() in ["n/a", "na", "none", ""]
             
             # Determine study type and RVU for display
+            # For Mosaic multiple accessions, the values should already be set above
+            # Skip if already set for Mosaic multiple accessions
+            if mosaic_multiple_mode and hasattr(self, 'current_study_type') and self.current_study_type:
+                # Already set above for Mosaic multi-accession - keep it
+                pass
             # Skip if already set for duplicate multi-accession
-            if is_multi_accession_view and not self.multi_accession_mode and self.current_study_type.startswith("Multiple"):
+            elif is_multi_accession_view and not self.multi_accession_mode and hasattr(self, 'current_study_type') and self.current_study_type and self.current_study_type.startswith("Multiple"):
                 # Already set for duplicate multi-accession - keep it
                 pass
             elif self.multi_accession_mode and multiple_accessions:
@@ -1407,15 +1836,74 @@ class RVUCounterApp:
                 self.update_display()
                 return  # Return after handling N/A case
         
-            # Skip normal study tracking when viewing a multi-accession study
-            # Multi-accession studies are handled separately above
-            # Also skip if we're viewing a multi-accession that we're ignoring as duplicate
-            if self.multi_accession_mode or is_multi_accession_view:
+            # Skip normal study tracking when viewing a multi-accession study (PowerScribe only)
+            # For Mosaic, we track each accession separately, so we need to check completion
+            # Also skip if we're viewing a multi-accession that we're ignoring as duplicate (PowerScribe only)
+            if (self.multi_accession_mode or is_multi_accession_view) and data_source != "Mosaic":
                 return
             
             # Check for completed studies FIRST (before checking if we should ignore)
             # This handles studies that have disappeared
-            completed = self.tracker.check_completed(current_time, accession)
+            # For Mosaic multi-accession, we need to check all accessions, not just the current one
+            if data_source == "Mosaic":
+                if multiple_accessions:
+                    # For Mosaic multi-accession, check completion for all accessions
+                    # Extract all accession numbers from multiple_accessions
+                    all_current_accessions = set()
+                    for acc_entry in multiple_accessions:
+                        if '(' in acc_entry and ')' in acc_entry:
+                            # Format: "ACC (PROC)"
+                            acc_match = re.match(r'^([^(]+)', acc_entry)
+                            if acc_match:
+                                all_current_accessions.add(acc_match.group(1).strip())
+                        else:
+                            all_current_accessions.add(acc_entry)
+                    
+                    # Update last_seen for all currently visible Mosaic accessions
+                    for acc in all_current_accessions:
+                        if acc in self.tracker.active_studies:
+                            self.tracker.active_studies[acc]["last_seen"] = current_time
+                    
+                    # Check completion - any active Mosaic study not in the current accessions list should be completed
+                    completed = []
+                    for acc, study in list(self.tracker.active_studies.items()):
+                        # Only check Mosaic studies (patient_class == "Unknown")
+                        if study.get('patient_class') == 'Unknown' and acc not in all_current_accessions:
+                            # This accession is no longer visible - mark as completed
+                            time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
+                            if time_since_last_seen > 1.0:
+                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
+                                if duration >= self.tracker.min_seconds:
+                                    completed_study = study.copy()
+                                    completed_study["end_time"] = study["last_seen"]
+                                    completed_study["duration"] = duration
+                                    completed.append(completed_study)
+                                    logger.info(f"Completed Mosaic study: {acc} - {study['study_type']} ({duration:.1f}s)")
+                                    # Remove from active studies
+                                    del self.tracker.active_studies[acc]
+                elif not accession:
+                    # Mosaic but no multiple_accessions and no accession - all active Mosaic studies should be completed
+                    completed = []
+                    for acc, study in list(self.tracker.active_studies.items()):
+                        # Only check Mosaic studies (patient_class == "Unknown")
+                        if study.get('patient_class') == 'Unknown':
+                            time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
+                            if time_since_last_seen > 1.0:
+                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
+                                if duration >= self.tracker.min_seconds:
+                                    completed_study = study.copy()
+                                    completed_study["end_time"] = study["last_seen"]
+                                    completed_study["duration"] = duration
+                                    completed.append(completed_study)
+                                    logger.info(f"Completed Mosaic study (no accessions visible): {acc} - {study['study_type']} ({duration:.1f}s)")
+                                    # Remove from active studies
+                                    del self.tracker.active_studies[acc]
+                else:
+                    # Single Mosaic accession - use normal completion check
+                    completed = self.tracker.check_completed(current_time, accession)
+            else:
+                # Normal completion check (PowerScribe or single Mosaic accession)
+                completed = self.tracker.check_completed(current_time, accession)
             
             for study in completed:
                 study_record = {
@@ -1438,6 +1926,38 @@ class RVUCounterApp:
             
             # Now handle current study
             if not accession:
+                # No current study - check if we have active Mosaic studies that should be completed
+                if data_source == "Mosaic" and self.tracker.active_studies:
+                    # All active Mosaic studies should be completed since no study is visible
+                    current_time_check = datetime.now()
+                    for acc, study in list(self.tracker.active_studies.items()):
+                        # Only complete Mosaic studies (patient_class == "Unknown")
+                        if study.get('patient_class') == 'Unknown':
+                            time_since_last_seen = (current_time_check - study["last_seen"]).total_seconds()
+                            if time_since_last_seen > 1.0:
+                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
+                                if duration >= self.tracker.min_seconds:
+                                    completed_study = study.copy()
+                                    completed_study["end_time"] = study["last_seen"]
+                                    completed_study["duration"] = duration
+                                    study_record = {
+                                        "accession": completed_study["accession"],
+                                        "procedure": completed_study["procedure"],
+                                        "patient_class": completed_study.get("patient_class", ""),
+                                        "study_type": completed_study["study_type"],
+                                        "rvu": completed_study["rvu"],
+                                        "time_performed": completed_study["start_time"].isoformat(),
+                                        "time_finished": completed_study["end_time"].isoformat(),
+                                        "duration_seconds": completed_study["duration"],
+                                    }
+                                    self.data_manager.data["current_shift"]["records"].append(study_record)
+                                    self.data_manager.save()
+                                    self.undo_used = False
+                                    self.undo_btn.config(state=tk.NORMAL)
+                                    logger.info(f"Recorded completed Mosaic study (no study visible): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
+                                    del self.tracker.active_studies[acc]
+                    if self.tracker.active_studies:
+                        self.update_display()
                 # No current study - all active studies should be checked for completion
                 # This is already handled above, so just return
                 return
@@ -1451,8 +1971,12 @@ class RVUCounterApp:
             rvu_table = self.data_manager.data["rvu_table"]
             
             # If study is already active, update it (don't ignore)
+            # For Mosaic multi-accession, we handle last_seen updates above, so skip here
             if accession in self.tracker.active_studies:
-                self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
+                if data_source != "Mosaic" or not multiple_accessions:
+                    # Normal update for PowerScribe or single Mosaic accession
+                    self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
+                # For Mosaic multi-accession, last_seen is updated above, so just return
                 return
             
             # If study was already completed in this shift, ignore it
@@ -2002,13 +2526,40 @@ class RVUCounterApp:
             # Handle multi-accession display
             if self.current_multiple_accessions:
                 # Multi-accession - either active or duplicate
-                # Show accession numbers
-                acc_display = ", ".join(self.current_multiple_accessions[:2])
+                # Parse accession display - handle both formats:
+                # PowerScribe: ["ACC1", "ACC2"]
+                # Mosaic: ["ACC1 (PROC1)", "ACC2 (PROC2)"]
+                acc_display_list = []
+                for acc_entry in self.current_multiple_accessions[:2]:
+                    if '(' in acc_entry and ')' in acc_entry:
+                        # Mosaic format - extract just the accession
+                        acc_match = re.match(r'^([^(]+)', acc_entry)
+                        if acc_match:
+                            acc_display_list.append(acc_match.group(1).strip())
+                        else:
+                            acc_display_list.append(acc_entry)
+                    else:
+                        # PowerScribe format - use as-is
+                        acc_display_list.append(acc_entry)
+                
+                acc_display = ", ".join(acc_display_list)
                 if len(self.current_multiple_accessions) > 2:
                     acc_display += f" (+{len(self.current_multiple_accessions) - 2})"
                 self.debug_accession_label.config(text=f"Accession: {acc_display}")
                 
-                if self.multi_accession_mode:
+                # Check if this is Mosaic multi-accession (no multi_accession_mode, but has multiple)
+                data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
+                is_mosaic_multi = data_source == "Mosaic" and len(self.current_multiple_accessions) > 1 and not self.multi_accession_mode
+                
+                if is_mosaic_multi:
+                    # Mosaic multi-accession - show summary
+                    if self.current_procedure and self.current_procedure != "Multiple studies":
+                        # Show the first procedure
+                        self.debug_procedure_label.config(text=f"Procedure: {self.current_procedure}", foreground="gray")
+                    else:
+                        # Show summary
+                        self.debug_procedure_label.config(text=f"Procedure: {len(self.current_multiple_accessions)} studies", foreground="gray")
+                elif self.multi_accession_mode:
                     # Active multi-accession tracking
                     collected_count = len(self.multi_accession_data)
                     total_count = len(self.current_multiple_accessions)
@@ -2300,9 +2851,9 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"450x550+{window_pos['x']}+{window_pos['y']}")
+            self.window.geometry(f"450x580+{window_pos['x']}+{window_pos['y']}")
         else:
-            self.window.geometry("450x550")
+            self.window.geometry("450x580")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -2345,6 +2896,16 @@ class SettingsWindow:
         # Dark mode
         self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
         ttk.Checkbutton(main_frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
+        
+        # Data source radio buttons (PowerScribe or Mosaic)
+        data_source_frame = ttk.Frame(main_frame)
+        data_source_frame.pack(anchor=tk.W, pady=(10, 5))
+        
+        ttk.Label(data_source_frame, text="Data Source:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.data_source_var = tk.StringVar(value=settings.get("data_source", "PowerScribe"))
+        ttk.Radiobutton(data_source_frame, text="PowerScribe", variable=self.data_source_var, value="PowerScribe").pack(side=tk.LEFT)
+        ttk.Radiobutton(data_source_frame, text="Mosaic", variable=self.data_source_var, value="Mosaic").pack(side=tk.LEFT, padx=(10, 0))
         
         # Two-column frame for counters and compensation
         columns_frame = ttk.Frame(main_frame)
@@ -2498,6 +3059,7 @@ class SettingsWindow:
             self.data_manager.data["settings"]["show_comp_projected"] = self.show_comp_projected_var.get()
             self.data_manager.data["settings"]["show_comp_projected_shift"] = self.show_comp_projected_shift_var.get()
             self.data_manager.data["settings"]["role"] = self.role_var.get()
+            self.data_manager.data["settings"]["data_source"] = self.data_source_var.get()
             self.data_manager.data["settings"]["shift_length_hours"] = int(self.shift_length_var.get())
             self.data_manager.data["settings"]["min_study_seconds"] = int(self.min_seconds_var.get())
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
@@ -3417,25 +3979,76 @@ class StatisticsWindow:
         total_rvu = sum(r.get("rvu", 0) for r in records)
         avg_rvu = total_rvu / total_studies if total_studies > 0 else 0
         
-        # Calculate time span
+        # Calculate time span - sum of actual shift durations, not time from first to last record
+        hours = 0.0
         if records:
-            times = []
+            # Get all shifts (current and historical)
+            all_shifts = []
+            current_shift = self.data_manager.data.get("current_shift", {})
+            if current_shift.get("shift_start"):
+                all_shifts.append(current_shift)
+            all_shifts.extend(self.data_manager.data.get("shifts", []))
+            
+            # Find which shifts contain these records and sum their durations
+            record_times = []
             for r in records:
                 try:
-                    times.append(datetime.fromisoformat(r.get("time_performed", "")))
+                    record_times.append(datetime.fromisoformat(r.get("time_performed", "")))
                 except:
                     pass
-            if times:
-                time_span = max(times) - min(times)
-                hours = time_span.total_seconds() / 3600
+            
+            if record_times:
+                # Find unique shifts that contain any of these records
+                # Use shift_start as unique identifier since each shift has a unique start time
+                shifts_with_records = {}
+                for record_time in record_times:
+                    for shift in all_shifts:
+                        try:
+                            shift_start_str = shift.get("shift_start")
+                            if not shift_start_str:
+                                continue
+                            
+                            shift_start = datetime.fromisoformat(shift_start_str)
+                            shift_end_str = shift.get("shift_end")
+                            
+                            # Check if record falls within this shift
+                            if shift_end_str:
+                                shift_end = datetime.fromisoformat(shift_end_str)
+                                if shift_start <= record_time <= shift_end:
+                                    shifts_with_records[shift_start_str] = shift
+                            else:
+                                # Current shift without end - check if record is after shift start
+                                if record_time >= shift_start:
+                                    shifts_with_records[shift_start_str] = shift
+                        except:
+                            continue
+                
+                # Sum durations of unique shifts
+                for shift_start_str, shift in shifts_with_records.items():
+                    try:
+                        shift_start = datetime.fromisoformat(shift_start_str)
+                        shift_end_str = shift.get("shift_end")
+                        
+                        if shift_end_str:
+                            shift_end = datetime.fromisoformat(shift_end_str)
+                            shift_duration = (shift_end - shift_start).total_seconds() / 3600
+                            hours += shift_duration
+                        else:
+                            # Current shift - use latest record time as end
+                            if record_times:
+                                latest_record_time = max(record_times)
+                                if latest_record_time > shift_start:
+                                    shift_duration = (latest_record_time - shift_start).total_seconds() / 3600
+                                    hours += shift_duration
+                    except:
+                        continue
+                
                 rvu_per_hour = total_rvu / hours if hours > 0 else 0
                 studies_per_hour = total_studies / hours if hours > 0 else 0
             else:
-                hours = 0
                 rvu_per_hour = 0
                 studies_per_hour = 0
         else:
-            hours = 0
             rvu_per_hour = 0
             studies_per_hour = 0
         

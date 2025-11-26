@@ -6,18 +6,19 @@
     "show_last_hour": true,
     "show_last_full_hour": true,
     "show_projected": true,
-    "show_comp_total": true,
-    "show_comp_avg": true,
-    "show_comp_last_hour": true,
-    "show_comp_last_full_hour": true,
-    "show_comp_projected": true,
+    "show_comp_total": false,
+    "show_comp_avg": false,
+    "show_comp_last_hour": false,
+    "show_comp_last_full_hour": false,
+    "show_comp_projected": false,
     "role": "Partner",
     "min_study_seconds": 1,
     "ignore_duplicate_accessions": true,
     "dark_mode": false,
     "show_projected_shift": true,
-    "show_comp_projected_shift": true,
-    "shift_length_hours": 9
+    "show_comp_projected_shift": false,
+    "shift_length_hours": 9,
+    "data_source": "PowerScribe"
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -501,8 +502,8 @@
       "height": 500
     },
     "settings": {
-      "x": 5295,
-      "y": -289
+      "x": 5235,
+      "y": -319
     },
     "statistics": {
       "x": 5327,

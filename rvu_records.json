@@ -5,28 +5,18 @@
     "shift_end": null,
     "records": [
       {
-        "accession": "20XR250086400UOC",
-        "procedure": "XR ABDOMEN 2 VIEWS SUPINE ERECT",
-        "patient_class": "Outpatient",
-        "study_type": "XR Abdomen",
-        "rvu": 0.3,
-        "time_performed": "2025-11-25T17:42:44.287553",
-        "time_finished": "2025-11-25T17:52:38.069717",
-        "duration_seconds": 593.782164
-      },
-      {
-        "accession": "CO384274GB",
-        "procedure": "XR ANKLE 3 OR MORE VIEWS",
-        "patient_class": "Outpatient",
-        "study_type": "XR MSK",
-        "rvu": 0.3,
-        "time_performed": "2025-11-25T18:04:19.068386",
-        "time_finished": "2025-11-25T18:36:15.221127",
-        "duration_seconds": 1916.152741
+        "accession": "A01265985DU",
+        "procedure": "CT CHEST ABDOMEN PELVIS WITH IV CONTRAST",
+        "patient_class": "Pre-admit",
+        "study_type": "CT CAP",
+        "rvu": 3.06,
+        "time_performed": "2025-11-25T23:29:45.256349",
+        "time_finished": "2025-11-25T23:30:15.477875",
+        "duration_seconds": 30.221526
       }
     ],
-    "effective_shift_start": "2025-11-25T16:53:52.057257",
-    "projected_shift_end": "2025-11-26T01:53:52.057257"
+    "effective_shift_start": "2025-11-25T22:00:00",
+    "projected_shift_end": "2025-11-26T07:00:00"
   },
   "shifts": [
     {
@@ -877,6 +867,54 @@
       ],
       "effective_shift_start": "2025-11-25T16:53:52.057257",
       "projected_shift_end": "2025-11-26T01:53:52.057257"
+    },
+    {
+      "shift_start": "2025-11-25T22:01:02.102909",
+      "shift_end": "2025-11-25T22:13:21.412658",
+      "records": [
+        {
+          "accession": "AHS27208946LLHS",
+          "procedure": "MR THORACIC SPINE WITHOUT IV CONTRAST",
+          "patient_class": "Unknown",
+          "study_type": "MRI Other",
+          "rvu": 1.75,
+          "time_performed": "2025-11-25T22:06:49.960492",
+          "time_finished": "2025-11-25T22:07:19.240435",
+          "duration_seconds": 29.279943
+        },
+        {
+          "accession": "AHS27208945LLHS",
+          "procedure": "MR CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "Unknown",
+          "study_type": "MRI Other",
+          "rvu": 1.75,
+          "time_performed": "2025-11-25T22:06:49.961336",
+          "time_finished": "2025-11-25T22:07:19.240435",
+          "duration_seconds": 29.279099
+        },
+        {
+          "accession": "AHS27208947LLHS",
+          "procedure": "MR LUMBAR SPINE WITHOUT IV CONTRAST",
+          "patient_class": "Unknown",
+          "study_type": "MRI Other",
+          "rvu": 1.75,
+          "time_performed": "2025-11-25T22:06:49.962252",
+          "time_finished": "2025-11-25T22:07:19.240435",
+          "duration_seconds": 29.278183
+        },
+        {
+          "accession": "AHS27211442LLHS",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "Unknown",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-25T22:07:38.524795",
+          "time_finished": "2025-11-25T22:07:47.606583",
+          "duration_seconds": 9.081788
+        }
+      ],
+      "effective_shift_start": "2025-11-25T22:00:00",
+      "projected_shift_end": "2025-11-26T07:00:00"
     }
   ]
 }
