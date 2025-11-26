@@ -53,7 +53,10 @@ RVU_TABLE = {
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
     "CT Brain and Cervical": 1.9,
-    "CT Thoracic and Lumbar Spine": 2.0,
+    "CT TL Spine": 2.0,
+    "CT Face": 1.0,
+    "XR Abdomen": 0.3,
+    "XR MSK": 0.3,
 }
 
 
@@ -164,17 +167,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     classification_match_name = None
     classification_match_rvu = None
     
-    # FIRST: Check direct/exact lookups (exact procedure name matches)
-    if direct_lookups:
-        # Try exact match (case-insensitive)
-        for lookup_procedure, rvu_value in direct_lookups.items():
-            if lookup_procedure.lower().strip() == procedure_lower:
-                direct_match_rvu = rvu_value
-                direct_match_name = lookup_procedure
-                logger.info(f"Matched direct lookup: {procedure_text} -> {rvu_value} RVU")
-                break
-    
-    # SECOND: Check user-defined classification rules
+    # FIRST: Check user-defined classification rules (highest priority)
     # Rules are grouped by study_type, each group contains a list of rule definitions
     for study_type, rules_list in classification_rules.items():
         if not isinstance(rules_list, list):
@@ -183,6 +176,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         for rule in rules_list:
             required_keywords = rule.get("required_keywords", [])
             excluded_keywords = rule.get("excluded_keywords", [])
+            any_of_keywords = rule.get("any_of_keywords", [])
             
             # Special case for "CT Spine": exclude only if ALL excluded keywords are present
             if study_type == "CT Spine" and excluded_keywords:
@@ -196,32 +190,46 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
                     continue  # Skip this rule if excluded keyword is present
             
             # Check if all required keywords are present (case-insensitive, lowercase comparison)
+            required_match = True
             if required_keywords:
-                all_present = all(keyword.lower() in procedure_lower for keyword in required_keywords)
-                if all_present:
-                    # Get RVU from rvu_table
-                    rvu = rvu_table.get(study_type, 0.0)
-                    classification_match_name = study_type
-                    classification_match_rvu = rvu
-                    logger.info(f"Matched classification rule for '{study_type}': {procedure_text} -> {study_type}")
-                    break  # Found a classification match, stop searching rules for this study_type
+                required_match = all(keyword.lower() in procedure_lower for keyword in required_keywords)
+            
+            # Check if at least one of any_of_keywords is present (if specified)
+            any_of_match = True
+            if any_of_keywords:
+                any_of_match = any(keyword.lower() in procedure_lower for keyword in any_of_keywords)
+            
+            # Match if all required keywords are present AND (any_of_keywords match OR no any_of_keywords specified)
+            if required_match and any_of_match:
+                # Get RVU from rvu_table
+                rvu = rvu_table.get(study_type, 0.0)
+                classification_match_name = study_type
+                classification_match_rvu = rvu
+                logger.info(f"Matched classification rule for '{study_type}': {procedure_text} -> {study_type}")
+                break  # Found a classification match, stop searching rules for this study_type
         
         # If we found a classification match, stop searching other study_types
         if classification_match_name:
             break
     
-    # If both direct lookup and classification rule match, prefer classification name but use direct lookup RVU
-    if direct_match_rvu is not None and classification_match_name:
-        logger.info(f"Both direct lookup and classification rule matched. Using '{classification_match_name}' name with {direct_match_rvu} RVU from direct lookup")
-        return classification_match_name, direct_match_rvu
+    # If classification rule matched, return it immediately (highest priority)
+    if classification_match_name:
+        logger.info(f"Matched classification rule: {procedure_text} -> {classification_match_name} ({classification_match_rvu} RVU)")
+        return classification_match_name, classification_match_rvu
     
-    # If only direct lookup matched
+    # SECOND: Check direct/exact lookups (exact procedure name matches)
+    if direct_lookups:
+        # Try exact match (case-insensitive)
+        for lookup_procedure, rvu_value in direct_lookups.items():
+            if lookup_procedure.lower().strip() == procedure_lower:
+                direct_match_rvu = rvu_value
+                direct_match_name = lookup_procedure
+                logger.info(f"Matched direct lookup: {procedure_text} -> {rvu_value} RVU")
+                break
+    
+    # If direct lookup matched, return it
     if direct_match_rvu is not None:
         return direct_match_name, direct_match_rvu
-    
-    # If only classification rule matched
-    if classification_match_name:
-        return classification_match_name, classification_match_rvu
     
     # Check for modality keywords and use "Other" types as fallback before partial matching
     modality_fallbacks = {
@@ -249,6 +257,47 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         if study_type.lower() == procedure_lower:
             return study_type, rvu
     
+    # Try keyword matching FIRST (before partial matching) to correctly identify modality
+    keywords = {
+        "ct cap": ("CT CAP", 3.06),
+        "ct ap": ("CT AP", 1.68),
+        "cta": ("CTA Brain", 1.75),  # Default CTA
+        "pet": ("PET CT", 3.6),
+        "mri": ("MRI Other", 1.75),
+        "mr ": ("MRI Other", 1.75),
+        "ultrasound": ("US Other", 0.68),
+        "us ": ("US Other", 0.68),
+        "x-ray": ("XR Other", 0.3),
+        "xr ": ("XR Other", 0.3),
+        "xr\t": ("XR Other", 0.3),  # XR with tab
+        "nuclear": ("NM Other", 1.0),
+        "nm ": ("NM Other", 1.0),
+    }
+    
+    # Check for keywords - prioritize longer/more specific keywords first
+    for keyword in sorted(keywords.keys(), key=len, reverse=True):
+        if keyword in procedure_lower:
+            study_type, rvu = keywords[keyword]
+            logger.info(f"Matched keyword '{keyword}' to '{study_type}' for: {procedure_text}")
+            return study_type, rvu
+    
+    # Also check if procedure starts with modality prefix (case-insensitive)
+    if len(procedure_lower) >= 2:
+        first_two = procedure_lower[:2]
+        prefix_keywords = {
+            "xr": ("XR Other", 0.3),
+            "x-": ("XR Other", 0.3),
+            "ct": ("CT Other", 1.0),
+            "mr": ("MRI Other", 1.75),
+            "us": ("US Other", 0.68),
+            "nm": ("NM Other", 1.0),
+            "pe": ("PET CT", 3.6),  # PET
+        }
+        if first_two in prefix_keywords:
+            study_type, rvu = prefix_keywords[first_two]
+            logger.info(f"Matched prefix '{first_two}' to '{study_type}' for: {procedure_text}")
+            return study_type, rvu
+    
     # Try partial matches (most specific first), but exclude "Other" types initially
     matches = []
     other_matches = []
@@ -273,46 +322,6 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         other_matches.sort(reverse=True)  # Highest score first
         logger.info(f"Using 'Other' type fallback '{other_matches[0][1]}' for: {procedure_text}")
         return other_matches[0][1], other_matches[0][2]
-    
-    # Try keyword matching
-    keywords = {
-        "mri": ("MRI Other", 1.75),
-        "mr ": ("MRI Other", 1.75),
-        "ct cap": ("CT CAP", 3.06),
-        "ct ap": ("CT AP", 1.68),
-        "cta": ("CTA Brain", 1.75),  # Default CTA
-        "pet": ("PET CT", 3.6),
-        "ultrasound": ("US Other", 0.68),
-        "us ": ("US Other", 0.68),
-        "x-ray": ("XR Other", 0.3),
-        "xr ": ("XR Other", 0.3),
-        "nuclear": ("NM Other", 1.0),
-        "nm ": ("NM Other", 1.0),
-    }
-    
-    for keyword, (study_type, rvu) in keywords.items():
-        if keyword in procedure_lower:
-            return study_type, rvu
-    
-    # Default fallback: Use first two letters to determine generic type
-    if len(procedure_lower) >= 2:
-        first_two = procedure_lower[:2]
-        
-        # Generic type defaults based on first two letters
-        generic_defaults = {
-            "ct": ("CT Other", 1.0),
-            "mr": ("MRI Other", 1.75),
-            "us": ("US Other", 0.68),
-            "nm": ("NM Other", 1.0),
-            "pe": ("PET CT", 3.6),  # PET
-            "xr": ("XR Other", 0.3),
-            "x-": ("XR Other", 0.3),
-        }
-        
-        if first_two in generic_defaults:
-            study_type, rvu = generic_defaults[first_two]
-            logger.info(f"Using generic type '{study_type}' for procedure starting with '{first_two}': {procedure_text}")
-            return study_type, rvu
     
     return "Unknown", 0.0
 
@@ -413,6 +422,9 @@ class RVUData:
                 "show_last_hour": True,
                 "show_last_full_hour": True,
                 "show_projected": True,
+                "show_projected_shift": True,
+                "show_comp_projected_shift": True,
+                "shift_length_hours": 9,
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
             },
@@ -738,10 +750,12 @@ class RVUCounterApp:
         
         # State
         self.shift_start: Optional[datetime] = None
+        self.effective_shift_start: Optional[datetime] = None
+        self.projected_shift_end: Optional[datetime] = None
         self.is_running = False
         self.current_window = None
         self.refresh_interval = 1000  # 1 second
-        
+            
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
         self.current_procedure = ""
@@ -782,6 +796,25 @@ class RVUCounterApp:
             if shift_start and not shift_end:
                 try:
                     self.shift_start = datetime.fromisoformat(shift_start)
+                    # Restore effective shift start and projected end if available
+                    effective_start = current_shift.get("effective_shift_start")
+                    projected_end = current_shift.get("projected_shift_end")
+                    if effective_start:
+                        self.effective_shift_start = datetime.fromisoformat(effective_start)
+                    else:
+                        # Fall back to calculating it
+                        minutes_into_hour = self.shift_start.minute
+                        if minutes_into_hour <= 15:
+                            self.effective_shift_start = self.shift_start.replace(minute=0, second=0, microsecond=0)
+                        else:
+                            self.effective_shift_start = self.shift_start
+                    if projected_end:
+                        self.projected_shift_end = datetime.fromisoformat(projected_end)
+                    else:
+                        # Fall back to calculating it
+                        shift_length = self.data_manager.data["settings"].get("shift_length_hours", 9)
+                        self.projected_shift_end = self.effective_shift_start + timedelta(hours=shift_length)
+                    
                     self.is_running = True
                     # Update button and UI to reflect running state
                     self.start_btn.config(text="Stop Shift")
@@ -839,11 +872,11 @@ class RVUCounterApp:
         row = 0
         
         # Total
-        self.total_label_text = ttk.Label(counters_inner, text="Total wRVU:", font=("Arial", 10), anchor=tk.E)
+        self.total_label_text = ttk.Label(counters_inner, text="total wRVU:", font=("Arial", 9), anchor=tk.E)
         self.total_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         total_value_frame = ttk.Frame(counters_inner)
         total_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.total_label = ttk.Label(total_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
         self.total_label.pack(side=tk.LEFT)
         self.total_comp_label = tk.Label(total_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.total_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -851,11 +884,11 @@ class RVUCounterApp:
         row += 1
         
         # Average per hour
-        self.avg_label_text = ttk.Label(counters_inner, text="Avg/Hour:", font=("Arial", 10), anchor=tk.E)
+        self.avg_label_text = ttk.Label(counters_inner, text="avg/hour:", font=("Arial", 9), anchor=tk.E)
         self.avg_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         avg_value_frame = ttk.Frame(counters_inner)
         avg_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.avg_label = ttk.Label(avg_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
         self.avg_label.pack(side=tk.LEFT)
         self.avg_comp_label = tk.Label(avg_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.avg_comp_label.pack(side=tk.LEFT, padx=(3, 0))
@@ -863,39 +896,56 @@ class RVUCounterApp:
         row += 1
         
         # Last hour
-        self.last_hour_label_text = ttk.Label(counters_inner, text="Last Hour:", font=("Arial", 10), anchor=tk.E)
+        self.last_hour_label_text = ttk.Label(counters_inner, text="last hour:", font=("Arial", 9), anchor=tk.E)
         self.last_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         last_hour_value_frame = ttk.Frame(counters_inner)
         last_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.last_hour_label = ttk.Label(last_hour_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
         self.last_hour_label.pack(side=tk.LEFT)
         self.last_hour_comp_label = tk.Label(last_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.last_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.last_hour_value_frame = last_hour_value_frame
         row += 1
         
-        # Last full hour - format: "8pm-9pm Hour: x.x"
-        self.last_full_hour_label_text = ttk.Label(counters_inner, text="Hour:", font=("Arial", 10), anchor=tk.E, width=14)
-        self.last_full_hour_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
+        # Last full hour - format: "8pm-9pm hour: x.x"
+        # Use a frame to hold both the time range (smaller font) and "hour:" text
+        self.last_full_hour_label_frame = ttk.Frame(counters_inner)
+        self.last_full_hour_label_frame.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
+        self.last_full_hour_range_label = ttk.Label(self.last_full_hour_label_frame, text="", font=("Arial", 8), anchor=tk.E)
+        self.last_full_hour_range_label.pack(side=tk.LEFT)
+        self.last_full_hour_label_text = ttk.Label(self.last_full_hour_label_frame, text="hour:", font=("Arial", 9), anchor=tk.E)
+        self.last_full_hour_label_text.pack(side=tk.LEFT, padx=(2, 0))
         last_full_hour_value_frame = ttk.Frame(counters_inner)
         last_full_hour_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.last_full_hour_label = ttk.Label(last_full_hour_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
         self.last_full_hour_label.pack(side=tk.LEFT)
         self.last_full_hour_comp_label = tk.Label(last_full_hour_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.last_full_hour_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.last_full_hour_value_frame = last_full_hour_value_frame
         row += 1
         
-        # Projected
-        self.projected_label_text = ttk.Label(counters_inner, text="Projected This Hour:", font=("Arial", 10), anchor=tk.E)
+        # Projected This Hour
+        self.projected_label_text = ttk.Label(counters_inner, text="est this hour:", font=("Arial", 9), anchor=tk.E)
         self.projected_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
         projected_value_frame = ttk.Frame(counters_inner)
         projected_value_frame.grid(row=row, column=1, sticky=tk.W)
-        self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 10), anchor=tk.W)
+        self.projected_label = ttk.Label(projected_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
         self.projected_label.pack(side=tk.LEFT)
         self.projected_comp_label = tk.Label(projected_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
         self.projected_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.projected_value_frame = projected_value_frame
+        row += 1
+        
+        # Projected Shift Total
+        self.projected_shift_label_text = ttk.Label(counters_inner, text="est shift total:", font=("Arial", 9), anchor=tk.E)
+        self.projected_shift_label_text.grid(row=row, column=0, sticky=tk.E, padx=(0, 5))
+        projected_shift_value_frame = ttk.Frame(counters_inner)
+        projected_shift_value_frame.grid(row=row, column=1, sticky=tk.W)
+        self.projected_shift_label = ttk.Label(projected_shift_value_frame, text="0.0", font=("Arial", 9), anchor=tk.W)
+        self.projected_shift_label.pack(side=tk.LEFT)
+        self.projected_shift_comp_label = tk.Label(projected_shift_value_frame, text="", font=("Arial", 8), fg="dark green", bg=self.root.cget('bg'))
+        self.projected_shift_comp_label.pack(side=tk.LEFT, padx=(3, 0))
+        self.projected_shift_value_frame = projected_shift_value_frame
         
         # Buttons frame - centered
         buttons_frame = ttk.Frame(main_frame)
@@ -961,11 +1011,14 @@ class RVUCounterApp:
         self.debug_procedure_label = ttk.Label(debug_frame, text="Procedure: -", font=("Consolas", 8), foreground="gray")
         self.debug_procedure_label.pack(anchor=tk.W)
         
-        # Study Type with RVU frame (to align RVU to the right)
+        # Study Type with RVU frame (to align RVU to the right) - separate labels like Recent Studies
         study_type_frame = ttk.Frame(debug_frame)
         study_type_frame.pack(fill=tk.X)
         
-        self.debug_study_type_label = ttk.Label(study_type_frame, text="Study Type: -", font=("Consolas", 8), foreground="gray")
+        self.debug_study_type_prefix_label = ttk.Label(study_type_frame, text="Study Type: ", font=("Consolas", 8), foreground="gray")
+        self.debug_study_type_prefix_label.pack(side=tk.LEFT, anchor=tk.W)
+        
+        self.debug_study_type_label = ttk.Label(study_type_frame, text="-", font=("Consolas", 8), foreground="gray")
         self.debug_study_type_label.pack(side=tk.LEFT, anchor=tk.W)
         
         self.debug_study_rvu_label = ttk.Label(study_type_frame, text="", font=("Consolas", 8), foreground="gray")
@@ -1323,35 +1376,35 @@ class RVUCounterApp:
                     self.multi_accession_start_time = None
                     self.multi_accession_last_procedure = ""
                     return
-                
-                # Handle regular single-accession studies
-                if self.tracker.active_studies:
-                    logger.info("Procedure changed to N/A - completing all active studies")
-                    # Mark all active studies as completed immediately
-                    for acc, study in list(self.tracker.active_studies.items()):
-                        duration = (current_time - study["start_time"]).total_seconds()
-                        if duration >= self.tracker.min_seconds:
-                            completed_study = study.copy()
-                            completed_study["end_time"] = current_time
-                            completed_study["duration"] = duration
-                            study_record = {
-                                "accession": completed_study["accession"],
-                                "procedure": completed_study["procedure"],
-                                "patient_class": completed_study.get("patient_class", ""),
-                                "study_type": completed_study["study_type"],
-                                "rvu": completed_study["rvu"],
-                                "time_performed": completed_study["start_time"].isoformat(),
-                                "time_finished": completed_study["end_time"].isoformat(),
-                                "duration_seconds": completed_study["duration"],
-                            }
-                            self.data_manager.data["current_shift"]["records"].append(study_record)
-                            self.data_manager.save()
-                            self.undo_used = False
-                            self.undo_btn.config(state=tk.NORMAL)
-                            logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
-                    # Clear all active studies
-                    self.tracker.active_studies.clear()
-                    self.update_display()
+            
+            # Handle regular single-accession studies
+            if is_na and self.tracker.active_studies:
+                logger.info("Procedure changed to N/A - completing all active studies")
+                # Mark all active studies as completed immediately
+                for acc, study in list(self.tracker.active_studies.items()):
+                    duration = (current_time - study["start_time"]).total_seconds()
+                    if duration >= self.tracker.min_seconds:
+                        completed_study = study.copy()
+                        completed_study["end_time"] = current_time
+                        completed_study["duration"] = duration
+                        study_record = {
+                            "accession": completed_study["accession"],
+                            "procedure": completed_study["procedure"],
+                            "patient_class": completed_study.get("patient_class", ""),
+                            "study_type": completed_study["study_type"],
+                            "rvu": completed_study["rvu"],
+                            "time_performed": completed_study["start_time"].isoformat(),
+                            "time_finished": completed_study["end_time"].isoformat(),
+                            "duration_seconds": completed_study["duration"],
+                        }
+                        self.data_manager.data["current_shift"]["records"].append(study_record)
+                        self.data_manager.save()
+                        self.undo_used = False
+                        self.undo_btn.config(state=tk.NORMAL)
+                        logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
+                # Clear all active studies
+                self.tracker.active_studies.clear()
+                self.update_display()
                 return  # Return after handling N/A case
         
             # Skip normal study tracking when viewing a multi-accession study
@@ -1449,6 +1502,8 @@ class RVUCounterApp:
             self.start_btn.config(text="Start Shift")
             self.root.title("RVU Counter - Stopped")
             self.shift_start = None
+            self.effective_shift_start = None
+            self.projected_shift_end = None
             self.update_shift_start_label()
             self.update_recent_studies_label()
             # Clear the recent studies display (data is preserved in archived shift)
@@ -1466,7 +1521,23 @@ class RVUCounterApp:
             
             # Start new shift
             self.shift_start = datetime.now()
+            
+            # Calculate effective shift start (rounded to hour if within 15 min)
+            minutes_into_hour = self.shift_start.minute
+            if minutes_into_hour <= 15:
+                # Round down to the hour
+                self.effective_shift_start = self.shift_start.replace(minute=0, second=0, microsecond=0)
+            else:
+                # Use actual start time
+                self.effective_shift_start = self.shift_start
+            
+            # Calculate projected shift end based on shift length setting
+            shift_length = self.data_manager.data["settings"].get("shift_length_hours", 9)
+            self.projected_shift_end = self.effective_shift_start + timedelta(hours=shift_length)
+            
             self.data_manager.data["current_shift"]["shift_start"] = self.shift_start.isoformat()
+            self.data_manager.data["current_shift"]["effective_shift_start"] = self.effective_shift_start.isoformat()
+            self.data_manager.data["current_shift"]["projected_shift_end"] = self.projected_shift_end.isoformat()
             self.data_manager.data["current_shift"]["shift_end"] = None
             self.data_manager.data["current_shift"]["records"] = []
             self.tracker = StudyTracker(
@@ -1549,6 +1620,39 @@ class RVUCounterApp:
         except (KeyError, ValueError):
             return 0.0
     
+    def _calculate_projected_compensation(self, start_time: datetime, end_time: datetime, rvu_rate_per_hour: float) -> float:
+        """Calculate projected compensation for remaining shift hours considering hourly rate changes."""
+        total_comp = 0.0
+        current = start_time
+        
+        while current < end_time:
+            # Calculate how much of this hour is within our range
+            hour_start = current.replace(minute=0, second=0, microsecond=0)
+            hour_end = hour_start + timedelta(hours=1)
+            
+            # Clip to our actual range
+            effective_start = max(current, hour_start)
+            effective_end = min(end_time, hour_end)
+            
+            # Calculate fraction of hour
+            fraction_of_hour = (effective_end - effective_start).total_seconds() / 3600
+            
+            if fraction_of_hour > 0:
+                # Get the rate for this hour
+                rate = self._get_compensation_rate(hour_start)
+                
+                # Calculate RVU for this fraction of hour
+                rvu_this_period = rvu_rate_per_hour * fraction_of_hour
+                
+                # Calculate compensation
+                comp_this_period = rvu_this_period * rate
+                total_comp += comp_this_period
+            
+            # Move to next hour
+            current = hour_end
+        
+        return total_comp
+    
     def calculate_stats(self) -> dict:
         """Calculate statistics."""
         if not self.shift_start:
@@ -1559,11 +1663,13 @@ class RVUCounterApp:
                 "last_full_hour": 0.0,
                 "last_full_hour_range": "",
                 "projected": 0.0,
+                "projected_shift": 0.0,
                 "comp_total": 0.0,
                 "comp_avg": 0.0,
                 "comp_last_hour": 0.0,
                 "comp_last_full_hour": 0.0,
                 "comp_projected": 0.0,
+                "comp_projected_shift": 0.0,
             }
         
         records = self.data_manager.data["current_shift"]["records"]
@@ -1608,6 +1714,32 @@ class RVUCounterApp:
             projected = 0.0
             projected_comp = 0.0
         
+        # Projected shift total - extrapolate based on RVU rate and remaining time
+        projected_shift_rvu = total_rvu
+        projected_shift_comp = total_comp
+        
+        if self.effective_shift_start and self.projected_shift_end:
+            # Calculate time remaining in shift
+            time_remaining = (self.projected_shift_end - current_time).total_seconds()
+            
+            if time_remaining > 0 and hours_elapsed > 0:
+                # Calculate RVU rate per hour
+                rvu_rate_per_hour = avg_per_hour
+                hours_remaining = time_remaining / 3600
+                
+                # Project additional RVU for remaining time
+                projected_additional_rvu = rvu_rate_per_hour * hours_remaining
+                projected_shift_rvu = total_rvu + projected_additional_rvu
+                
+                # Calculate projected compensation for remaining hours
+                # Consider hourly rate changes throughout remaining shift
+                projected_additional_comp = self._calculate_projected_compensation(
+                    current_time, 
+                    self.projected_shift_end, 
+                    rvu_rate_per_hour
+                )
+                projected_shift_comp = total_comp + projected_additional_comp
+        
         return {
             "total": total_rvu,
             "avg_per_hour": avg_per_hour,
@@ -1615,11 +1747,13 @@ class RVUCounterApp:
             "last_full_hour": last_full_hour_rvu,
             "last_full_hour_range": last_full_hour_range,
             "projected": projected,
+            "projected_shift": projected_shift_rvu,
             "comp_total": total_comp,
             "comp_avg": avg_comp_per_hour,
             "comp_last_hour": last_hour_comp,
             "comp_last_full_hour": last_full_hour_comp,
             "comp_projected": projected_comp,
+            "comp_projected_shift": projected_shift_comp,
         }
     
     def create_tooltip(self, widget, text):
@@ -1664,11 +1798,15 @@ class RVUCounterApp:
             self.last_hour_comp_label.config(text="")
         if settings.get("show_last_full_hour", True):
             self.last_full_hour_label.config(text="0.0")
-            self.last_full_hour_label_text.config(text="Hour:")
+            self.last_full_hour_range_label.config(text="")
+            self.last_full_hour_label_text.config(text="hour:")
             self.last_full_hour_comp_label.config(text="")
         if settings.get("show_projected", True):
             self.projected_label.config(text="0.0")
             self.projected_comp_label.config(text="")
+        if settings.get("show_projected_shift", True):
+            self.projected_shift_label.config(text="0.0")
+            self.projected_shift_comp_label.config(text="")
     
     def update_display(self):
         """Update the display with current statistics."""
@@ -1720,20 +1858,22 @@ class RVUCounterApp:
             self.last_hour_value_frame.grid_remove()
         
         if settings.get("show_last_full_hour", True):
-            self.last_full_hour_label_text.grid()
+            self.last_full_hour_label_frame.grid()
             self.last_full_hour_value_frame.grid()
             self.last_full_hour_label.config(text=f"{stats['last_full_hour']:.1f}")
             range_text = stats.get("last_full_hour_range", "")
             if range_text:
-                self.last_full_hour_label_text.config(text=f"{range_text} Hour:")
+                self.last_full_hour_range_label.config(text=range_text)
+                self.last_full_hour_label_text.config(text="hour:")
             else:
-                self.last_full_hour_label_text.config(text="Hour:")
+                self.last_full_hour_range_label.config(text="")
+                self.last_full_hour_label_text.config(text="hour:")
             if settings.get("show_comp_last_full_hour", False):
                 self.last_full_hour_comp_label.config(text=f"(${stats['comp_last_full_hour']:,.0f})")
             else:
                 self.last_full_hour_comp_label.config(text="")
         else:
-            self.last_full_hour_label_text.grid_remove()
+            self.last_full_hour_label_frame.grid_remove()
             self.last_full_hour_value_frame.grid_remove()
         
         if settings.get("show_projected", True):
@@ -1747,6 +1887,18 @@ class RVUCounterApp:
         else:
             self.projected_label_text.grid_remove()
             self.projected_value_frame.grid_remove()
+        
+        if settings.get("show_projected_shift", True):
+            self.projected_shift_label_text.grid()
+            self.projected_shift_value_frame.grid()
+            self.projected_shift_label.config(text=f"{stats['projected_shift']:.1f}")
+            if settings.get("show_comp_projected_shift", False):
+                self.projected_shift_comp_label.config(text=f"(${stats['comp_projected_shift']:,.0f})")
+            else:
+                self.projected_shift_comp_label.config(text="")
+        else:
+            self.projected_shift_label_text.grid_remove()
+            self.projected_shift_value_frame.grid_remove()
         
         # Only rebuild widgets if records changed
         if rebuild_widgets:
@@ -1770,23 +1922,21 @@ class RVUCounterApp:
                 study_frame = ttk.Frame(self.studies_scrollable_frame)
                 study_frame.pack(fill=tk.X, pady=1, padx=0)  # No horizontal padding
                 
-                # X button to delete (on the left) - use tk.Button for smaller size
+                # X button to delete (on the left) - use Label for precise size control
                 colors = self.theme_colors
-                delete_btn = tk.Button(
+                delete_btn = tk.Label(
                     study_frame, 
                     text="×", 
-                    font=("Arial", 7),
-                    width=1,
-                    height=1,
-                    padx=1,
-                    pady=0,
+                    font=("Arial", 10),
                     bg=colors["delete_btn_bg"],
                     fg=colors["delete_btn_fg"],
-                    activebackground=colors["button_active_bg"],
-                    activeforeground=colors["fg"],
-                    relief=tk.FLAT,
-                    command=lambda idx=actual_index: self.delete_study_by_index(idx)
+                    cursor="hand2",
+                    padx=0,
+                    pady=0
                 )
+                delete_btn.bind("<Button-1>", lambda e, idx=actual_index: self.delete_study_by_index(idx))
+                delete_btn.bind("<Enter>", lambda e: delete_btn.config(bg=colors["button_active_bg"]))
+                delete_btn.bind("<Leave>", lambda e: delete_btn.config(bg=colors["delete_btn_bg"]))
                 delete_btn.pack(side=tk.LEFT, padx=(1, 3))
                 
                 # Study text label (show actual procedure name, or "Multiple XR" for multi-accession)
@@ -1845,6 +1995,7 @@ class RVUCounterApp:
             self.debug_accession_label.config(text="")
             self.debug_procedure_label.config(text="", foreground="gray")
             self.debug_patient_class_label.config(text="")
+            self.debug_study_type_prefix_label.config(text="")
             self.debug_study_type_label.config(text="")
             self.debug_study_rvu_label.config(text="")
         else:
@@ -1890,29 +2041,30 @@ class RVUCounterApp:
                         self.debug_procedure_label.config(text=f"Procedure: Multiple {modality} (done)", foreground="gray")
             else:
                 self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
-                # Dynamic truncation based on window width
-                frame_width = self.root.winfo_width()
-                max_chars = self._calculate_max_chars(frame_width) - 11  # Account for "Procedure: " prefix
-                procedure_display = self._truncate_text(self.current_procedure, max(10, max_chars)) if self.current_procedure else '-'
+                # No truncation for procedure - show full name
+                procedure_display = self.current_procedure if self.current_procedure else '-'
                 self.debug_procedure_label.config(text=f"Procedure: {procedure_display}", foreground="gray")
             
             self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
             
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                # Dynamic truncation - account for "Study Type: " prefix and RVU on right
+                # Dynamic truncation - same logic as Recent Studies
                 frame_width = self.root.winfo_width()
-                max_chars = self._calculate_max_chars(frame_width) - 20  # Account for prefix and RVU
-                study_type_display = self._truncate_text(self.current_study_type, max(8, max_chars))
+                max_chars = self._calculate_max_chars(frame_width)
+                study_type_display = self._truncate_text(self.current_study_type, max_chars)
+                # Show prefix
+                self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
                 # Check if incomplete (starts with "incomplete") - show in red
                 if self.current_study_type.startswith("incomplete"):
-                    self.debug_study_type_label.config(text=f"Study Type: {study_type_display}", foreground="red")
+                    self.debug_study_type_label.config(text=study_type_display, foreground="red")
                 else:
-                    self.debug_study_type_label.config(text=f"Study Type: {study_type_display}", foreground="gray")
+                    self.debug_study_type_label.config(text=study_type_display, foreground="gray")
                 rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
                 self.debug_study_rvu_label.config(text=f"{rvu_value:.1f} RVU")
             else:
-                self.debug_study_type_label.config(text=f"Study Type: -", foreground="gray")
+                self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
+                self.debug_study_type_label.config(text="-", foreground="gray")
                 self.debug_study_rvu_label.config(text="")
 
     def _format_hour_label(self, dt: datetime) -> str:
@@ -2038,6 +2190,7 @@ class RVUCounterApp:
             getattr(self, 'last_hour_comp_label', None),
             getattr(self, 'last_full_hour_comp_label', None),
             getattr(self, 'projected_comp_label', None),
+            getattr(self, 'projected_shift_comp_label', None),
         ]:
             if label:
                 label.configure(bg=bg_color, fg=comp_color)
@@ -2147,9 +2300,9 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"450x450+{window_pos['x']}+{window_pos['y']}")
+            self.window.geometry(f"450x550+{window_pos['x']}+{window_pos['y']}")
         else:
-            self.window.geometry("450x450")
+            self.window.geometry("450x550")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -2205,29 +2358,34 @@ class SettingsWindow:
         
         # Counter variables and checkbuttons
         self.show_total_var = tk.BooleanVar(value=settings["show_total"])
-        self.total_cb = ttk.Checkbutton(counters_col, text="Total", variable=self.show_total_var, 
+        self.total_cb = ttk.Checkbutton(counters_col, text="total", variable=self.show_total_var, 
                                          command=lambda: self.sync_compensation_state("total"))
         self.total_cb.pack(anchor=tk.W, pady=2)
         
         self.show_avg_var = tk.BooleanVar(value=settings["show_avg"])
-        self.avg_cb = ttk.Checkbutton(counters_col, text="Average per Hour", variable=self.show_avg_var,
+        self.avg_cb = ttk.Checkbutton(counters_col, text="average per hour", variable=self.show_avg_var,
                                        command=lambda: self.sync_compensation_state("avg"))
         self.avg_cb.pack(anchor=tk.W, pady=2)
         
         self.show_last_hour_var = tk.BooleanVar(value=settings["show_last_hour"])
-        self.last_hour_cb = ttk.Checkbutton(counters_col, text="Last Hour", variable=self.show_last_hour_var,
+        self.last_hour_cb = ttk.Checkbutton(counters_col, text="last hour", variable=self.show_last_hour_var,
                                              command=lambda: self.sync_compensation_state("last_hour"))
         self.last_hour_cb.pack(anchor=tk.W, pady=2)
         
         self.show_last_full_hour_var = tk.BooleanVar(value=settings["show_last_full_hour"])
-        self.last_full_hour_cb = ttk.Checkbutton(counters_col, text="Last Full Hour", variable=self.show_last_full_hour_var,
+        self.last_full_hour_cb = ttk.Checkbutton(counters_col, text="last full hour", variable=self.show_last_full_hour_var,
                                                   command=lambda: self.sync_compensation_state("last_full_hour"))
         self.last_full_hour_cb.pack(anchor=tk.W, pady=2)
         
         self.show_projected_var = tk.BooleanVar(value=settings["show_projected"])
-        self.projected_cb = ttk.Checkbutton(counters_col, text="Projected This Hour", variable=self.show_projected_var,
+        self.projected_cb = ttk.Checkbutton(counters_col, text="est this hour", variable=self.show_projected_var,
                                              command=lambda: self.sync_compensation_state("projected"))
         self.projected_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_projected_shift_var = tk.BooleanVar(value=settings.get("show_projected_shift", True))
+        self.projected_shift_cb = ttk.Checkbutton(counters_col, text="est shift total", variable=self.show_projected_shift_var,
+                                             command=lambda: self.sync_compensation_state("projected_shift"))
+        self.projected_shift_cb.pack(anchor=tk.W, pady=2)
         
         # Role radio buttons (Partner/Associate)
         role_frame = ttk.Frame(counters_col)
@@ -2246,24 +2404,28 @@ class SettingsWindow:
         # Compensation variables and checkbuttons (initially set based on counter state)
         
         self.show_comp_total_var = tk.BooleanVar(value=settings.get("show_comp_total", False))
-        self.comp_total_cb = ttk.Checkbutton(comp_col, text="Total", variable=self.show_comp_total_var)
+        self.comp_total_cb = ttk.Checkbutton(comp_col, text="total", variable=self.show_comp_total_var)
         self.comp_total_cb.pack(anchor=tk.W, pady=2)
         
         self.show_comp_avg_var = tk.BooleanVar(value=settings.get("show_comp_avg", False))
-        self.comp_avg_cb = ttk.Checkbutton(comp_col, text="Average per Hour", variable=self.show_comp_avg_var)
+        self.comp_avg_cb = ttk.Checkbutton(comp_col, text="average per hour", variable=self.show_comp_avg_var)
         self.comp_avg_cb.pack(anchor=tk.W, pady=2)
         
         self.show_comp_last_hour_var = tk.BooleanVar(value=settings.get("show_comp_last_hour", False))
-        self.comp_last_hour_cb = ttk.Checkbutton(comp_col, text="Last Hour", variable=self.show_comp_last_hour_var)
+        self.comp_last_hour_cb = ttk.Checkbutton(comp_col, text="last hour", variable=self.show_comp_last_hour_var)
         self.comp_last_hour_cb.pack(anchor=tk.W, pady=2)
         
         self.show_comp_last_full_hour_var = tk.BooleanVar(value=settings.get("show_comp_last_full_hour", False))
-        self.comp_last_full_hour_cb = ttk.Checkbutton(comp_col, text="Last Full Hour", variable=self.show_comp_last_full_hour_var)
+        self.comp_last_full_hour_cb = ttk.Checkbutton(comp_col, text="last full hour", variable=self.show_comp_last_full_hour_var)
         self.comp_last_full_hour_cb.pack(anchor=tk.W, pady=2)
         
         self.show_comp_projected_var = tk.BooleanVar(value=settings.get("show_comp_projected", False))
-        self.comp_projected_cb = ttk.Checkbutton(comp_col, text="Projected This Hour", variable=self.show_comp_projected_var)
+        self.comp_projected_cb = ttk.Checkbutton(comp_col, text="est this hour", variable=self.show_comp_projected_var)
         self.comp_projected_cb.pack(anchor=tk.W, pady=2)
+        
+        self.show_comp_projected_shift_var = tk.BooleanVar(value=settings.get("show_comp_projected_shift", True))
+        self.comp_projected_shift_cb = ttk.Checkbutton(comp_col, text="est shift total", variable=self.show_comp_projected_shift_var)
+        self.comp_projected_shift_cb.pack(anchor=tk.W, pady=2)
         
         # Store mapping for easy sync
         self.comp_mapping = {
@@ -2272,11 +2434,17 @@ class SettingsWindow:
             "last_hour": (self.show_last_hour_var, self.show_comp_last_hour_var, self.comp_last_hour_cb),
             "last_full_hour": (self.show_last_full_hour_var, self.show_comp_last_full_hour_var, self.comp_last_full_hour_cb),
             "projected": (self.show_projected_var, self.show_comp_projected_var, self.comp_projected_cb),
+            "projected_shift": (self.show_projected_shift_var, self.show_comp_projected_shift_var, self.comp_projected_shift_cb),
         }
         
         # Initial sync of compensation state based on counter state
         for key in self.comp_mapping:
             self.sync_compensation_state(key)
+        
+        # Shift length (hours)
+        ttk.Label(main_frame, text="Shift Length (hours):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        self.shift_length_var = tk.StringVar(value=str(self.data_manager.data["settings"].get("shift_length_hours", 9)))
+        ttk.Entry(main_frame, textvariable=self.shift_length_var, width=10).pack(anchor=tk.W, pady=2)
         
         # Min study seconds
         ttk.Label(main_frame, text="Min Study Duration (seconds):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
@@ -2322,12 +2490,15 @@ class SettingsWindow:
             self.data_manager.data["settings"]["show_last_hour"] = self.show_last_hour_var.get()
             self.data_manager.data["settings"]["show_last_full_hour"] = self.show_last_full_hour_var.get()
             self.data_manager.data["settings"]["show_projected"] = self.show_projected_var.get()
+            self.data_manager.data["settings"]["show_projected_shift"] = self.show_projected_shift_var.get()
             self.data_manager.data["settings"]["show_comp_total"] = self.show_comp_total_var.get()
             self.data_manager.data["settings"]["show_comp_avg"] = self.show_comp_avg_var.get()
             self.data_manager.data["settings"]["show_comp_last_hour"] = self.show_comp_last_hour_var.get()
             self.data_manager.data["settings"]["show_comp_last_full_hour"] = self.show_comp_last_full_hour_var.get()
             self.data_manager.data["settings"]["show_comp_projected"] = self.show_comp_projected_var.get()
+            self.data_manager.data["settings"]["show_comp_projected_shift"] = self.show_comp_projected_shift_var.get()
             self.data_manager.data["settings"]["role"] = self.role_var.get()
+            self.data_manager.data["settings"]["shift_length_hours"] = int(self.shift_length_var.get())
             self.data_manager.data["settings"]["min_study_seconds"] = int(self.min_seconds_var.get())
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
             
@@ -2545,6 +2716,8 @@ class StatisticsWindow:
                        value="by_patient_class", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Study Type", variable=self.view_mode,
                        value="by_study_type", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="All Studies", variable=self.view_mode,
+                       value="all_studies", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
                        value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         
@@ -2829,6 +3002,8 @@ class StatisticsWindow:
             self._display_by_patient_class(records)
         elif view_mode == "by_study_type":
             self._display_by_study_type(records)
+        elif view_mode == "all_studies":
+            self._display_all_studies(records)
         else:  # summary
             self._display_summary(records)
         
@@ -2845,11 +3020,11 @@ class StatisticsWindow:
         """Display data broken down by hour."""
         # Configure columns
         self.tree["columns"] = ("hour", "studies", "rvu", "avg_rvu", "top_modality")
-        self.tree.heading("hour", text="Hour")
-        self.tree.heading("studies", text="Studies")
-        self.tree.heading("rvu", text="RVU")
-        self.tree.heading("avg_rvu", text="Avg/Study")
-        self.tree.heading("top_modality", text="Top Modality")
+        self.tree.heading("hour", text="Hour", command=lambda: self._sort_column("hour"))
+        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
+        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
+        self.tree.heading("top_modality", text="Top Modality", command=lambda: self._sort_column("top_modality"))
         
         self.tree.column("hour", width=120, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
@@ -2925,12 +3100,12 @@ class StatisticsWindow:
         """Display data broken down by modality."""
         # Configure columns
         self.tree["columns"] = ("modality", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("modality", text="Modality")
-        self.tree.heading("studies", text="Studies")
-        self.tree.heading("rvu", text="RVU")
-        self.tree.heading("avg_rvu", text="Avg/Study")
-        self.tree.heading("pct_studies", text="% Studies")
-        self.tree.heading("pct_rvu", text="% RVU")
+        self.tree.heading("modality", text="Modality", command=lambda: self._sort_column("modality"))
+        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
+        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
+        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
+        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
         
         self.tree.column("modality", width=100, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
@@ -2990,12 +3165,12 @@ class StatisticsWindow:
         """Display data broken down by patient class."""
         # Configure columns
         self.tree["columns"] = ("patient_class", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("patient_class", text="Patient Class")
-        self.tree.heading("studies", text="Studies")
-        self.tree.heading("rvu", text="RVU")
-        self.tree.heading("avg_rvu", text="Avg/Study")
-        self.tree.heading("pct_studies", text="% Studies")
-        self.tree.heading("pct_rvu", text="% RVU")
+        self.tree.heading("patient_class", text="Patient Class", command=lambda: self._sort_column("patient_class"))
+        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
+        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
+        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
+        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
         
         self.tree.column("patient_class", width=120, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
@@ -3057,12 +3232,12 @@ class StatisticsWindow:
         """Display data broken down by study type."""
         # Configure columns
         self.tree["columns"] = ("study_type", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("study_type", text="Study Type")
-        self.tree.heading("studies", text="Studies")
-        self.tree.heading("rvu", text="RVU")
-        self.tree.heading("avg_rvu", text="Avg/Study")
-        self.tree.heading("pct_studies", text="% Studies")
-        self.tree.heading("pct_rvu", text="% RVU")
+        self.tree.heading("study_type", text="Study Type", command=lambda: self._sort_column("study_type"))
+        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
+        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
+        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
+        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
         
         self.tree.column("study_type", width=150, anchor=tk.CENTER)
         self.tree.column("studies", width=80, anchor=tk.CENTER)
@@ -3119,6 +3294,114 @@ class StatisticsWindow:
                 "100%",
                 "100%"
             ))
+    
+    def _display_all_studies(self, records: List[dict]):
+        """Display all individual studies with Procedure, Study Type, RVU columns."""
+        # Configure columns
+        self.tree["columns"] = ("procedure", "study_type", "rvu")
+        self.tree.heading("procedure", text="Procedure", command=lambda: self._sort_column("procedure"))
+        self.tree.heading("study_type", text="Study Type", command=lambda: self._sort_column("study_type"))
+        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        
+        self.tree.column("procedure", width=400, anchor=tk.W)
+        self.tree.column("study_type", width=200, anchor=tk.CENTER)
+        self.tree.column("rvu", width=100, anchor=tk.CENTER)
+        
+        # Display all studies
+        for record in records:
+            procedure = record.get("procedure", "Unknown")
+            study_type = record.get("study_type", "Unknown")
+            rvu = record.get("rvu", 0.0)
+            
+            self.tree.insert("", tk.END, values=(
+                procedure,
+                study_type,
+                f"{rvu:.1f}"
+            ))
+    
+    def _sort_column(self, col: str, reverse: bool = None):
+        """Sort treeview by column. Toggles direction on each click."""
+        # Track current sort state
+        if not hasattr(self, '_current_sort_col'):
+            self._current_sort_col = None
+            self._current_sort_reverse = False
+        
+        # If clicking same column, toggle direction; otherwise sort ascending
+        if self._current_sort_col == col:
+            reverse = not self._current_sort_reverse
+        else:
+            reverse = False
+        
+        self._current_sort_col = col
+        self._current_sort_reverse = reverse
+        
+        # Get all items with their values before clearing
+        all_items_data = []
+        for item in self.tree.get_children(""):
+            values = []
+            for c in self.tree["columns"]:
+                values.append(self.tree.set(item, c))
+            sort_val = self.tree.set(item, col)
+            
+            # Check if it's a totals/separator row by checking all values
+            is_total = False
+            for val in values:
+                if isinstance(val, str):
+                    val_str = val.strip()
+                    # Check for separator patterns: "─", dashes, "TOTAL", or all dashes
+                    if ("─" in val_str or val_str.startswith("TOTAL") or 
+                        (len(val_str) > 0 and all(c in "─-" for c in val_str)) or
+                        val_str == "─" * len(val_str)):
+                        is_total = True
+                        break
+            
+            all_items_data.append((sort_val, values, is_total))
+        
+        # Separate regular items and totals/separators
+        regular_items = [(val, values) for val, values, is_total in all_items_data if not is_total]
+        totals_data = [(val, values) for val, values, is_total in all_items_data if is_total]
+        
+        # Sort regular items
+        try:
+            # Check if column contains numeric data
+            numeric_cols = ["rvu", "studies", "avg_rvu", "pct_studies", "pct_rvu"]
+            if col in numeric_cols or (regular_items and regular_items[0][0] and 
+                                       str(regular_items[0][0]).replace(".", "").replace("-", "").replace("%", "").strip().isdigit()):
+                # Numeric sort
+                regular_items.sort(key=lambda t: float(str(t[0]).replace("%", "").replace(",", "")) if t[0] and str(t[0]).replace(".", "").replace("-", "").replace("%", "").replace(",", "").strip().isdigit() else float('-inf'), reverse=reverse)
+            else:
+                # String sort
+                regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
+        except (ValueError, TypeError):
+            # Fallback to string sort
+            regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
+        
+        # Clear tree
+        for item in self.tree.get_children(""):
+            self.tree.delete(item)
+        
+        # Insert sorted regular items
+        for val, values in regular_items:
+            self.tree.insert("", tk.END, values=values)
+        
+        # Insert totals at end
+        for val, values in totals_data:
+            self.tree.insert("", tk.END, values=values)
+        
+        # Update column headings to show sort direction (subtle arrows: ▲ ▼)
+        for column in self.tree["columns"]:
+            heading_text = self.tree.heading(column)["text"]
+            # Remove existing sort indicators
+            heading_text = heading_text.replace("▲ ", "").replace("▼ ", "").strip()
+            
+            # Add indicator and command for clicked column
+            if column == col:
+                indicator = "▼ " if reverse else "▲ "
+                self.tree.heading(column, text=indicator + heading_text, 
+                                 command=lambda c=column: self._sort_column(c))
+            else:
+                self.tree.heading(column, text=heading_text,
+                                 command=lambda c=column: self._sort_column(c))
     
     def _display_summary(self, records: List[dict]):
         """Display summary statistics."""

@@ -14,7 +14,10 @@
     "role": "Partner",
     "min_study_seconds": 1,
     "ignore_duplicate_accessions": true,
-    "dark_mode": false
+    "dark_mode": false,
+    "show_projected_shift": true,
+    "show_comp_projected_shift": true,
+    "shift_length_hours": 9
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -50,7 +53,10 @@
     "CTA Brain and Neck": 3.5,
     "CT Brain and Cervical": 1.9,
     "CT Spine": 1.0,
-    "CT Thoracic and Lumbar Spine": 2.0
+    "CT TL Spine": 2.0,
+    "CT Face": 1.0,
+    "XR Abdomen": 0.3,
+    "XR MSK": 0.3
   },
   "classification_rules": {
     "CT AP": [
@@ -170,7 +176,8 @@
           "head",
           "brain",
           "angiography",
-          "angio"
+          "angio",
+          "CTA"
         ]
       }
     ],
@@ -199,12 +206,96 @@
         ]
       }
     ],
-    "CT Thoracic and Lumbar Spine": [
+    "CT TL Spine": [
       {
         "required_keywords": [
           "CT",
           "thor",
           "lumb"
+        ]
+      }
+    ],
+    "CT Face": [
+      {
+        "required_keywords": [
+          "CT"
+        ],
+        "any_of_keywords": [
+          "facial",
+          "face",
+          "orbit",
+          "maxil",
+          "sinus"
+        ]
+      }
+    ],
+    "XR Abdomen": [
+      {
+        "required_keywords": [
+          "XR",
+          "abd"
+        ]
+      }
+    ],
+    "XR MSK": [
+      {
+        "required_keywords": [
+          "XR"
+        ],
+        "any_of_keywords": [
+          "knee",
+          "wrist",
+          "hand",
+          "thumb",
+          "index finger",
+          "middle finger",
+          "ring finger",
+          "small finger",
+          "fingers",
+          "pelvis",
+          "hip",
+          "hips",
+          "si joints",
+          "ankle",
+          "foot",
+          "humerus",
+          "forearm",
+          "tibia-fibula",
+          "tibia/fibula",
+          "tib/fib",
+          "tibia",
+          "fibula",
+          "elbow",
+          "shoulder",
+          "cervical spine",
+          "c-spine",
+          "thoracic spine",
+          "t-spine",
+          "lumbar spine",
+          "l-spine",
+          "lumbosacral spine",
+          "ls-spine",
+          "spine",
+          "scoliosis",
+          "leg length",
+          "lower extremity leg length",
+          "bone survey",
+          "ribs",
+          "rib",
+          "clavicle",
+          "scapula",
+          "calcaneus",
+          "femur",
+          "skull",
+          "mandible",
+          "facial bones",
+          "nasal bones",
+          "orbits",
+          "tmj",
+          "sternum",
+          "sacrum",
+          "coccyx",
+          "sacrum and coccyx"
         ]
       }
     ],
@@ -238,6 +329,56 @@
         "required_keywords": [
           "XR",
           "Chest"
+        ]
+      }
+    ],
+    "XR Other": [
+      {
+        "required_keywords": [
+          "XR"
+        ]
+      }
+    ],
+    "CT Other": [
+      {
+        "required_keywords": [
+          "CT"
+        ]
+      }
+    ],
+    "MRI Other": [
+      {
+        "required_keywords": [
+          "MRI"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR "
+        ]
+      }
+    ],
+    "US Other": [
+      {
+        "required_keywords": [
+          "US"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound"
+        ]
+      }
+    ],
+    "NM Other": [
+      {
+        "required_keywords": [
+          "NM"
+        ]
+      },
+      {
+        "required_keywords": [
+          "nuclear"
         ]
       }
     ]
@@ -354,8 +495,8 @@
   },
   "window_positions": {
     "main": {
-      "x": 4990,
-      "y": -324,
+      "x": 4986,
+      "y": -320,
       "width": 236,
       "height": 500
     },
@@ -364,8 +505,8 @@
       "y": -289
     },
     "statistics": {
-      "x": 5355,
-      "y": -276
+      "x": 5327,
+      "y": -225
     }
   }
 }

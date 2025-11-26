@@ -3,7 +3,30 @@
   "current_shift": {
     "shift_start": null,
     "shift_end": null,
-    "records": []
+    "records": [
+      {
+        "accession": "20XR250086400UOC",
+        "procedure": "XR ABDOMEN 2 VIEWS SUPINE ERECT",
+        "patient_class": "Outpatient",
+        "study_type": "XR Abdomen",
+        "rvu": 0.3,
+        "time_performed": "2025-11-25T17:42:44.287553",
+        "time_finished": "2025-11-25T17:52:38.069717",
+        "duration_seconds": 593.782164
+      },
+      {
+        "accession": "CO384274GB",
+        "procedure": "XR ANKLE 3 OR MORE VIEWS",
+        "patient_class": "Outpatient",
+        "study_type": "XR MSK",
+        "rvu": 0.3,
+        "time_performed": "2025-11-25T18:04:19.068386",
+        "time_finished": "2025-11-25T18:36:15.221127",
+        "duration_seconds": 1916.152741
+      }
+    ],
+    "effective_shift_start": "2025-11-25T16:53:52.057257",
+    "projected_shift_end": "2025-11-26T01:53:52.057257"
   },
   "shifts": [
     {
@@ -13,7 +36,7 @@
         {
           "accession": "00414CT250069946ABZ1",
           "procedure": "CT THORACIC SPINE WITHOUT IV CONTRAST",
-          "study_type": "CT",
+          "study_type": "CT Spine",
           "rvu": 1.0,
           "time_performed": "2025-11-24T03:44:59.515029",
           "time_finished": "2025-11-24T03:45:59.347544",
@@ -22,8 +45,8 @@
         {
           "accession": "00414CT250069947ABZ1",
           "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
-          "study_type": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
-          "rvu": 2.0,
+          "study_type": "CT Spine",
+          "rvu": 1.0,
           "time_performed": "2025-11-24T03:46:08.814785",
           "time_finished": "2025-11-24T03:46:38.788975",
           "duration_seconds": 29.97419
@@ -31,7 +54,7 @@
         {
           "accession": "00414CT250069943ABZ1",
           "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
-          "study_type": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "study_type": "CT Spine",
           "rvu": 1.0,
           "time_performed": "2025-11-24T03:49:55.382883",
           "time_finished": "2025-11-24T03:52:59.335160",
@@ -49,8 +72,8 @@
         {
           "accession": "SSH2511240000301CST",
           "procedure": "CT LUMBAR SPINE WITH IV CONTRAST",
-          "study_type": "CT LUMBAR SPINE WITH IV CONTRAST",
-          "rvu": 2.0,
+          "study_type": "CT Spine",
+          "rvu": 1.0,
           "time_performed": "2025-11-24T04:02:10.643847",
           "time_finished": "2025-11-24T04:05:10.981750",
           "duration_seconds": 180.337903
@@ -58,7 +81,7 @@
         {
           "accession": "SSH2511240000305CST",
           "procedure": "CT THORACIC SPINE WITH IV CONTRAST",
-          "study_type": "CT THORACIC SPINE WITH IV CONTRAST",
+          "study_type": "CT Spine",
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:05:40.302925",
           "time_finished": "2025-11-24T04:07:01.514574",
@@ -67,7 +90,7 @@
         {
           "accession": "A01266011DU",
           "procedure": "XR RIBS UNILATERAL WITH CHEST",
-          "study_type": "XR",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:07:25.489454",
           "time_finished": "2025-11-24T04:07:37.282956",
@@ -76,7 +99,7 @@
         {
           "accession": "00416XR250038730ABZ3",
           "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "study_type": "XR",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:12:23.996488",
           "time_finished": "2025-11-24T04:12:47.588166",
@@ -85,7 +108,7 @@
         {
           "accession": "205692320251124OK",
           "procedure": "XR CHEST 1 VIEW",
-          "study_type": "XR",
+          "study_type": "XR Chest",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:13:01.273763",
           "time_finished": "2025-11-24T04:13:24.229516",
@@ -94,7 +117,7 @@
         {
           "accession": "205692520251124OK",
           "procedure": "XR ELBOW 1-2 VIEWS RIGHT",
-          "study_type": "XR",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:13:30.999135",
           "time_finished": "2025-11-24T04:13:44.737024",
@@ -130,7 +153,7 @@
         {
           "accession": "000576655ARLUSH",
           "procedure": "XR KNEE 3 VIEWS RIGHT",
-          "study_type": "XR",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:25:50.943889",
           "time_finished": "2025-11-24T04:32:10.736911",
@@ -139,7 +162,7 @@
         {
           "accession": "000576657ARLUSH",
           "procedure": "XR TIBIA FIBULA 2 VIEWS RIGHT",
-          "study_type": "XR",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:32:22.272148",
           "time_finished": "2025-11-24T04:32:32.027593",
@@ -157,7 +180,7 @@
         {
           "accession": "SSH2511240000581CST",
           "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-          "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CT Chest",
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:34:53.156912",
           "time_finished": "2025-11-24T04:40:32.436705",
@@ -166,7 +189,7 @@
         {
           "accession": "62-XR-25-055199DL",
           "procedure": "XR ABDOMEN 2 VIEWS SUPINE ERECT",
-          "study_type": "XR",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:40:46.420114",
           "time_finished": "2025-11-24T04:40:54.213257",
@@ -175,7 +198,7 @@
         {
           "accession": "56690151BP",
           "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "study_type": "XR",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:41:03.172391",
           "time_finished": "2025-11-24T04:41:12.483650",
@@ -193,7 +216,7 @@
         {
           "accession": "SSH2511240000563CST",
           "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
-          "study_type": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "study_type": "CT Chest",
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:45:43.213341",
           "time_finished": "2025-11-24T04:48:20.612181",
@@ -202,7 +225,7 @@
         {
           "accession": "4002532800414NMCH",
           "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "study_type": "XR",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:48:26.303320",
           "time_finished": "2025-11-24T04:49:13.240129",
@@ -220,7 +243,7 @@
         {
           "accession": "00414XR250061418ABZ1",
           "procedure": "XR CHEST 1 VIEW",
-          "study_type": "XR",
+          "study_type": "XR Chest",
           "rvu": 0.3,
           "time_performed": "2025-11-24T05:02:46.144880",
           "time_finished": "2025-11-24T05:03:21.538878",
@@ -229,7 +252,7 @@
         {
           "accession": "56690115BP",
           "procedure": "CT MAXILLOFACIAL WITH IV CONTRAST",
-          "study_type": "CT",
+          "study_type": "CT Face",
           "rvu": 1.0,
           "time_performed": "2025-11-24T05:03:37.440448",
           "time_finished": "2025-11-24T05:09:07.619658",
@@ -373,7 +396,7 @@
         {
           "accession": "56692069BP",
           "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
-          "study_type": "XR",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:23:32.538560",
           "time_finished": "2025-11-24T06:23:44.787057",
@@ -427,7 +450,7 @@
         {
           "accession": "56692085BP",
           "procedure": "XR HAND 3 OR MORE VIEWS RIGHT",
-          "study_type": "XR Other",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:42:38.889238",
           "time_finished": "2025-11-24T06:42:48.432964",
@@ -445,7 +468,7 @@
         {
           "accession": "316644020251124CRE",
           "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "study_type": "XR Other",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:43:40.447272",
           "time_finished": "2025-11-24T06:44:48.262714",
@@ -463,7 +486,7 @@
         {
           "accession": "X002063967WTX",
           "procedure": "XR FEMUR 2 VIEWS LEFT",
-          "study_type": "XR Other",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:49:17.513927",
           "time_finished": "2025-11-24T06:49:27.865601",
@@ -472,7 +495,7 @@
         {
           "accession": "X002063956WTX",
           "procedure": "XR PELVIS 1-2 VIEWS",
-          "study_type": "XR Other",
+          "study_type": "XR MSK",
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:49:37.326211",
           "time_finished": "2025-11-24T06:49:48.693021",
@@ -544,8 +567,8 @@
         {
           "accession": "62-XR-25-055202DL",
           "procedure": "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)",
-          "study_type": "XR Chest",
-          "rvu": 0.6,
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
           "time_performed": "2025-11-24T06:58:41.201637",
           "time_finished": "2025-11-24T06:59:03.124527",
           "duration_seconds": 21.92289
@@ -679,7 +702,7 @@
         {
           "accession": "RAD20251124-0005PRMC",
           "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "study_type": "XR Other",
+          "study_type": "XR Abdomen",
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:45:03.295627",
           "time_finished": "2025-11-24T07:45:12.188097",
@@ -776,6 +799,84 @@
           "duration_seconds": 51.256734
         }
       ]
+    },
+    {
+      "shift_start": "2025-11-25T16:53:52.057257",
+      "shift_end": "2025-11-25T17:51:23.121270",
+      "records": [
+        {
+          "accession": "001923529MLC",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "Inpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-25T16:54:17.050434",
+          "time_finished": "2025-11-25T16:54:27.129696",
+          "duration_seconds": 10.079262
+        },
+        {
+          "accession": "251121101937MH",
+          "procedure": "CT SHOULDER WITHOUT IV CONTRAST LEFT",
+          "patient_class": "Outpatient",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-25T16:54:57.421554",
+          "time_finished": "2025-11-25T16:54:58.422687",
+          "duration_seconds": 1.001133
+        },
+        {
+          "accession": "4142532800033NMCH",
+          "procedure": "US EXTREMITY VEINS LEFT",
+          "patient_class": "Inpatient",
+          "study_type": "US Other",
+          "rvu": 0.68,
+          "time_performed": "2025-11-25T16:57:49.925908",
+          "time_finished": "2025-11-25T16:57:56.989307",
+          "duration_seconds": 7.063399
+        },
+        {
+          "accession": "AHS27172699LLHS",
+          "procedure": "XR WRIST 3 OR MORE VIEWS",
+          "patient_class": "Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-25T17:00:26.218370",
+          "time_finished": "2025-11-25T17:01:05.515925",
+          "duration_seconds": 39.297555
+        },
+        {
+          "accession": "251124101139MH",
+          "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
+          "patient_class": "Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-25T17:03:05.234416",
+          "time_finished": "2025-11-25T17:03:14.292422",
+          "duration_seconds": 9.058006
+        },
+        {
+          "accession": "A01266354DU",
+          "procedure": "XR KNEE 3 VIEWS",
+          "patient_class": "Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-25T17:03:25.473348",
+          "time_finished": "2025-11-25T17:03:37.540206",
+          "duration_seconds": 12.066858
+        },
+        {
+          "accession": "AHS27178000LLHS",
+          "procedure": "XR HIP 2 OR MORE VIEWS RIGHT WITH PELVIS",
+          "patient_class": "Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-25T17:04:02.810001",
+          "time_finished": "2025-11-25T17:04:09.867476",
+          "duration_seconds": 7.057475
+        }
+      ],
+      "effective_shift_start": "2025-11-25T16:53:52.057257",
+      "projected_shift_end": "2025-11-26T01:53:52.057257"
     }
   ]
 }

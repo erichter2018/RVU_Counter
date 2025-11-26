@@ -14,12 +14,15 @@
     "role": "Partner",
     "min_study_seconds": 1,
     "ignore_duplicate_accessions": true,
-    "dark_mode": false
+    "dark_mode": false,
+    "show_projected_shift": true,
+    "show_comp_projected_shift": true,
+    "shift_length_hours": 9
   },
   "window_positions": {
     "main": {
-      "x": 4990,
-      "y": -324,
+      "x": 4986,
+      "y": -320,
       "width": 236,
       "height": 500
     },
@@ -28,8 +31,8 @@
       "y": -289
     },
     "statistics": {
-      "x": 5355,
-      "y": -276
+      "x": 5327,
+      "y": -225
     }
   }
 }
