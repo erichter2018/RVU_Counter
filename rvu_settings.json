@@ -19,7 +19,8 @@
     "show_comp_projected_shift": false,
     "shift_length_hours": 9,
     "data_source": "PowerScribe",
-    "show_time": true
+    "show_time": true,
+    "stay_on_top": true
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -497,8 +498,8 @@
   },
   "window_positions": {
     "main": {
-      "x": 4988,
-      "y": -185,
+      "x": 4989,
+      "y": -184,
       "width": 240,
       "height": 500
     },

@@ -434,7 +434,6 @@ def refresh_elements():
             
             # Display all elements
             display_elements()
-            
         else:
             left_header.config(text=f"Found window but could not locate WebView2 control - Scanning main window only...")
             root.update()

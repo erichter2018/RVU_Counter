@@ -5,44 +5,31 @@
     "shift_end": null,
     "records": [
       {
-        "accession": "A01265985DU",
-        "procedure": "CT CHEST ABDOMEN PELVIS WITH IV CONTRAST",
-        "patient_class": "Pre-admit",
-        "study_type": "CT CAP",
-        "rvu": 3.06,
-        "time_performed": "2025-11-25T23:29:45.256349",
-        "time_finished": "2025-11-25T23:30:15.477875",
-        "duration_seconds": 30.221526
+        "accession": "LS-62279EV, LS-62278EV, LS-62277EV",
+        "procedure": "Multiple XR (3 studies)",
+        "patient_class": "Urgent Outpatient",
+        "study_type": "Multiple XR",
+        "rvu": 0.8999999999999999,
+        "time_performed": "2025-11-26T11:48:42.751774",
+        "time_finished": "2025-11-26T11:49:13.992213",
+        "duration_seconds": 31.240439,
+        "is_multi_accession": true,
+        "accession_count": 3,
+        "individual_procedures": [
+          "XR LUMBAR SPINE 2-3 VIEWS",
+          "XR CERVICAL SPINE 2-3 VIEWS",
+          "XR EXAM UNLISTED LEFT"
+        ]
       },
       {
-        "accession": "320US25012555ELP",
-        "procedure": "US LIVER",
-        "patient_class": "Inpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-26T07:04:41.151237",
-        "time_finished": "2025-11-26T07:05:00.332132",
-        "duration_seconds": 19.180895
-      },
-      {
-        "accession": "390XR25034606ELP",
-        "procedure": "XR CHEST 1 VIEW",
-        "patient_class": "Inpatient",
-        "study_type": "XR Chest",
-        "rvu": 0.3,
-        "time_performed": "2025-11-26T07:44:28.650112",
-        "time_finished": "2025-11-26T07:44:40.721427",
-        "duration_seconds": 12.071315
-      },
-      {
-        "accession": "62-XR-25-055515DL",
-        "procedure": "XR ANKLE 3 OR MORE VIEWS RIGHT",
-        "patient_class": "Outpatient",
-        "study_type": "XR MSK",
-        "rvu": 0.3,
-        "time_performed": "2025-11-26T07:47:46.996301",
-        "time_finished": "2025-11-26T07:48:58.593933",
-        "duration_seconds": 71.597632
+        "accession": "A01266701DU",
+        "procedure": "MR FOOT WITHOUT IV CONTRAST",
+        "patient_class": "STAT Inpatient",
+        "study_type": "MRI Other",
+        "rvu": 1.75,
+        "time_performed": "2025-11-26T15:45:57.972552",
+        "time_finished": "2025-11-26T15:46:08.057058",
+        "duration_seconds": 10.084506
       }
     ],
     "effective_shift_start": "2025-11-25T22:00:00",

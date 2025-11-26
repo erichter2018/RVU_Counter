@@ -128,7 +128,7 @@ def find_mosaic_window():
                             return window
                     except:
                         # If we can't check automation ID, still return it if it matches
-                    return window
+                        return window
             except:
                 continue
     except:
@@ -159,12 +159,11 @@ def find_mosaic_webview_element(main_window):
                 automation_id = child.element_info.automation_id
                 if automation_id == "webView":
                     return child
-                    except:
+            except:
                 continue
     except:
         pass
-    
-                        return None
+    return None
                 
 
 def get_mosaic_elements(webview_element, depth=0, max_depth=20):
@@ -202,14 +201,364 @@ def get_mosaic_elements(webview_element, depth=0, max_depth=20):
         # Recursively get children
         try:
             children = webview_element.children()
-                    for child in children:
+            for child in children:
                 elements.extend(get_mosaic_elements(child, depth + 1, max_depth))
+        except:
+            pass
+    except:
+        pass
+    
+    return elements
+
+
+# Clario extraction functions (for patient class lookup)
+_clario_cache = {
+    'chrome_window': None,
+    'content_area': None
+}
+
+
+def find_clario_chrome_window(use_cache=True):
+    """Find Chrome window with 'Clario - Worklist' tab.
+    
+    Uses cache if available and valid, only searches if cache is invalid or missing.
+    """
+    global _clario_cache
+    
+    # Check cache first
+    if use_cache and _clario_cache['chrome_window']:
+        try:
+            _ = _clario_cache['chrome_window'].window_text()
+            return _clario_cache['chrome_window']
+        except:
+            _clario_cache['chrome_window'] = None
+            _clario_cache['content_area'] = None
+    
+    # Search for window
+    desktop = Desktop(backend="uia")
+    
+    try:
+        all_windows = desktop.windows(visible_only=True)
+        for window in all_windows:
+            try:
+                window_text = window.window_text().lower()
+                # Exclude test/viewer windows and RVU Counter
+                if ("rvu counter" in window_text or 
+                    "test" in window_text or 
+                    "viewer" in window_text or 
+                    "ui elements" in window_text or
+                    "diagnostic" in window_text):
+                    continue
+                
+                # Look for Chrome window with "clario" and "worklist" in title
+                if "clario" in window_text and "worklist" in window_text:
+                    try:
+                        class_name = window.element_info.class_name.lower()
+                        if "chrome" in class_name:
+                            _clario_cache['chrome_window'] = window
+                            return window
+                    except:
+                        # If we can't check class name, still return it if title matches
+                        _clario_cache['chrome_window'] = window
+                        return window
+            except:
+                continue
+    except:
+        pass
+    
+    return None
+
+
+def find_clario_content_area(chrome_window, use_cache=True):
+    """Find the Chrome content area (where the web page is rendered)."""
+    global _clario_cache
+    
+    # Check cache first
+    if use_cache and _clario_cache['content_area']:
+        try:
+            _ = _clario_cache['content_area'].element_info.control_type
+            return _clario_cache['content_area']
+        except:
+            _clario_cache['content_area'] = None
+    
+    if not chrome_window:
+        return None
+    
+    try:
+        # Look for elements with control_type "Document" or "Pane"
+        for child in chrome_window.descendants():
+            try:
+                control_type = child.element_info.control_type
+                if control_type in ["Document", "Pane"]:
+                    try:
+                        name = child.element_info.name or ""
+                        if name and len(name) > 10:
+                            _clario_cache['content_area'] = child
+                            return child
+                    except:
+                        pass
+            except:
+                continue
+    except:
+        pass
+    
+    # Fallback: try to find by automation_id patterns
+    try:
+        for child in chrome_window.descendants():
+            try:
+                automation_id = child.element_info.automation_id or ""
+                if "content" in automation_id.lower() or "render" in automation_id.lower():
+                    _clario_cache['content_area'] = child
+                    return child
+            except:
+                continue
+    except:
+        pass
+    
+    # Last resort: return the window itself
+    _clario_cache['content_area'] = chrome_window
+    return chrome_window
+
+
+def _combine_priority_and_class_clario(data):
+    """Combine Priority and Class into a single patient_class string."""
+    priority_value = data.get('priority', '').strip()
+    class_value = data.get('class', '').strip()
+    
+    # Normalize: Replace ED/ER with "Emergency"
+    if priority_value:
+        priority_value = priority_value.replace('ED', 'Emergency').replace('ER', 'Emergency')
+    if class_value:
+        class_value = class_value.replace('ED', 'Emergency').replace('ER', 'Emergency')
+    
+    # Define urgency terms and location terms
+    urgency_terms = ['STAT', 'Stroke', 'Urgent', 'Routine', 'ASAP', 'CRITICAL', 'IMMEDIATE', 'Trauma']
+    location_terms = ['Emergency', 'Inpatient', 'Outpatient', 'Observation', 'Ambulatory']
+    
+    # Extract urgency from Priority
+    urgency_parts = []
+    location_from_priority = []
+    
+    if priority_value:
+        priority_parts = priority_value.strip().split()
+        for part in priority_parts:
+            part_upper = part.upper()
+            is_urgency = any(term.upper() in part_upper for term in urgency_terms)
+            is_location = any(term.lower() in part.lower() for term in location_terms)
+            
+            if is_urgency:
+                urgency_parts.append(part)
+            elif is_location:
+                location_from_priority.append(part)
+    
+    # Extract location from Class
+    location_from_class = ''
+    if class_value:
+        class_clean = class_value.strip()
+        for location_term in location_terms:
+            if location_term.lower() in class_clean.lower():
+                location_from_class = location_term
+                break
+        if not location_from_class:
+            location_from_class = class_clean
+    
+    # Determine final location (prefer Class over Priority)
+    final_location = location_from_class if location_from_class else ' '.join(location_from_priority) if location_from_priority else ''
+    
+    # Remove redundant location from urgency parts
+    if final_location:
+        final_location_lower = final_location.lower()
+        urgency_parts = [part for part in urgency_parts if part.lower() not in final_location_lower]
+    
+    # Combine: urgency + location
+    combined_parts = []
+    if urgency_parts:
+        combined_parts.extend(urgency_parts)
+    if final_location:
+        combined_parts.append(final_location)
+    
+    data['patient_class'] = ' '.join(combined_parts).strip()
+
+
+def extract_clario_patient_class(target_accession=None):
+    """Extract patient class from Clario - Worklist.
+    
+    Args:
+        target_accession: Optional accession to match. If provided, only returns data if accession matches.
+    
+    Returns:
+        dict with 'patient_class' and 'accession', or None if not found/doesn't match
+    """
+    try:
+        # Find Chrome window
+        chrome_window = find_clario_chrome_window(use_cache=True)
+        if not chrome_window:
+            logger.info("Clario: Chrome window not found")
+            return None
+        
+        # Find content area
+        content_area = find_clario_content_area(chrome_window, use_cache=True)
+        if not content_area:
+            logger.info("Clario: Content area not found")
+            return None
+        
+        # Shallow scan (depth 15) for label-based search
+        # Use a helper function to get elements (similar to get_mosaic_elements)
+        def get_all_elements_clario(element, depth=0, max_depth=15):
+            """Recursively get all UI elements from a window."""
+            elements = []
+            if depth > max_depth:
+                return elements
+            try:
+                try:
+                    automation_id = element.element_info.automation_id or ""
+                except:
+                    automation_id = ""
+                try:
+                    name = element.element_info.name or ""
+                except:
+                    name = ""
+                try:
+                    text = element.window_text() or ""
+                except:
+                    text = ""
+                if automation_id or name or text:
+                    elements.append({
+                        'depth': depth,
+                        'automation_id': automation_id,
+                        'name': name,
+                        'text': text
+                    })
+                try:
+                    children = element.children()
+                    for child in children:
+                        elements.extend(get_all_elements_clario(child, depth + 1, max_depth))
                 except:
                     pass
             except:
                 pass
-    
-    return elements
+            return elements
+        
+        shallow_elements = get_all_elements_clario(content_area, max_depth=15)
+        
+        # Convert to list
+        element_data = []
+        for elem in shallow_elements:
+            name = elem.get('name', '').strip()
+            text = elem.get('text', '').strip()
+            automation_id = elem.get('automation_id', '').strip()
+            if name or text or automation_id:
+                element_data.append({
+                    'name': name,
+                    'text': text,
+                    'automation_id': automation_id
+                })
+        
+        # Label-based search
+        data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
+        
+        for i, elem in enumerate(element_data):
+            if data['priority'] and data['class'] and data['accession']:
+                break
+                
+            name = elem['name']
+            text = elem['text']
+            automation_id = elem['automation_id']
+            
+            # PRIORITY
+            if not data['priority']:
+                if automation_id and 'priority' in automation_id.lower():
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        next_text = next_elem['text']
+                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                            data['priority'] = next_name
+                            break
+                        elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
+                            data['priority'] = next_text
+                            break
+                elif name and 'priority' in name.lower() and ':' in name:
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                            data['priority'] = next_name
+                            break
+            
+            # CLASS
+            if not data['class']:
+                if automation_id and 'class' in automation_id.lower() and 'priority' not in automation_id.lower():
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        next_text = next_elem['text']
+                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                            data['class'] = next_name
+                            break
+                        elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
+                            data['class'] = next_text
+                            break
+                elif name and 'class' in name.lower() and ':' in name and 'priority' not in name.lower():
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                            data['class'] = next_name
+                            break
+            
+            # ACCESSION
+            if not data['accession']:
+                if automation_id and 'accession' in automation_id.lower():
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        next_text = next_elem['text']
+                        if next_name and ':' not in next_name and len(next_name) > 5 and ' ' not in next_name:
+                            data['accession'] = next_name
+                            break
+                        elif next_text and ':' not in next_text and len(next_text) > 5 and ' ' not in next_text:
+                            data['accession'] = next_text
+                            break
+                elif name and 'accession' in name.lower() and ':' in name:
+                    for j in range(i+1, min(i+10, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name']
+                        if next_name and ':' not in next_name and len(next_name) > 5:
+                            data['accession'] = next_name
+                            break
+        
+        # Check if we found all required data
+        if not (data['priority'] or data['class']):
+            logger.debug(f"Clario: No priority or class found. Priority='{data['priority']}', Class='{data['class']}'")
+            return None
+        
+        # Combine priority and class
+        _combine_priority_and_class_clario(data)
+        
+        logger.debug(f"Clario: Extracted - Priority='{data['priority']}', Class='{data['class']}', Combined='{data['patient_class']}', Accession='{data['accession']}'")
+        
+        # If target_accession provided, verify it matches
+        # If target_accession is None, we'll accept any accession (for multi-accession matching)
+        if target_accession is not None:
+            if data['accession'] and data['accession'].strip() != target_accession.strip():
+                # Accession doesn't match - return None
+                logger.debug(f"Clario: Accession mismatch - expected '{target_accession}', got '{data['accession']}'")
+                return None
+        
+        # Return patient class and accession
+        if data['patient_class']:
+            logger.debug(f"Clario: Returning patient_class='{data['patient_class']}', accession='{data['accession']}'")
+            return {
+                'patient_class': data['patient_class'],
+                'accession': data['accession']
+            }
+        
+        logger.info(f"Clario: No patient_class found. Priority='{data.get('priority', '')}', Class='{data.get('class', '')}', Accession='{data.get('accession', '')}'")
+        return None
+    except Exception as e:
+        logger.info(f"Clario extraction error: {e}", exc_info=True)
+        return None
 
 
 def extract_mosaic_data(webview_element):
@@ -660,6 +1009,7 @@ class RVUData:
                 "ignore_duplicate_accessions": True,
                 "data_source": "PowerScribe",  # "PowerScribe" or "Mosaic"
                 "show_time": False,  # Show time information in recent studies
+                "stay_on_top": True,  # Keep window on top of other windows
             },
             "direct_lookups": {},
             "rvu_table": RVU_TABLE.copy(),
@@ -998,9 +1348,12 @@ class StudyTracker:
         completed = []
         to_remove = []
         
+        logger.debug(f"check_completed: current_accession='{current_accession}', active_studies={list(self.active_studies.keys())}")
+        
         for accession, study in list(self.active_studies.items()):
             # If this accession is currently visible, it's not completed
             if accession == current_accession:
+                logger.debug(f"check_completed: {accession} is currently visible, skipping")
                 continue
             
             # If current_accession is empty or different, this study has disappeared
@@ -1012,6 +1365,7 @@ class StudyTracker:
             # 2. No study is visible (current_accession is empty) and it hasn't been seen for > 1 second
             if current_accession or time_since_last_seen > 1.0:
                 duration = (study["last_seen"] - study["start_time"]).total_seconds()
+                logger.debug(f"check_completed: {accession} disappeared, time_since_last_seen={time_since_last_seen:.1f}s, duration={duration:.1f}s")
                 
                 # Only count if duration >= min_seconds
                 if duration >= self.min_seconds:
@@ -1054,12 +1408,11 @@ class RVUCounterApp:
     """Main application class."""
     
     def __init__(self, root):
-            self.root = root
-            self.root.title("RVU Counter")
+        self.root = root
+        self.root.title("RVU Counter")
         self.root.geometry("240x500")  # Default size
         self.root.minsize(200, 350)  # Minimum size
         self.root.resizable(True, True)
-        self.root.attributes("-topmost", True)  # Keep window on top
         
         # Window dragging state
         self.drag_start_x = 0
@@ -1067,6 +1420,10 @@ class RVUCounterApp:
         
         # Data management
         self.data_manager = RVUData()
+        
+        # Set stay on top based on settings (default True if not set)
+        stay_on_top = self.data_manager.data["settings"].get("stay_on_top", True)
+        self.root.attributes("-topmost", stay_on_top)
         
         # Load saved window position and size or use default (after data_manager is initialized)
         window_pos = self.data_manager.data.get("window_positions", {}).get("main", None)
@@ -1087,8 +1444,8 @@ class RVUCounterApp:
         self.projected_shift_end: Optional[datetime] = None
         self.is_running = False
         self.current_window = None
-            self.refresh_interval = 1000  # 1 second
-            
+        self.refresh_interval = 1000  # 1 second
+        
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
         self.current_procedure = ""
@@ -1112,13 +1469,15 @@ class RVUCounterApp:
         # Background thread for PowerScribe operations
         self._ps_lock = threading.Lock()
         self._ps_data = {}  # Data from PowerScribe (updated by background thread)
+        self._last_clario_accession = ""  # Track last accession we queried Clario for
+        self._clario_patient_class_cache = {}  # Cache Clario patient class by accession
         self._ps_thread_running = True
         self._ps_thread = threading.Thread(target=self._powerscribe_worker, daemon=True)
         self._ps_thread.start()
         
-            # Create UI
-            self.create_ui()
-            
+        # Create UI
+        self.create_ui()
+        
         # Initialize time labels list for time display updates
         self.time_labels = []
         
@@ -1140,7 +1499,7 @@ class RVUCounterApp:
                     projected_end = current_shift.get("projected_shift_end")
                     if effective_start:
                         self.effective_shift_start = datetime.fromisoformat(effective_start)
-        else:
+                    else:
                         # Fall back to calculating it
                         minutes_into_hour = self.shift_start.minute
                         if minutes_into_hour <= 15:
@@ -1399,6 +1758,13 @@ class RVUCounterApp:
         if not self.multi_accession_data:
             return
         
+        # Check if all accessions are already seen (duplicate detection)
+        all_accessions = list(self.multi_accession_data.keys())
+        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+        if ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in all_accessions):
+            logger.info(f"Skipping recording of duplicate multi-accession study: all {len(all_accessions)} accessions already seen: {all_accessions}")
+            return
+        
         total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
         
         # Get modality from collected studies
@@ -1552,7 +1918,7 @@ class RVUCounterApp:
                                         proc = acc_data.get('procedure', '')
                                         if proc:
                                             data['multiple_accessions'].append(f"{acc} ({proc})")
-                    else:
+                                        else:
                                             data['multiple_accessions'].append(acc)
                                     
                                     # Set first as primary
@@ -1568,6 +1934,108 @@ class RVUCounterApp:
                         except Exception as e:
                             logger.debug(f"Mosaic extraction error: {e}")
                             data['found'] = False
+                
+                # Query Clario for patient class only when a new study is detected (accession changed)
+                # Assume Clario shows the active study and verify accession matches
+                current_accession = data.get('accession', '').strip()
+                multiple_accessions_list = data.get('multiple_accessions', [])
+                
+                # For multi-accession studies, extract all accession numbers
+                all_accessions = set()
+                if current_accession:
+                    all_accessions.add(current_accession)
+                if multiple_accessions_list:
+                    for acc_entry in multiple_accessions_list:
+                        # Format: "ACC (PROC)" or just "ACC"
+                        if '(' in acc_entry and ')' in acc_entry:
+                            acc_match = re.match(r'^([^(]+)', acc_entry)
+                            if acc_match:
+                                all_accessions.add(acc_match.group(1).strip())
+                        else:
+                            all_accessions.add(acc_entry.strip())
+                
+                if data.get('found') and all_accessions:
+                    # Check if this is a new study (accession changed)
+                    # For multi-accession, check if any accession is new
+                    with self._ps_lock:
+                        is_new_study = not any(acc == self._last_clario_accession for acc in all_accessions)
+                        last_accession = self._last_clario_accession
+                    
+                    logger.info(f"Checking Clario: current_accession='{current_accession}', all_accessions={list(all_accessions)}, last_clario_accession='{last_accession}', is_new_study={is_new_study}")
+                    
+                    if is_new_study:
+                        # New study detected - query Clario (don't pass target_accession for multi-accession, let it match any)
+                        logger.info(f"New study detected, querying Clario. Multi-accession: {len(all_accessions) > 1}, accessions: {list(all_accessions)}")
+                        try:
+                            # Query Clario without target_accession for multi-accession studies
+                            # This allows Clario to match any of the accessions
+                            if len(all_accessions) > 1:
+                                # Multi-accession: query without target, then check if result matches any
+                                clario_data = extract_clario_patient_class(target_accession=None)
+                            else:
+                                # Single accession: query with target
+                                clario_data = extract_clario_patient_class(target_accession=current_accession)
+                            
+                            if clario_data and clario_data.get('patient_class'):
+                                # Verify accession matches (for multi-accession, match any accession)
+                                clario_accession = clario_data.get('accession', '').strip()
+                                logger.info(f"Clario returned: patient_class='{clario_data.get('patient_class')}', accession='{clario_accession}'")
+                                
+                                # Check if Clario accession matches any of our accessions
+                                accession_matches = clario_accession in all_accessions if clario_accession else False
+                                
+                                if accession_matches:
+                                    # Accession matches one of the multi-accession accessions - use Clario's patient class
+                                    data['patient_class'] = clario_data['patient_class']
+                                    logger.info(f"Clario patient class OVERRIDES: {clario_data['patient_class']} for multi-accession study (matched accession: {clario_accession}, was: {data.get('patient_class', 'N/A')})")
+                                    # Update last queried accession and cache the patient class for all accessions
+                                    with self._ps_lock:
+                                        self._last_clario_accession = clario_accession
+                                        # Cache patient class for all accessions in this multi-accession study
+                                        for acc in all_accessions:
+                                            self._clario_patient_class_cache[acc] = clario_data['patient_class']
+                                else:
+                                    # Accession doesn't match any - fallback to PowerScribe/Mosaic
+                                    logger.info(f"Clario accession mismatch: got '{clario_accession}', expected one of {list(all_accessions)}, using fallback")
+                                    if data_source == "Mosaic":
+                                        data['patient_class'] = 'Unknown'
+                                    # For PowerScribe, keep existing patient_class
+                            else:
+                                # Clario didn't return data - fallback
+                                if clario_data:
+                                    logger.info(f"Clario returned data but no patient_class. Accession='{clario_data.get('accession', '')}', using fallback")
+                                else:
+                                    logger.info(f"Clario did not return any data, using fallback")
+                                if data_source == "Mosaic":
+                                    data['patient_class'] = 'Unknown'
+                                # For PowerScribe, keep existing patient_class
+                        except Exception as e:
+                            logger.info(f"Clario query error: {e}", exc_info=True)
+                            # On error, keep existing patient_class (PowerScribe value or Unknown for Mosaic)
+                            if data_source == "Mosaic":
+                                data['patient_class'] = 'Unknown'
+                    else:
+                        # Same study - check if we have cached Clario patient class for any accession
+                        with self._ps_lock:
+                            cached_clario_class = None
+                            for acc in all_accessions:
+                                cached = self._clario_patient_class_cache.get(acc)
+                                if cached:
+                                    cached_clario_class = cached
+                                    break
+                        
+                        if cached_clario_class:
+                            # Use cached Clario patient class (preserve it, don't let PowerScribe overwrite)
+                            data['patient_class'] = cached_clario_class
+                            logger.debug(f"Same study (accessions={list(all_accessions)}), using cached Clario patient class: {cached_clario_class}")
+                        else:
+                            # No cached Clario class - keep existing patient_class (from PowerScribe/Mosaic)
+                            logger.debug(f"Same study (accessions={list(all_accessions)}), no cached Clario class, keeping existing: {data.get('patient_class', 'N/A')}")
+                elif data.get('found') and not all_accessions:
+                    # No accession - can't query Clario
+                    logger.debug(f"No accession found, cannot query Clario")
+                    if data_source == "Mosaic":
+                        data['patient_class'] = 'Unknown'
                 
                 # Update shared data (thread-safe)
                 with self._ps_lock:
@@ -1711,7 +2179,7 @@ class RVUCounterApp:
                     # For multiple accessions, show "Multiple studies" instead of first procedure
                     if len(mosaic_accession_procedures) > 1:
                         procedure = "Multiple studies"
-                            else:
+                    else:
                         # Single accession - get the procedure
                         first_procedure = None
                         for acc_data in mosaic_accession_procedures:
@@ -1779,46 +2247,51 @@ class RVUCounterApp:
                 # Check if we're transitioning from single to multi-accession
                 if not self.multi_accession_mode:
                     # Check if ALL accessions were already completed (to prevent duplicates)
+                    # Extract just accession numbers from multiple_accessions (format: "ACC (PROC)" or "ACC")
+                    accession_numbers = []
+                    for acc_entry in multiple_accessions:
+                        if '(' in acc_entry and ')' in acc_entry:
+                            # Format: "ACC (PROC)" - extract just the accession
+                            acc_match = re.match(r'^([^(]+)', acc_entry)
+                            if acc_match:
+                                accession_numbers.append(acc_match.group(1).strip())
+                        else:
+                            # Just accession number
+                            accession_numbers.append(acc_entry.strip())
+                    
                     ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                    all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in multiple_accessions)
+                    # Check if ALL accessions are already seen (order doesn't matter - using set membership)
+                    all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in accession_numbers)
                     
                     if all_seen:
-                        # All accessions already completed - don't track again, but still display properly
-                        logger.info(f"Ignoring duplicate multi-accession study: all {len(multiple_accessions)} accessions already seen")
-                        
-                        # Set display to show this is a completed multi-accession
-                        # Get modality from current procedure for display
-                        if procedure and procedure.strip().lower() not in ["n/a", "na", "none", ""]:
-                            classification_rules = self.data_manager.data.get("classification_rules", {})
-                            direct_lookups = self.data_manager.data.get("direct_lookups", {})
-                            study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
-                            parts = study_type.split() if study_type else []
-                            modality = parts[0] if parts else "Studies"
-                            self.current_study_type = f"Multiple {modality} (done)"
-                            self.current_study_rvu = 0.0  # Already counted
-                    else:
-                        # Starting multi-accession mode
-                        self.multi_accession_mode = True
-                        self.multi_accession_start_time = datetime.now()
-                        self.multi_accession_data = {}
-                        self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
-                        
-                        # Check if any of the new accessions were being tracked as single
-                        # If so, migrate their data to multi-accession tracking
-                        for acc in multiple_accessions:
-                            if acc in self.tracker.active_studies:
-                                study = self.tracker.active_studies[acc]
-                                self.multi_accession_data[acc] = {
-                                    "procedure": study["procedure"],
-                                    "study_type": study["study_type"],
-                                    "rvu": study["rvu"],
-                                    "patient_class": study.get("patient_class", ""),
-                                }
-                                # Remove from active_studies to prevent completion
-                                del self.tracker.active_studies[acc]
-                                logger.info(f"Migrated {acc} from single to multi-accession tracking")
-                        
-                        logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
+                        # All accessions already completed - don't track again, but still display normally
+                        # Don't show "(done)" - just display it as a normal multi-accession study
+                        logger.info(f"Duplicate multi-accession study detected (all {len(accession_numbers)} accessions already seen): {accession_numbers}")
+                        # Continue to enter multi-accession mode for display, but duplicate detection will prevent re-recording
+                        # Fall through to start multi-accession mode below
+                    
+                    # Starting multi-accession mode (whether duplicate or not - display it normally)
+                    self.multi_accession_mode = True
+                    self.multi_accession_start_time = datetime.now()
+                    self.multi_accession_data = {}
+                    self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
+                    
+                    # Check if any of the new accessions were being tracked as single
+                    # If so, migrate their data to multi-accession tracking
+                    for acc in multiple_accessions:
+                        if acc in self.tracker.active_studies:
+                            study = self.tracker.active_studies[acc]
+                            self.multi_accession_data[acc] = {
+                                "procedure": study["procedure"],
+                                "study_type": study["study_type"],
+                                "rvu": study["rvu"],
+                                "patient_class": study.get("patient_class", ""),
+                            }
+                            # Remove from active_studies to prevent completion
+                            del self.tracker.active_studies[acc]
+                            logger.info(f"Migrated {acc} from single to multi-accession tracking")
+                    
+                    logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
                 
                 # Collect procedure for current view - ONLY when procedure changes
                 # This ensures we only collect when user clicks a different accession
@@ -1941,44 +2414,43 @@ class RVUCounterApp:
                     self.multi_accession_data = {}
                     self.multi_accession_start_time = None
                     self.multi_accession_last_procedure = ""
-            return
-        
-            # Handle regular single-accession studies
-            if is_na and self.tracker.active_studies:
-                logger.info("Procedure changed to N/A - completing all active studies")
-                # Mark all active studies as completed immediately
-                for acc, study in list(self.tracker.active_studies.items()):
-                    duration = (current_time - study["start_time"]).total_seconds()
-                    if duration >= self.tracker.min_seconds:
-                        completed_study = study.copy()
-                        completed_study["end_time"] = current_time
-                        completed_study["duration"] = duration
-                        study_record = {
-                            "accession": completed_study["accession"],
-                            "procedure": completed_study["procedure"],
-                            "patient_class": completed_study.get("patient_class", ""),
-                            "study_type": completed_study["study_type"],
-                            "rvu": completed_study["rvu"],
-                            "time_performed": completed_study["start_time"].isoformat(),
-                            "time_finished": completed_study["end_time"].isoformat(),
-                            "duration_seconds": completed_study["duration"],
-                        }
-                        self.data_manager.data["current_shift"]["records"].append(study_record)
-                        self.data_manager.save()
-                        self.undo_used = False
-                        self.undo_btn.config(state=tk.NORMAL)
-                        logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
-                # Clear all active studies
-                self.tracker.active_studies.clear()
-                self.update_display()
-                return  # Return after handling N/A case
+                
+                # Handle regular single-accession studies when N/A
+                if self.tracker.active_studies:
+                    logger.info("Procedure changed to N/A - completing all active studies")
+                    # Mark all active studies as completed immediately
+                    for acc, study in list(self.tracker.active_studies.items()):
+                        duration = (current_time - study["start_time"]).total_seconds()
+                        if duration >= self.tracker.min_seconds:
+                            completed_study = study.copy()
+                            completed_study["end_time"] = current_time
+                            completed_study["duration"] = duration
+                            study_record = {
+                                "accession": completed_study["accession"],
+                                "procedure": completed_study["procedure"],
+                                "patient_class": completed_study.get("patient_class", ""),
+                                "study_type": completed_study["study_type"],
+                                "rvu": completed_study["rvu"],
+                                "time_performed": completed_study["start_time"].isoformat(),
+                                "time_finished": completed_study["end_time"].isoformat(),
+                                "duration_seconds": completed_study["duration"],
+                            }
+                            self.data_manager.data["current_shift"]["records"].append(study_record)
+                            self.data_manager.save()
+                            self.undo_used = False
+                            self.undo_btn.config(state=tk.NORMAL)
+                            logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
+                    # Clear all active studies
+                    self.tracker.active_studies.clear()
+                    self.update_display()
+                return  # Return after handling N/A case - don't process normal study tracking
         
             # Skip normal study tracking when viewing a multi-accession study (PowerScribe only)
             # For Mosaic, we track each accession separately, so we need to check completion
             # Also skip if we're viewing a multi-accession that we're ignoring as duplicate (PowerScribe only)
             if (self.multi_accession_mode or is_multi_accession_view) and data_source != "Mosaic":
                 return
-            
+        
             # Check for completed studies FIRST (before checking if we should ignore)
             # This handles studies that have disappeared
             # For Mosaic multi-accession, we need to check all accessions, not just the current one
@@ -2112,8 +2584,12 @@ class RVUCounterApp:
             if accession in self.tracker.active_studies:
                 if data_source != "Mosaic" or not multiple_accessions:
                     # Normal update for PowerScribe or single Mosaic accession
+                    # Update with current patient class (may be from Clario cache)
                     self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
+                    logger.debug(f"Updated existing study: {accession} with patient_class: {self.current_patient_class}")
                 # For Mosaic multi-accession, last_seen is updated above, so just return
+                # BUT: Don't return here - we still need to check for completion of OTHER studies
+                # The completion check happens above, so we can return now
                 return
             
             # If study was already completed in this shift, ignore it
@@ -2223,7 +2699,7 @@ class RVUCounterApp:
             removed = records.pop()
             self.data_manager.save()
             self.undo_used = True
-                self.undo_btn.config(state=tk.DISABLED)
+            self.undo_btn.config(state=tk.DISABLED)
             logger.info(f"Undid study: {removed['accession']}")
             self.update_display()
     
@@ -2529,7 +3005,7 @@ class RVUCounterApp:
             if range_text:
                 self.last_full_hour_range_label.config(text=range_text)
                 self.last_full_hour_label_text.config(text="hour:")
-                    else:
+            else:
                 self.last_full_hour_range_label.config(text="")
                 self.last_full_hour_label_text.config(text="hour:")
             if settings.get("show_comp_last_full_hour", False):
@@ -2796,7 +3272,7 @@ class RVUCounterApp:
                         study_type, _ = match_study_type(self.current_procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
                         parts = study_type.split() if study_type else []
                         modality = parts[0] if parts else "Studies"
-                        self.debug_procedure_label.config(text=f"Procedure: Multiple {modality} (done)", foreground="gray")
+                        self.debug_procedure_label.config(text=f"Procedure: Multiple {modality}", foreground="gray")
             else:
                 self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
                 # No truncation for procedure - show full name
@@ -3146,9 +3622,9 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"450x620+{window_pos['x']}+{window_pos['y']}")
+            self.window.geometry(f"450x590+{window_pos['x']}+{window_pos['y']}")
         else:
-            self.window.geometry("450x620")
+            self.window.geometry("450x590")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -3196,6 +3672,10 @@ class SettingsWindow:
         # Show time checkbox
         self.show_time_var = tk.BooleanVar(value=settings.get("show_time", False))
         ttk.Checkbutton(main_frame, text="Show time", variable=self.show_time_var).pack(anchor=tk.W, pady=2)
+        
+        # Stay on top option
+        self.stay_on_top_var = tk.BooleanVar(value=settings.get("stay_on_top", True))
+        ttk.Checkbutton(main_frame, text="Stay on top", variable=self.stay_on_top_var).pack(anchor=tk.W, pady=2)
         
         # Data source radio buttons (PowerScribe or Mosaic)
         data_source_frame = ttk.Frame(main_frame)
@@ -3364,9 +3844,13 @@ class SettingsWindow:
             self.data_manager.data["settings"]["min_study_seconds"] = int(self.min_seconds_var.get())
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
             self.data_manager.data["settings"]["show_time"] = self.show_time_var.get()
+            self.data_manager.data["settings"]["stay_on_top"] = self.stay_on_top_var.get()
             
             # Update tracker min_seconds
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
+            
+            # Update stay on top setting
+            self.app.root.attributes("-topmost", self.data_manager.data["settings"]["stay_on_top"])
             
             self.data_manager.save()
             self.app.apply_theme()
@@ -4432,7 +4916,7 @@ class StatisticsWindow:
             self.last_saved_x = x
             self.last_saved_y = y
             self.data_manager.save()
-    except Exception as e:
+        except Exception as e:
             logger.error(f"Error saving statistics window position: {e}")
     
     def apply_theme(self):
