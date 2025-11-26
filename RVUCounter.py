@@ -591,6 +591,8 @@ class RVUData:
         
         # Load data from files
         self.settings_data = self.load_settings()
+        # Validate and fix window positions after loading
+        self.settings_data = self._validate_window_positions(self.settings_data)
         self.records_data = self.load_records()
         
         # Migrate old file if it exists
@@ -663,10 +665,135 @@ class RVUData:
             "rvu_table": RVU_TABLE.copy(),
             "classification_rules": {},
             "window_positions": {
-                "main": {"x": 100, "y": 100},
-                "settings": {"x": 200, "y": 200}
+                "main": {"x": 50, "y": 50},
+                "settings": {"x": 100, "y": 100},
+                "statistics": {"x": 150, "y": 150}
             }
         }
+    
+    def _validate_window_positions(self, data: dict) -> dict:
+        """Validate window positions and reset invalid ones to safe defaults.
+        
+        Returns data dict with validated/reset window positions.
+        Handles multi-monitor setups by using virtual screen dimensions.
+        """
+        try:
+            # Try to get virtual screen dimensions (includes all monitors)
+            temp_root = None
+            try:
+                temp_root = tk.Tk()
+                temp_root.withdraw()  # Hide the window
+                # Use virtual screen dimensions for multi-monitor support
+                # Virtual screen includes all monitors, so coordinates can be negative or beyond primary monitor
+                virtual_width = temp_root.winfo_vrootwidth()
+                virtual_height = temp_root.winfo_vrootheight()
+                # Get virtual screen origin (usually negative if monitors extend left/up)
+                virtual_x = temp_root.winfo_vrootx()
+                virtual_y = temp_root.winfo_vrooty()
+            except:
+                # Fallback: use reasonable defaults if tkinter not available yet
+                virtual_width = 3840  # Assume dual 1920x1080 monitors
+                virtual_height = 1080
+                virtual_x = 0
+                virtual_y = 0
+            finally:
+                if temp_root:
+                    temp_root.destroy()
+            
+            # Default safe positions (low x, y with small offsets) - on primary monitor
+            default_positions = {
+                "main": {"x": 50, "y": 50, "width": 240, "height": 500},
+                "settings": {"x": 100, "y": 100},
+                "statistics": {"x": 150, "y": 150}
+            }
+            
+            # Window size constraints (minimum visible area)
+            window_sizes = {
+                "main": {"width": 240, "height": 500},
+                "settings": {"width": 450, "height": 580},
+                "statistics": {"width": 1200, "height": 700}
+            }
+            
+            if "window_positions" not in data:
+                data["window_positions"] = default_positions.copy()
+                return data
+            
+            positions = data["window_positions"]
+            positions_updated = False
+            
+            # Calculate virtual screen bounds
+            virtual_left = virtual_x
+            virtual_right = virtual_x + virtual_width
+            virtual_top = virtual_y
+            virtual_bottom = virtual_y + virtual_height
+            
+            for window_type in ["main", "settings", "statistics"]:
+                if window_type not in positions:
+                    positions[window_type] = default_positions[window_type].copy()
+                    positions_updated = True
+                    continue
+                
+                pos = positions[window_type]
+                x = pos.get("x", 0)
+                y = pos.get("y", 0)
+                
+                # Get window dimensions
+                window_size = window_sizes.get(window_type, {"width": 400, "height": 400})
+                min_width = window_size["width"]
+                min_height = window_size["height"]
+                
+                # Validate position against virtual screen (all monitors)
+                # Window must be at least partially within the virtual screen bounds
+                # Allow windows that extend slightly beyond (up to 50% can be off-screen)
+                window_right = x + min_width
+                window_bottom = y + min_height
+                
+                # Check if window is completely off-screen
+                if window_right < virtual_left or x > virtual_right or window_bottom < virtual_top or y > virtual_bottom:
+                    logger.warning(f"{window_type} window completely off virtual screen (x={x}, y={y}), resetting to default")
+                    positions[window_type] = default_positions[window_type].copy()
+                    positions_updated = True
+                    continue
+                
+                # Check if window is mostly off-screen (less than 50% visible)
+                # Calculate visible portion
+                visible_left = max(x, virtual_left)
+                visible_right = min(window_right, virtual_right)
+                visible_top = max(y, virtual_top)
+                visible_bottom = min(window_bottom, virtual_bottom)
+                
+                visible_width = max(0, visible_right - visible_left)
+                visible_height = max(0, visible_bottom - visible_top)
+                
+                if visible_width < min_width * 0.5 or visible_height < min_height * 0.5:
+                    logger.warning(f"{window_type} window mostly off-screen (only {visible_width}x{visible_height} visible), resetting to default")
+                    positions[window_type] = default_positions[window_type].copy()
+                    positions_updated = True
+                    continue
+            
+            # If positions were updated, save the corrected data
+            if positions_updated:
+                data["window_positions"] = positions
+                try:
+                    # Save corrected positions back to file
+                    with open(self.settings_file, 'w') as f:
+                        json.dump(data, f, indent=2, default=str)
+                    logger.info("Window positions validated and corrected")
+                except Exception as e:
+                    logger.error(f"Error saving corrected window positions: {e}")
+            
+            return data
+            
+        except Exception as e:
+            logger.error(f"Error validating window positions: {e}")
+            # Return data with safe defaults if validation fails
+            if "window_positions" not in data:
+                data["window_positions"] = {
+                    "main": {"x": 50, "y": 50, "width": 240, "height": 500},
+                    "settings": {"x": 100, "y": 100},
+                    "statistics": {"x": 150, "y": 150}
+                }
+            return data
     
     
     def load_records(self) -> dict:
@@ -947,6 +1074,9 @@ class RVUCounterApp:
             width = window_pos.get('width', 240)
             height = window_pos.get('height', 500)
             self.root.geometry(f"{width}x{height}+{window_pos['x']}+{window_pos['y']}")
+        # Initialize last saved position tracking
+        self._last_saved_main_x = self.root.winfo_x()
+        self._last_saved_main_y = self.root.winfo_y()
         self.tracker = StudyTracker(
             min_seconds=self.data_manager.data["settings"]["min_study_seconds"]
         )
@@ -1053,6 +1183,7 @@ class RVUCounterApp:
         # Title bar is draggable (bind to main frame)
         main_frame.bind("<Button-1>", self.start_drag)
         main_frame.bind("<B1-Motion>", self.on_drag)
+        main_frame.bind("<ButtonRelease-1>", self.on_drag_end)
         
         # Top bar with Start/Stop Shift button and shift start time
         top_bar_frame = ttk.Frame(main_frame)
@@ -2804,28 +2935,54 @@ class RVUCounterApp:
         """Start dragging window."""
         self.drag_start_x = event.x
         self.drag_start_y = event.y
+        # Initialize last saved position if not set
+        if not hasattr(self, '_last_saved_main_x'):
+            self._last_saved_main_x = self.root.winfo_x()
+            self._last_saved_main_y = self.root.winfo_y()
     
     def on_drag(self, event):
         """Handle window dragging."""
         x = self.root.winfo_x() + event.x - self.drag_start_x
         y = self.root.winfo_y() + event.y - self.drag_start_y
         self.root.geometry(f"+{x}+{y}")
-        # Debounce position saving during drag
+        # Debounce position saving during drag (only if position changed)
+        current_x = self.root.winfo_x()
+        current_y = self.root.winfo_y()
+        if current_x != self._last_saved_main_x or current_y != self._last_saved_main_y:
+            if hasattr(self, '_position_save_timer'):
+                self.root.after_cancel(self._position_save_timer)
+            # Use shorter debounce during drag (100ms) to be more responsive
+            self._position_save_timer = self.root.after(100, self.save_window_position)
+    
+    def on_drag_end(self, event):
+        """Handle end of window dragging - save position immediately."""
+        # Cancel any pending debounced save
         if hasattr(self, '_position_save_timer'):
             self.root.after_cancel(self._position_save_timer)
-        self._position_save_timer = self.root.after(500, self.save_window_position)
+        # Save immediately on mouse release
+        self.save_window_position()
     
     def save_window_position(self):
         """Save the main window position and size."""
         try:
+            current_x = self.root.winfo_x()
+            current_y = self.root.winfo_y()
+            
+            # Only save if position actually changed
+            if hasattr(self, '_last_saved_main_x') and hasattr(self, '_last_saved_main_y'):
+                if current_x == self._last_saved_main_x and current_y == self._last_saved_main_y:
+                    return  # Position hasn't changed, don't save
+            
             if "window_positions" not in self.data_manager.data:
                 self.data_manager.data["window_positions"] = {}
             self.data_manager.data["window_positions"]["main"] = {
-                "x": self.root.winfo_x(),
-                "y": self.root.winfo_y(),
+                "x": current_x,
+                "y": current_y,
                 "width": self.root.winfo_width(),
                 "height": self.root.winfo_height()
             }
+            self._last_saved_main_x = current_x
+            self._last_saved_main_y = current_y
             self.data_manager.save()
         except Exception as e:
             logger.error(f"Error saving window position: {e}")
@@ -2864,6 +3021,7 @@ class SettingsWindow:
         
         # Bind to window movement to save position (debounced)
         self.window.bind("<Configure>", self.on_settings_window_move)
+        self.window.bind("<ButtonRelease-1>", self.on_settings_drag_end)
         self.window.protocol("WM_DELETE_WINDOW", self.on_settings_closing)
         
         # Apply theme
@@ -3108,12 +3266,23 @@ class SettingsWindow:
                 y = self.window.winfo_y()
                 # Only save if position actually changed
                 if self.last_saved_x != x or self.last_saved_y != y:
-                    # Debounce: save after 500ms of no movement
+                    # Debounce: save after 100ms of no movement (shorter for responsiveness)
                     if hasattr(self, '_save_timer'):
                         self.window.after_cancel(self._save_timer)
-                    self._save_timer = self.window.after(500, lambda: self.save_settings_position(x, y))
+                    self._save_timer = self.window.after(100, lambda: self.save_settings_position(x, y))
             except Exception as e:
                 logger.error(f"Error saving settings window position: {e}")
+    
+    def on_settings_drag_end(self, event):
+        """Handle end of settings window dragging - save position immediately."""
+        # Cancel any pending debounced save
+        if hasattr(self, '_save_timer'):
+            try:
+                self.window.after_cancel(self._save_timer)
+            except:
+                pass
+        # Save immediately on mouse release
+        self.save_settings_position()
     
     def save_settings_position(self, x=None, y=None):
         """Save settings window position."""
@@ -3186,6 +3355,7 @@ class StatisticsWindow:
         # Bind window events
         self.window.protocol("WM_DELETE_WINDOW", self.on_closing)
         self.window.bind("<Configure>", self.on_configure)
+        self.window.bind("<ButtonRelease-1>", self.on_statistics_drag_end)
         
         # Apply theme
         self.apply_theme()
@@ -4081,13 +4251,24 @@ class StatisticsWindow:
             
             # Only save if position actually changed
             if x != self.last_saved_x or y != self.last_saved_y:
-                # Debounce position saving
+                # Debounce position saving (shorter for responsiveness)
                 if hasattr(self, '_save_timer'):
                     try:
                         self.window.after_cancel(self._save_timer)
                     except:
                         pass
-                self._save_timer = self.window.after(500, lambda: self.save_position(x, y))
+                self._save_timer = self.window.after(100, lambda: self.save_position(x, y))
+    
+    def on_statistics_drag_end(self, event):
+        """Handle end of statistics window dragging - save position immediately."""
+        # Cancel any pending debounced save
+        if hasattr(self, '_save_timer'):
+            try:
+                self.window.after_cancel(self._save_timer)
+            except:
+                pass
+        # Save immediately on mouse release
+        self.save_position()
     
     def save_position(self, x=None, y=None):
         """Save statistics window position."""
