@@ -163,6 +163,7 @@ def find_mosaic_webview_element(main_window):
                 continue
     except:
         pass
+    
     return None
                 
 
@@ -1061,7 +1062,7 @@ class RVUData:
             window_sizes = {
                 "main": {"width": 240, "height": 500},
                 "settings": {"width": 450, "height": 580},
-                "statistics": {"width": 1200, "height": 700}
+                "statistics": {"width": 1350, "height": 700}
             }
             
             if "window_positions" not in data:
@@ -1951,8 +1952,8 @@ class RVUCounterApp:
                             acc_match = re.match(r'^([^(]+)', acc_entry)
                             if acc_match:
                                 all_accessions.add(acc_match.group(1).strip())
-                        else:
-                            all_accessions.add(acc_entry.strip())
+                            else:
+                                all_accessions.add(acc_entry.strip())
                 
                 if data.get('found') and all_accessions:
                     # Check if this is a new study (accession changed)
@@ -2040,7 +2041,7 @@ class RVUCounterApp:
                 # Update shared data (thread-safe)
                 with self._ps_lock:
                     self._ps_data = data
-                    
+                
             except Exception as e:
                 logger.debug(f"Worker error: {e}")
             
@@ -2062,8 +2063,8 @@ class RVUCounterApp:
                 self.current_procedure = ""
                 self.current_study_type = ""
                 self.update_debug_display()
-                return
-            
+            return
+        
             self.root.title("RVU Counter")
             
             # Extract data from background thread results
@@ -3960,22 +3961,22 @@ class StatisticsWindow:
         self.window.grab_set()
         
         # Make window larger for detailed stats
-        self.window.geometry("1200x700")
+        self.window.geometry("1350x700")
         self.window.minsize(800, 500)
         
         # Restore saved position or center on screen
         positions = self.data_manager.data.get("window_positions", {})
         if "statistics" in positions:
             pos = positions["statistics"]
-            self.window.geometry(f"1200x700+{pos['x']}+{pos['y']}")
+            self.window.geometry(f"1350x700+{pos['x']}+{pos['y']}")
         else:
             # Center on screen
             parent.update_idletasks()
             screen_width = parent.winfo_screenwidth()
             screen_height = parent.winfo_screenheight()
-            x = (screen_width - 1200) // 2
+            x = (screen_width - 1350) // 2
             y = (screen_height - 700) // 2
-            self.window.geometry(f"1200x700+{x}+{y}")
+            self.window.geometry(f"1350x700+{x}+{y}")
         
         # Track position for saving
         self.last_saved_x = self.window.winfo_x()
@@ -4068,7 +4069,7 @@ class StatisticsWindow:
         view_frame = ttk.Frame(right_panel)
         view_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(view_frame, text="View By:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(view_frame, text="View:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(view_frame, text="By Hour", variable=self.view_mode,
                        value="by_hour", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Modality", variable=self.view_mode,
@@ -4079,6 +4080,8 @@ class StatisticsWindow:
                        value="by_study_type", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="All Studies", variable=self.view_mode,
                        value="all_studies", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="Efficiency", variable=self.view_mode,
+                       value="efficiency", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
                        value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         
@@ -4087,18 +4090,23 @@ class StatisticsWindow:
         self.period_label.pack(anchor=tk.W, pady=(0, 10))
         
         # Data table frame
-        table_frame = ttk.Frame(right_panel)
-        table_frame.pack(fill=tk.BOTH, expand=True)
+        self.table_frame = ttk.Frame(right_panel)
+        self.table_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Create Treeview for data display
-        self.tree = ttk.Treeview(table_frame, show="headings")
-        tree_scrollbar_y = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
-        tree_scrollbar_x = ttk.Scrollbar(table_frame, orient="horizontal", command=self.tree.xview)
-        self.tree.configure(yscrollcommand=tree_scrollbar_y.set, xscrollcommand=tree_scrollbar_x.set)
+        # Create Treeview for data display (for all views except efficiency)
+        self.tree = ttk.Treeview(self.table_frame, show="headings")
+        self.tree_scrollbar_y = ttk.Scrollbar(self.table_frame, orient="vertical", command=self.tree.yview)
+        self.tree_scrollbar_x = ttk.Scrollbar(self.table_frame, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=self.tree_scrollbar_y.set, xscrollcommand=self.tree_scrollbar_x.set)
         
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
-        tree_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self.tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Efficiency trees will be created dynamically when needed
+        self.efficiency_night_tree = None
+        self.efficiency_day_tree = None
+        self.efficiency_frame = None
         
         # Summary frame at bottom
         summary_frame = ttk.LabelFrame(right_panel, text="Summary", padding="10")
@@ -4351,9 +4359,25 @@ class StatisticsWindow:
         
         view_mode = self.view_mode.get()
         
-        # Clear existing tree
-        for item in self.tree.get_children():
-            self.tree.delete(item)
+        # Show/hide trees based on view mode
+        if view_mode == "efficiency":
+            # Hide regular tree and its scrollbars, show efficiency trees
+            self.tree.pack_forget()
+            self.tree_scrollbar_y.pack_forget()
+            self.tree_scrollbar_x.pack_forget()
+            if self.efficiency_frame:
+                self.efficiency_frame.pack(fill=tk.BOTH, expand=True)
+        else:
+            # Hide efficiency trees, show regular tree and its scrollbars
+            if self.efficiency_frame:
+                self.efficiency_frame.pack_forget()
+            self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            self.tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+            self.tree_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+            
+            # Clear existing tree
+            for item in self.tree.get_children():
+                self.tree.delete(item)
         
         if view_mode == "by_hour":
             self._display_by_hour(records)
@@ -4365,7 +4389,9 @@ class StatisticsWindow:
             self._display_by_study_type(records)
         elif view_mode == "all_studies":
             self._display_all_studies(records)
-        else:  # summary
+        elif view_mode == "efficiency":
+            self._display_efficiency(records)
+        elif view_mode == "summary":
             self._display_summary(records)
         
         # Update summary
@@ -4656,28 +4682,53 @@ class StatisticsWindow:
                 "100%"
             ))
     
+    def _format_duration(self, seconds: float) -> str:
+        """Format duration in seconds to a human-readable string (e.g., '5m 30s', '1h 23m')."""
+        if seconds is None or seconds == 0:
+            return "N/A"
+        
+        total_seconds = int(seconds)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        secs = total_seconds % 60
+        
+        parts = []
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if minutes > 0:
+            parts.append(f"{minutes}m")
+        if secs > 0 and hours == 0:  # Only show seconds if less than an hour
+            parts.append(f"{secs}s")
+        
+        return " ".join(parts) if parts else "0s"
+    
     def _display_all_studies(self, records: List[dict]):
-        """Display all individual studies with Procedure, Study Type, RVU columns."""
+        """Display all individual studies with Procedure, Study Type, RVU, and Time to Read columns."""
         # Configure columns
-        self.tree["columns"] = ("procedure", "study_type", "rvu")
+        self.tree["columns"] = ("procedure", "study_type", "rvu", "time_to_read")
         self.tree.heading("procedure", text="Procedure", command=lambda: self._sort_column("procedure"))
         self.tree.heading("study_type", text="Study Type", command=lambda: self._sort_column("study_type"))
         self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
+        self.tree.heading("time_to_read", text="Time to Read", command=lambda: self._sort_column("time_to_read"))
         
-        self.tree.column("procedure", width=400, anchor=tk.W)
-        self.tree.column("study_type", width=200, anchor=tk.CENTER)
+        self.tree.column("procedure", width=350, anchor=tk.W)
+        self.tree.column("study_type", width=150, anchor=tk.CENTER)
         self.tree.column("rvu", width=100, anchor=tk.CENTER)
+        self.tree.column("time_to_read", width=120, anchor=tk.CENTER)
         
         # Display all studies
         for record in records:
             procedure = record.get("procedure", "Unknown")
             study_type = record.get("study_type", "Unknown")
             rvu = record.get("rvu", 0.0)
+            duration = record.get("duration_seconds", 0)
+            time_to_read = self._format_duration(duration)
             
             self.tree.insert("", tk.END, values=(
                 procedure,
                 study_type,
-                f"{rvu:.1f}"
+                f"{rvu:.1f}",
+                time_to_read
             ))
     
     def _sort_column(self, col: str, reverse: bool = None):
@@ -4730,6 +4781,25 @@ class StatisticsWindow:
                                        str(regular_items[0][0]).replace(".", "").replace("-", "").replace("%", "").strip().isdigit()):
                 # Numeric sort
                 regular_items.sort(key=lambda t: float(str(t[0]).replace("%", "").replace(",", "")) if t[0] and str(t[0]).replace(".", "").replace("-", "").replace("%", "").replace(",", "").strip().isdigit() else float('-inf'), reverse=reverse)
+            elif col == "time_to_read":
+                # Sort by duration - parse time format (e.g., "5m 30s" -> seconds for sorting)
+                def parse_duration(val):
+                    if not val or val == "N/A":
+                        return 0
+                    total_seconds = 0
+                    val_str = str(val).strip()
+                    # Parse format like "1h 23m", "5m 30s", "30s"
+                    hours = re.search(r'(\d+)h', val_str)
+                    minutes = re.search(r'(\d+)m', val_str)
+                    seconds = re.search(r'(\d+)s', val_str)
+                    if hours:
+                        total_seconds += int(hours.group(1)) * 3600
+                    if minutes:
+                        total_seconds += int(minutes.group(1)) * 60
+                    if seconds:
+                        total_seconds += int(seconds.group(1))
+                    return total_seconds
+                regular_items.sort(key=lambda t: parse_duration(t[0]), reverse=reverse)
             else:
                 # String sort
                 regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
@@ -4763,6 +4833,201 @@ class StatisticsWindow:
             else:
                 self.tree.heading(column, text=heading_text,
                                  command=lambda c=column: self._sort_column(c))
+    
+    def _display_efficiency(self, records: List[dict]):
+        """Display efficiency view showing average duration by modality and hour of day.
+        Two separate Treeviews stacked vertically: 11pm-10am (night) and 11am-10pm (day).
+        Each Treeview has its own column headers with hour labels.
+        """
+        # Create efficiency frame if it doesn't exist
+        if self.efficiency_frame is None:
+            self.efficiency_frame = ttk.Frame(self.table_frame)
+        
+        # Clear existing trees if they exist
+        for widget in self.efficiency_frame.winfo_children():
+            widget.destroy()
+        
+        # Define hour ranges: 11pm-10am (12 hours) and 11am-10pm (12 hours)
+        night_hours = list(range(23, 24)) + list(range(0, 11))  # 11pm-10am (12 hours)
+        day_hours = list(range(11, 23))  # 11am-10pm (12 hours)
+        
+        # Build hour columns - same column names for both trees
+        hour_columns = [f"h{i:02d}" for i in range(12)]  # 12 columns for hours
+        
+        # Build data structure: modality -> hour -> list of durations
+        efficiency_data = {}
+        
+        for record in records:
+            # Get modality
+            study_type = record.get("study_type", "Unknown")
+            modality = study_type.split()[0] if study_type else "Unknown"
+            
+            # Get hour from time_performed
+            try:
+                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                hour = rec_time.hour
+            except:
+                continue
+            
+            # Get duration
+            duration = record.get("duration_seconds", 0)
+            if duration and duration > 0:
+                if modality not in efficiency_data:
+                    efficiency_data[modality] = {}
+                if hour not in efficiency_data[modality]:
+                    efficiency_data[modality][hour] = []
+                efficiency_data[modality][hour].append(duration)
+        
+        # Get all modalities sorted
+        all_modalities = sorted(efficiency_data.keys())
+        
+        # Helper function to create a treeview with data
+        def create_treeview(parent_frame, hours_list, tree_name):
+            """Create a Treeview with columns for modality + hours."""
+            # Frame for this treeview with scrollbars
+            tree_frame = ttk.Frame(parent_frame)
+            tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+            
+            # Create Treeview (no horizontal scrolling needed)
+            tree = ttk.Treeview(tree_frame, show="headings")
+            tree_scrollbar_y = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
+            tree.configure(yscrollcommand=tree_scrollbar_y.set)
+            
+            # Sort function that works with this specific tree
+            def sort_tree_column(col):
+                """Sort this specific tree by column."""
+                # Track sort state for this tree
+                sort_key = f"{tree_name}_{col}"
+                if not hasattr(self, '_tree_sort_state'):
+                    self._tree_sort_state = {}
+                if sort_key not in self._tree_sort_state:
+                    self._tree_sort_state[sort_key] = False
+                
+                # Toggle sort direction
+                reverse = self._tree_sort_state[sort_key] = not self._tree_sort_state[sort_key]
+                
+                # Get all items
+                items = [(tree.set(item, col), tree.item(item)['values']) for item in tree.get_children()]
+                
+                # Separate totals
+                regular_items = []
+                totals = []
+                for sort_val, values in items:
+                    is_total = any(("─" in str(v) or str(v).strip() == "TOTAL") for v in values if v)
+                    if is_total:
+                        totals.append((sort_val, values))
+                    else:
+                        regular_items.append((sort_val, values))
+                
+                # Sort regular items
+                try:
+                    if col.startswith("h"):  # Hour columns - parse duration
+                        def parse_duration(val_str):
+                            if not val_str or val_str == "-" or "─" in val_str:
+                                return float('-inf')
+                            val_str = re.sub(r'\s*\(\d+\)$', '', str(val_str)).strip()
+                            total_seconds = 0
+                            hours = re.search(r'(\d+)h', val_str)
+                            minutes = re.search(r'(\d+)m', val_str)
+                            seconds = re.search(r'(\d+)s', val_str)
+                            if hours:
+                                total_seconds += int(hours.group(1)) * 3600
+                            if minutes:
+                                total_seconds += int(minutes.group(1)) * 60
+                            if seconds:
+                                total_seconds += int(seconds.group(1))
+                            return total_seconds
+                        regular_items.sort(key=lambda t: parse_duration(t[0]), reverse=reverse)
+                    else:
+                        regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
+                except:
+                    regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
+                
+                # Clear and repopulate
+                for item in tree.get_children():
+                    tree.delete(item)
+                for _, values in regular_items:
+                    tree.insert("", tk.END, values=values)
+                for _, values in totals:
+                    tree.insert("", tk.END, values=values)
+                
+                # Update headers
+                indicator = "▼ " if reverse else "▲ "
+                for column in tree["columns"]:
+                    heading_text = tree.heading(column)["text"].replace("▲ ", "").replace("▼ ", "").strip()
+                    if column == col:
+                        tree.heading(column, text=indicator + heading_text, command=lambda c=column: sort_tree_column(c))
+                    else:
+                        tree.heading(column, text=heading_text, command=lambda c=column: sort_tree_column(c))
+            
+            # Configure columns: Modality + 12 hour columns
+            tree["columns"] = ["modality"] + hour_columns
+            tree.heading("modality", text="Modality", command=lambda: sort_tree_column("modality"))
+            
+            # Set hour column headers with button-style headers
+            for idx, hour in enumerate(hours_list):
+                hour_12 = hour % 12 or 12
+                am_pm = "AM" if hour < 12 else "PM"
+                hour_label = f"{hour_12}{am_pm}"
+                col_name = hour_columns[idx]
+                tree.heading(col_name, text=hour_label, command=lambda c=col_name: sort_tree_column(c))
+            
+            # Set column widths (adjusted to fit without horizontal scrolling)
+            tree.column("modality", width=100, anchor=tk.CENTER, stretch=False)
+            for col in hour_columns:
+                tree.column(col, width=80, anchor=tk.CENTER, stretch=False)
+            
+            # Display modality rows
+            for modality in all_modalities:
+                row_values = [modality]
+                for hour in hours_list:
+                    if hour in efficiency_data[modality]:
+                        durations = efficiency_data[modality][hour]
+                        avg_duration = sum(durations) / len(durations)
+                        count = len(durations)
+                        duration_str = self._format_duration(avg_duration)
+                        cell_value = f"{duration_str} ({count})"
+                    else:
+                        cell_value = "-"
+                    row_values.append(cell_value)
+                tree.insert("", tk.END, values=row_values)
+            
+            # Totals row
+            if efficiency_data:
+                row_values = ["TOTAL"]
+                for hour in hours_list:
+                    hour_durations = []
+                    for modality in efficiency_data.keys():
+                        if hour in efficiency_data[modality]:
+                            hour_durations.extend(efficiency_data[modality][hour])
+                    
+                    if hour_durations:
+                        avg_duration = sum(hour_durations) / len(hour_durations)
+                        count = len(hour_durations)
+                        duration_str = self._format_duration(avg_duration)
+                        cell_value = f"{duration_str} ({count})"
+                    else:
+                        cell_value = "-"
+                    row_values.append(cell_value)
+                tree.insert("", tk.END, values=row_values, tags=('total',))
+            
+            # Configure tags
+            try:
+                tree.tag_configure('total', font=('Arial', 9, 'bold'), background='#f5f5f5')
+            except:
+                pass
+            
+            # Pack treeview and vertical scrollbar (only when needed)
+            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            return tree
+        
+        # === SECTION 1: NIGHT SHIFT (11pm-10am) ===
+        self.efficiency_night_tree = create_treeview(self.efficiency_frame, night_hours, "night")
+        
+        # === SECTION 2: DAY SHIFT (11am-10pm) ===
+        self.efficiency_day_tree = create_treeview(self.efficiency_frame, day_hours, "day")
     
     def _display_summary(self, records: List[dict]):
         """Display summary statistics."""
@@ -4851,12 +5116,20 @@ class StatisticsWindow:
             rvu_per_hour = 0
             studies_per_hour = 0
         
-        # Modality breakdown
+        # Modality breakdown with duration tracking
         modalities = {}
+        modality_durations = {}  # Track durations for each modality
         for r in records:
             st = r.get("study_type", "Unknown")
             mod = st.split()[0] if st else "Unknown"
             modalities[mod] = modalities.get(mod, 0) + 1
+            
+            # Track duration for average calculation
+            duration = r.get("duration_seconds", 0)
+            if duration and duration > 0:
+                if mod not in modality_durations:
+                    modality_durations[mod] = []
+                modality_durations[mod].append(duration)
         
         top_modality = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
         
@@ -4871,6 +5144,22 @@ class StatisticsWindow:
         self.tree.insert("", tk.END, values=("", ""))  # Spacer
         self.tree.insert("", tk.END, values=("Top Modality", f"{top_modality} ({modalities.get(top_modality, 0)} studies)"))
         self.tree.insert("", tk.END, values=("Unique Modalities", str(len(modalities))))
+        
+        # Add average time to read by modality
+        if modality_durations:
+            self.tree.insert("", tk.END, values=("", ""))  # Spacer
+            self.tree.insert("", tk.END, values=("Average Time to Read by Modality", ""))
+            # Sort modalities by average duration (highest first)
+            modality_avgs = []
+            for mod, durations in modality_durations.items():
+                if durations:
+                    avg_duration = sum(durations) / len(durations)
+                    modality_avgs.append((mod, avg_duration, len(durations)))
+            
+            modality_avgs.sort(key=lambda x: x[1], reverse=True)
+            for mod, avg_duration, count in modality_avgs:
+                avg_formatted = self._format_duration(avg_duration)
+                self.tree.insert("", tk.END, values=(f"  {mod}", f"{avg_formatted} ({count} studies)"))
     
     def on_configure(self, event):
         """Handle window configuration changes (move/resize)."""

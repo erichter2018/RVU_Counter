@@ -30,6 +30,16 @@
         "time_performed": "2025-11-26T15:45:57.972552",
         "time_finished": "2025-11-26T15:46:08.057058",
         "duration_seconds": 10.084506
+      },
+      {
+        "accession": "SAH2511260014867CST",
+        "procedure": "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST STROKE",
+        "patient_class": "Stroke Emergency",
+        "study_type": "CTA Brain and Neck",
+        "rvu": 3.5,
+        "time_performed": "2025-11-26T16:41:29.093435",
+        "time_finished": "2025-11-26T16:41:48.359591",
+        "duration_seconds": 19.266156
       }
     ],
     "effective_shift_start": "2025-11-25T22:00:00",
