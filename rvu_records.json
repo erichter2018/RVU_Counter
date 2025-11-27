@@ -5,41 +5,70 @@
     "shift_end": null,
     "records": [
       {
-        "accession": "LS-62279EV, LS-62278EV, LS-62277EV",
-        "procedure": "Multiple XR (3 studies)",
-        "patient_class": "Urgent Outpatient",
-        "study_type": "Multiple XR",
-        "rvu": 0.8999999999999999,
-        "time_performed": "2025-11-26T11:48:42.751774",
-        "time_finished": "2025-11-26T11:49:13.992213",
-        "duration_seconds": 31.240439,
-        "is_multi_accession": true,
-        "accession_count": 3,
-        "individual_procedures": [
-          "XR LUMBAR SPINE 2-3 VIEWS",
-          "XR CERVICAL SPINE 2-3 VIEWS",
-          "XR EXAM UNLISTED LEFT"
-        ]
-      },
-      {
-        "accession": "A01266701DU",
-        "procedure": "MR FOOT WITHOUT IV CONTRAST",
+        "accession": "AHS27235188LLHS",
+        "procedure": "XR CHEST 1 VIEW",
         "patient_class": "STAT Inpatient",
-        "study_type": "MRI Other",
-        "rvu": 1.75,
-        "time_performed": "2025-11-26T15:45:57.972552",
-        "time_finished": "2025-11-26T15:46:08.057058",
-        "duration_seconds": 10.084506
+        "study_type": "XR Chest",
+        "rvu": 0.3,
+        "time_performed": "2025-11-26T23:10:37.066982",
+        "time_finished": "2025-11-26T23:10:50.174568",
+        "duration_seconds": 13.107586
       },
       {
-        "accession": "SAH2511260014867CST",
-        "procedure": "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST STROKE",
-        "patient_class": "Stroke Emergency",
-        "study_type": "CTA Brain and Neck",
-        "rvu": 3.5,
-        "time_performed": "2025-11-26T16:41:29.093435",
-        "time_finished": "2025-11-26T16:41:48.359591",
-        "duration_seconds": 19.266156
+        "accession": "45634230000600CBMC",
+        "procedure": "US PREGNANCY LIMITED",
+        "patient_class": "STAT Outpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-26T23:10:56.292128",
+        "time_finished": "2025-11-26T23:11:10.401179",
+        "duration_seconds": 14.109051
+      },
+      {
+        "accession": "001924168MLC",
+        "procedure": "US PREGNANCY TRANSVAGINAL",
+        "patient_class": "STAT Outpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-26T23:11:30.686321",
+        "time_finished": "2025-11-26T23:11:45.857469",
+        "duration_seconds": 15.171148
+      },
+      {
+        "accession": "A01267254DU",
+        "procedure": "CT UPPER EXTREMITY WITHOUT IV CONTRAST",
+        "patient_class": "STAT Outpatient",
+        "study_type": "CT Other",
+        "rvu": 1.0,
+        "time_performed": "2025-11-26T23:19:33.412736",
+        "time_finished": "2025-11-26T23:19:59.618781",
+        "duration_seconds": 26.206045
+      },
+      {
+        "accession": "14830510002900PM",
+        "procedure": "US LOWER EXTREMITY VEINS BILATERAL",
+        "patient_class": "STAT Outpatient",
+        "study_type": "US Other",
+        "rvu": 0.68,
+        "time_performed": "2025-11-26T23:20:46.117265",
+        "time_finished": "2025-11-26T23:21:05.330059",
+        "duration_seconds": 19.212794
+      },
+      {
+        "accession": "14830510002900PM, 14830510002800PM",
+        "procedure": "Multiple CT (2 studies)",
+        "patient_class": "STAT Outpatient",
+        "study_type": "Multiple CT",
+        "rvu": 2.36,
+        "time_performed": "2025-11-26T23:21:27.707388",
+        "time_finished": "2025-11-26T23:21:41.805010",
+        "duration_seconds": 14.097622,
+        "is_multi_accession": true,
+        "accession_count": 2,
+        "individual_procedures": [
+          "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "US LOWER EXTREMITY VEINS BILATERAL"
+        ]
       }
     ],
     "effective_shift_start": "2025-11-25T22:00:00",
@@ -57,7 +86,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T03:44:59.515029",
           "time_finished": "2025-11-24T03:45:59.347544",
-          "duration_seconds": 59.832515
+          "duration_seconds": 59.832515,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414CT250069947ABZ1",
@@ -66,7 +96,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T03:46:08.814785",
           "time_finished": "2025-11-24T03:46:38.788975",
-          "duration_seconds": 29.97419
+          "duration_seconds": 29.97419,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414CT250069943ABZ1",
@@ -75,7 +106,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T03:49:55.382883",
           "time_finished": "2025-11-24T03:52:59.335160",
-          "duration_seconds": 183.952277
+          "duration_seconds": 183.952277,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414CT250069948ABZ1",
@@ -84,7 +116,8 @@
           "rvu": 1.75,
           "time_performed": "2025-11-24T03:57:07.624177",
           "time_finished": "2025-11-24T03:58:18.058669",
-          "duration_seconds": 70.434492
+          "duration_seconds": 70.434492,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000301CST",
@@ -93,7 +126,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:02:10.643847",
           "time_finished": "2025-11-24T04:05:10.981750",
-          "duration_seconds": 180.337903
+          "duration_seconds": 180.337903,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000305CST",
@@ -102,7 +136,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:05:40.302925",
           "time_finished": "2025-11-24T04:07:01.514574",
-          "duration_seconds": 81.211649
+          "duration_seconds": 81.211649,
+          "patient_class": "Unknown"
         },
         {
           "accession": "A01266011DU",
@@ -111,7 +146,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:07:25.489454",
           "time_finished": "2025-11-24T04:07:37.282956",
-          "duration_seconds": 11.793502
+          "duration_seconds": 11.793502,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00416XR250038730ABZ3",
@@ -120,7 +156,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:12:23.996488",
           "time_finished": "2025-11-24T04:12:47.588166",
-          "duration_seconds": 23.591678
+          "duration_seconds": 23.591678,
+          "patient_class": "Unknown"
         },
         {
           "accession": "205692320251124OK",
@@ -129,7 +166,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:13:01.273763",
           "time_finished": "2025-11-24T04:13:24.229516",
-          "duration_seconds": 22.955753
+          "duration_seconds": 22.955753,
+          "patient_class": "Unknown"
         },
         {
           "accession": "205692520251124OK",
@@ -138,7 +176,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:13:30.999135",
           "time_finished": "2025-11-24T04:13:44.737024",
-          "duration_seconds": 13.737889
+          "duration_seconds": 13.737889,
+          "patient_class": "Unknown"
         },
         {
           "accession": "4002532701471NMCH",
@@ -147,7 +186,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T04:16:33.161143",
           "time_finished": "2025-11-24T04:17:36.227025",
-          "duration_seconds": 63.065882
+          "duration_seconds": 63.065882,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000600CST",
@@ -156,7 +196,8 @@
           "rvu": 1.75,
           "time_performed": "2025-11-24T04:17:48.182521",
           "time_finished": "2025-11-24T04:19:37.137415",
-          "duration_seconds": 108.954894
+          "duration_seconds": 108.954894,
+          "patient_class": "Unknown"
         },
         {
           "accession": "02CT250012572TCR",
@@ -165,7 +206,8 @@
           "rvu": 3.5,
           "time_performed": "2025-11-24T04:25:17.124475",
           "time_finished": "2025-11-24T04:25:35.473816",
-          "duration_seconds": 18.349341
+          "duration_seconds": 18.349341,
+          "patient_class": "Unknown"
         },
         {
           "accession": "000576655ARLUSH",
@@ -174,7 +216,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:25:50.943889",
           "time_finished": "2025-11-24T04:32:10.736911",
-          "duration_seconds": 379.793022
+          "duration_seconds": 379.793022,
+          "patient_class": "Unknown"
         },
         {
           "accession": "000576657ARLUSH",
@@ -183,7 +226,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:32:22.272148",
           "time_finished": "2025-11-24T04:32:32.027593",
-          "duration_seconds": 9.755445
+          "duration_seconds": 9.755445,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063930WTX",
@@ -192,7 +236,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T04:32:59.949746",
           "time_finished": "2025-11-24T04:34:40.057379",
-          "duration_seconds": 100.107633
+          "duration_seconds": 100.107633,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000581CST",
@@ -201,7 +246,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:34:53.156912",
           "time_finished": "2025-11-24T04:40:32.436705",
-          "duration_seconds": 339.279793
+          "duration_seconds": 339.279793,
+          "patient_class": "Unknown"
         },
         {
           "accession": "62-XR-25-055199DL",
@@ -210,7 +256,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:40:46.420114",
           "time_finished": "2025-11-24T04:40:54.213257",
-          "duration_seconds": 7.793143
+          "duration_seconds": 7.793143,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56690151BP",
@@ -219,7 +266,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:41:03.172391",
           "time_finished": "2025-11-24T04:41:12.483650",
-          "duration_seconds": 9.311259
+          "duration_seconds": 9.311259,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000687CST",
@@ -228,7 +276,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T04:41:22.107591",
           "time_finished": "2025-11-24T04:45:30.155972",
-          "duration_seconds": 248.048381
+          "duration_seconds": 248.048381,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000563CST",
@@ -237,7 +286,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T04:45:43.213341",
           "time_finished": "2025-11-24T04:48:20.612181",
-          "duration_seconds": 157.39884
+          "duration_seconds": 157.39884,
+          "patient_class": "Unknown"
         },
         {
           "accession": "4002532800414NMCH",
@@ -246,7 +296,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T04:48:26.303320",
           "time_finished": "2025-11-24T04:49:13.240129",
-          "duration_seconds": 46.936809
+          "duration_seconds": 46.936809,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56691976BP",
@@ -255,7 +306,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T05:00:37.589100",
           "time_finished": "2025-11-24T05:02:34.795010",
-          "duration_seconds": 117.20591
+          "duration_seconds": 117.20591,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414XR250061418ABZ1",
@@ -264,7 +316,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T05:02:46.144880",
           "time_finished": "2025-11-24T05:03:21.538878",
-          "duration_seconds": 35.393998
+          "duration_seconds": 35.393998,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56690115BP",
@@ -273,7 +326,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T05:03:37.440448",
           "time_finished": "2025-11-24T05:09:07.619658",
-          "duration_seconds": 330.17921
+          "duration_seconds": 330.17921,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56690116BP",
@@ -282,7 +336,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T05:09:18.426978",
           "time_finished": "2025-11-24T05:12:17.336134",
-          "duration_seconds": 178.909156
+          "duration_seconds": 178.909156,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56690117BP",
@@ -291,7 +346,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T05:14:26.846634",
           "time_finished": "2025-11-24T05:15:26.390773",
-          "duration_seconds": 59.544139
+          "duration_seconds": 59.544139,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414CT250069950ABZ1",
@@ -300,7 +356,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T05:15:36.270898",
           "time_finished": "2025-11-24T05:18:05.934157",
-          "duration_seconds": 149.663259
+          "duration_seconds": 149.663259,
+          "patient_class": "Unknown"
         },
         {
           "accession": "73048910000500ER",
@@ -309,7 +366,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T05:53:28.219930",
           "time_finished": "2025-11-24T05:55:05.326276",
-          "duration_seconds": 97.106346
+          "duration_seconds": 97.106346,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063958WTX",
@@ -318,7 +376,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T05:56:23.198125",
           "time_finished": "2025-11-24T05:56:47.569356",
-          "duration_seconds": 24.371231
+          "duration_seconds": 24.371231,
+          "patient_class": "Unknown"
         },
         {
           "accession": "02CT250012572TCR",
@@ -327,7 +386,8 @@
           "rvu": 3.5,
           "time_performed": "2025-11-24T05:57:25.880824",
           "time_finished": "2025-11-24T05:58:17.025344",
-          "duration_seconds": 51.14452
+          "duration_seconds": 51.14452,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063961WTX",
@@ -336,7 +396,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:06:50.124961",
           "time_finished": "2025-11-24T06:08:01.093269",
-          "duration_seconds": 70.968308
+          "duration_seconds": 70.968308,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063960WTX",
@@ -345,7 +406,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:08:11.556479",
           "time_finished": "2025-11-24T06:08:52.480139",
-          "duration_seconds": 40.92366
+          "duration_seconds": 40.92366,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063959WTX",
@@ -354,7 +416,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:09:03.218642",
           "time_finished": "2025-11-24T06:09:30.320633",
-          "duration_seconds": 27.101991
+          "duration_seconds": 27.101991,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240000775CST",
@@ -363,7 +426,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T06:09:44.613282",
           "time_finished": "2025-11-24T06:10:25.593991",
-          "duration_seconds": 40.980709
+          "duration_seconds": 40.980709,
+          "patient_class": "Unknown"
         },
         {
           "accession": "316643520251124CRE",
@@ -372,7 +436,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T06:10:49.187931",
           "time_finished": "2025-11-24T06:11:27.428764",
-          "duration_seconds": 38.240833
+          "duration_seconds": 38.240833,
+          "patient_class": "Unknown"
         },
         {
           "accession": "316643720251124CRE",
@@ -381,7 +446,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:14:38.386134",
           "time_finished": "2025-11-24T06:15:59.732091",
-          "duration_seconds": 81.345957
+          "duration_seconds": 81.345957,
+          "patient_class": "Unknown"
         },
         {
           "accession": "4002532701501NMCH",
@@ -390,7 +456,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:17:09.953816",
           "time_finished": "2025-11-24T06:20:35.724425",
-          "duration_seconds": 205.770609
+          "duration_seconds": 205.770609,
+          "patient_class": "Unknown"
         },
         {
           "accession": "320CT25020107ELP",
@@ -399,7 +466,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:20:38.426014",
           "time_finished": "2025-11-24T06:21:58.520727",
-          "duration_seconds": 80.094713
+          "duration_seconds": 80.094713,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SKM2511240000877CST",
@@ -408,7 +476,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:22:12.632151",
           "time_finished": "2025-11-24T06:23:21.295170",
-          "duration_seconds": 68.663019
+          "duration_seconds": 68.663019,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56692069BP",
@@ -417,7 +486,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:23:32.538560",
           "time_finished": "2025-11-24T06:23:44.787057",
-          "duration_seconds": 12.248497
+          "duration_seconds": 12.248497,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063964WTX",
@@ -426,7 +496,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:24:06.131998",
           "time_finished": "2025-11-24T06:24:36.797443",
-          "duration_seconds": 30.665445
+          "duration_seconds": 30.665445,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56695534BP",
@@ -435,7 +506,8 @@
           "rvu": 3.06,
           "time_performed": "2025-11-24T06:24:50.444847",
           "time_finished": "2025-11-24T06:28:04.777305",
-          "duration_seconds": 194.332458
+          "duration_seconds": 194.332458,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063949WTX",
@@ -444,7 +516,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:28:13.947678",
           "time_finished": "2025-11-24T06:37:34.589716",
-          "duration_seconds": 560.642038
+          "duration_seconds": 560.642038,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063934WTX",
@@ -453,7 +526,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T06:37:48.371153",
           "time_finished": "2025-11-24T06:39:05.481107",
-          "duration_seconds": 77.109954
+          "duration_seconds": 77.109954,
+          "patient_class": "Unknown"
         },
         {
           "accession": "2025112401611DR",
@@ -462,7 +536,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:39:33.057497",
           "time_finished": "2025-11-24T06:39:45.690813",
-          "duration_seconds": 12.633316
+          "duration_seconds": 12.633316,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56692085BP",
@@ -471,7 +546,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:42:38.889238",
           "time_finished": "2025-11-24T06:42:48.432964",
-          "duration_seconds": 9.543726
+          "duration_seconds": 9.543726,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063957WTX",
@@ -480,7 +556,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:43:07.403047",
           "time_finished": "2025-11-24T06:43:29.450991",
-          "duration_seconds": 22.047944
+          "duration_seconds": 22.047944,
+          "patient_class": "Unknown"
         },
         {
           "accession": "316644020251124CRE",
@@ -489,7 +566,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:43:40.447272",
           "time_finished": "2025-11-24T06:44:48.262714",
-          "duration_seconds": 67.815442
+          "duration_seconds": 67.815442,
+          "patient_class": "Unknown"
         },
         {
           "accession": "V003254412WTX",
@@ -498,7 +576,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T06:45:39.813824",
           "time_finished": "2025-11-24T06:49:04.265207",
-          "duration_seconds": 204.451383
+          "duration_seconds": 204.451383,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063967WTX",
@@ -507,7 +586,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:49:17.513927",
           "time_finished": "2025-11-24T06:49:27.865601",
-          "duration_seconds": 10.351674
+          "duration_seconds": 10.351674,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063956WTX",
@@ -516,7 +596,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:49:37.326211",
           "time_finished": "2025-11-24T06:49:48.693021",
-          "duration_seconds": 11.36681
+          "duration_seconds": 11.36681,
+          "patient_class": "Unknown"
         },
         {
           "accession": "V003254414WTX",
@@ -525,7 +606,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:50:08.457849",
           "time_finished": "2025-11-24T06:50:34.821064",
-          "duration_seconds": 26.363215
+          "duration_seconds": 26.363215,
+          "patient_class": "Unknown"
         },
         {
           "accession": "V003254415WTX",
@@ -534,7 +616,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:50:48.450236",
           "time_finished": "2025-11-24T06:51:45.198137",
-          "duration_seconds": 56.747901
+          "duration_seconds": 56.747901,
+          "patient_class": "Unknown"
         },
         {
           "accession": "440CT25018179ELP",
@@ -543,7 +626,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:52:01.018676",
           "time_finished": "2025-11-24T06:53:00.417163",
-          "duration_seconds": 59.398487
+          "duration_seconds": 59.398487,
+          "patient_class": "Unknown"
         },
         {
           "accession": "390936920251124JC",
@@ -552,7 +636,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:53:19.342788",
           "time_finished": "2025-11-24T06:54:50.206519",
-          "duration_seconds": 90.863731
+          "duration_seconds": 90.863731,
+          "patient_class": "Unknown"
         },
         {
           "accession": "55087085BR",
@@ -561,7 +646,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T06:55:02.946964",
           "time_finished": "2025-11-24T06:56:53.255803",
-          "duration_seconds": 110.308839
+          "duration_seconds": 110.308839,
+          "patient_class": "Unknown"
         },
         {
           "accession": "55087115BR",
@@ -570,7 +656,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T06:57:03.506554",
           "time_finished": "2025-11-24T06:57:51.664955",
-          "duration_seconds": 48.158401
+          "duration_seconds": 48.158401,
+          "patient_class": "Unknown"
         },
         {
           "accession": "2025112401611DR",
@@ -579,7 +666,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:58:02.634717",
           "time_finished": "2025-11-24T06:58:27.847613",
-          "duration_seconds": 25.212896
+          "duration_seconds": 25.212896,
+          "patient_class": "Unknown"
         },
         {
           "accession": "62-XR-25-055202DL",
@@ -588,7 +676,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:58:41.201637",
           "time_finished": "2025-11-24T06:59:03.124527",
-          "duration_seconds": 21.92289
+          "duration_seconds": 21.92289,
+          "patient_class": "Unknown"
         },
         {
           "accession": "14824510002900PM",
@@ -597,7 +686,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T06:59:14.826126",
           "time_finished": "2025-11-24T07:04:12.085539",
-          "duration_seconds": 297.259413
+          "duration_seconds": 297.259413,
+          "patient_class": "Unknown"
         },
         {
           "accession": "55087103BR",
@@ -606,7 +696,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:04:42.471084",
           "time_finished": "2025-11-24T07:04:56.298336",
-          "duration_seconds": 13.827252
+          "duration_seconds": 13.827252,
+          "patient_class": "Unknown"
         },
         {
           "accession": "55087104BR",
@@ -615,7 +706,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T07:05:06.569126",
           "time_finished": "2025-11-24T07:05:41.068545",
-          "duration_seconds": 34.499419
+          "duration_seconds": 34.499419,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063950WTX",
@@ -624,7 +716,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T07:05:55.671780",
           "time_finished": "2025-11-24T07:06:47.670159",
-          "duration_seconds": 51.998379
+          "duration_seconds": 51.998379,
+          "patient_class": "Unknown"
         },
         {
           "accession": "440CT25018181ELP",
@@ -633,7 +726,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T07:07:02.169365",
           "time_finished": "2025-11-24T07:08:40.514723",
-          "duration_seconds": 98.345358
+          "duration_seconds": 98.345358,
+          "patient_class": "Unknown"
         },
         {
           "accession": "62-CT-25-032853DL",
@@ -642,7 +736,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T07:08:58.697952",
           "time_finished": "2025-11-24T07:10:22.505089",
-          "duration_seconds": 83.807137
+          "duration_seconds": 83.807137,
+          "patient_class": "Unknown"
         },
         {
           "accession": "315080620251124MMC",
@@ -651,7 +746,8 @@
           "rvu": 1.0,
           "time_performed": "2025-11-24T07:10:39.799006",
           "time_finished": "2025-11-24T07:11:15.962898",
-          "duration_seconds": 36.163892
+          "duration_seconds": 36.163892,
+          "patient_class": "Unknown"
         },
         {
           "accession": "4002532701501NMCH",
@@ -660,7 +756,8 @@
           "rvu": 1.68,
           "time_performed": "2025-11-24T07:11:30.892431",
           "time_finished": "2025-11-24T07:11:46.425075",
-          "duration_seconds": 15.532644
+          "duration_seconds": 15.532644,
+          "patient_class": "Unknown"
         },
         {
           "accession": "A01265958DU",
@@ -669,7 +766,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:11:58.258626",
           "time_finished": "2025-11-24T07:12:29.332431",
-          "duration_seconds": 31.073805
+          "duration_seconds": 31.073805,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SBH2511240001169CST",
@@ -678,7 +776,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:40:06.613747",
           "time_finished": "2025-11-24T07:40:33.959101",
-          "duration_seconds": 27.345354
+          "duration_seconds": 27.345354,
+          "patient_class": "Unknown"
         },
         {
           "accession": "V003254416WTX",
@@ -687,7 +786,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:41:02.197533",
           "time_finished": "2025-11-24T07:42:27.712476",
-          "duration_seconds": 85.514943
+          "duration_seconds": 85.514943,
+          "patient_class": "Unknown"
         },
         {
           "accession": "40XR250002494RC",
@@ -696,7 +796,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:42:53.567349",
           "time_finished": "2025-11-24T07:43:10.786901",
-          "duration_seconds": 17.219552
+          "duration_seconds": 17.219552,
+          "patient_class": "Unknown"
         },
         {
           "accession": "40CT250001557RC",
@@ -705,7 +806,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:43:23.919609",
           "time_finished": "2025-11-24T07:43:54.148311",
-          "duration_seconds": 30.228702
+          "duration_seconds": 30.228702,
+          "patient_class": "Unknown"
         },
         {
           "accession": "RAD20251124-0003PRMC",
@@ -714,7 +816,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:44:26.691006",
           "time_finished": "2025-11-24T07:44:50.382486",
-          "duration_seconds": 23.69148
+          "duration_seconds": 23.69148,
+          "patient_class": "Unknown"
         },
         {
           "accession": "RAD20251124-0005PRMC",
@@ -723,7 +826,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:45:03.295627",
           "time_finished": "2025-11-24T07:45:12.188097",
-          "duration_seconds": 8.89247
+          "duration_seconds": 8.89247,
+          "patient_class": "Unknown"
         },
         {
           "accession": "AHS27150748SH1",
@@ -732,7 +836,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:46:43.865467",
           "time_finished": "2025-11-24T07:47:15.491851",
-          "duration_seconds": 31.626384
+          "duration_seconds": 31.626384,
+          "patient_class": "Unknown"
         },
         {
           "accession": "00414CT250069954ABZ1",
@@ -741,7 +846,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:47:27.292986",
           "time_finished": "2025-11-24T07:48:43.116921",
-          "duration_seconds": 75.823935
+          "duration_seconds": 75.823935,
+          "patient_class": "Unknown"
         },
         {
           "accession": "X002063969WTX",
@@ -750,7 +856,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:48:55.654450",
           "time_finished": "2025-11-24T07:49:24.523551",
-          "duration_seconds": 28.869101
+          "duration_seconds": 28.869101,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SAH2511240001275CST",
@@ -759,7 +866,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:49:45.501230",
           "time_finished": "2025-11-24T07:50:03.527377",
-          "duration_seconds": 18.026147
+          "duration_seconds": 18.026147,
+          "patient_class": "Unknown"
         },
         {
           "accession": "56690210BP",
@@ -768,7 +876,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:50:14.469113",
           "time_finished": "2025-11-24T07:51:53.344757",
-          "duration_seconds": 98.875644
+          "duration_seconds": 98.875644,
+          "patient_class": "Unknown"
         },
         {
           "accession": "390CT25016404ELP",
@@ -777,7 +886,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:52:06.345972",
           "time_finished": "2025-11-24T07:55:22.748353",
-          "duration_seconds": 196.402381
+          "duration_seconds": 196.402381,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SAH2511240001276CST",
@@ -786,7 +896,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:55:38.103822",
           "time_finished": "2025-11-24T07:56:22.120730",
-          "duration_seconds": 44.016908
+          "duration_seconds": 44.016908,
+          "patient_class": "Unknown"
         },
         {
           "accession": "SSH2511240001088CST",
@@ -795,7 +906,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T07:56:36.930005",
           "time_finished": "2025-11-24T07:57:59.953863",
-          "duration_seconds": 83.023858
+          "duration_seconds": 83.023858,
+          "patient_class": "Unknown"
         },
         {
           "accession": "2025112401735DMC",
@@ -804,7 +916,8 @@
           "rvu": 0.3,
           "time_performed": "2025-11-24T07:58:14.537294",
           "time_finished": "2025-11-24T07:59:45.187781",
-          "duration_seconds": 90.650487
+          "duration_seconds": 90.650487,
+          "patient_class": "Unknown"
         },
         {
           "accession": "62-CT-25-032856DL",
@@ -813,7 +926,8 @@
           "rvu": 0.9,
           "time_performed": "2025-11-24T08:00:01.032577",
           "time_finished": "2025-11-24T08:00:52.289311",
-          "duration_seconds": 51.256734
+          "duration_seconds": 51.256734,
+          "patient_class": "Unknown"
         }
       ]
     },

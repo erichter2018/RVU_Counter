@@ -166,7 +166,6 @@ def find_mosaic_webview_element(main_window):
     
     return None
                 
-
 def get_mosaic_elements(webview_element, depth=0, max_depth=20):
     """Recursively get all UI elements from WebView2."""
     elements = []
@@ -1220,8 +1219,12 @@ class RVUData:
             except Exception as e:
                 logger.error(f"Error migrating old file: {e}")
     
-    def save(self):
-        """Save data to appropriate files."""
+    def save(self, save_records=True):
+        """Save data to appropriate files.
+        
+        Args:
+            save_records: If True, save both settings and records. If False, only save settings.
+        """
         # Update internal data structures from merged data
         if "settings" in self.data:
             self.settings_data["settings"] = self.data["settings"]
@@ -1234,12 +1237,13 @@ class RVUData:
         if "window_positions" in self.data:
             self.settings_data["window_positions"] = self.data["window_positions"]
         
-        if "records" in self.data:
-            self.records_data["records"] = self.data["records"]
-        if "current_shift" in self.data:
-            self.records_data["current_shift"] = self.data["current_shift"]
-        if "shifts" in self.data:
-            self.records_data["shifts"] = self.data["shifts"]
+        if save_records:
+            if "records" in self.data:
+                self.records_data["records"] = self.data["records"]
+            if "current_shift" in self.data:
+                self.records_data["current_shift"] = self.data["current_shift"]
+            if "shifts" in self.data:
+                self.records_data["shifts"] = self.data["shifts"]
         
         # Save settings file (everything - settings, RVU tables, rules, window positions)
         try:
@@ -1257,22 +1261,23 @@ class RVUData:
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
         
-        # Save records file
-        try:
-            records_to_save = {
-                "records": self.records_data.get("records", []),
-                "current_shift": self.records_data.get("current_shift", {
-                    "shift_start": None,
-                    "shift_end": None,
-                    "records": []
-                }),
-                "shifts": self.records_data.get("shifts", [])
-            }
-            with open(self.records_file, 'w') as f:
-                json.dump(records_to_save, f, indent=2, default=str)
-            logger.info(f"Saved records to {self.records_file}")
-        except Exception as e:
-            logger.error(f"Error saving records: {e}")
+        # Save records file only if requested
+        if save_records:
+            try:
+                records_to_save = {
+                    "records": self.records_data.get("records", []),
+                    "current_shift": self.records_data.get("current_shift", {
+                        "shift_start": None,
+                        "shift_end": None,
+                        "records": []
+                    }),
+                    "shifts": self.records_data.get("shifts", [])
+                }
+                with open(self.records_file, 'w') as f:
+                    json.dump(records_to_save, f, indent=2, default=str)
+                logger.info(f"Saved records to {self.records_file}")
+            except Exception as e:
+                logger.error(f"Error saving records: {e}")
     
     def end_current_shift(self):
         """End the current shift and move it to historical shifts."""
@@ -1674,7 +1679,9 @@ class RVUCounterApp:
         canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
         canvas = tk.Canvas(canvas_frame, height=100, highlightthickness=0, bd=0, bg=canvas_bg)
         scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
-        self.studies_scrollable_frame = ttk.Frame(canvas)
+        # Use a custom style for the scrollable frame to match canvas_bg
+        self.style.configure("StudiesScrollable.TFrame", background=canvas_bg)
+        self.studies_scrollable_frame = ttk.Frame(canvas, style="StudiesScrollable.TFrame")
         
         canvas_window = canvas.create_window((0, 0), window=self.studies_scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
@@ -2063,7 +2070,7 @@ class RVUCounterApp:
                 self.current_procedure = ""
                 self.current_study_type = ""
                 self.update_debug_display()
-            return
+                return
         
             self.root.title("RVU Counter")
             
@@ -3132,7 +3139,8 @@ class RVUCounterApp:
                 show_time = self.data_manager.data["settings"].get("show_time", False)
                 if show_time:
                     # Use regular tk.Frame with minimal height to reduce spacing
-                    bg_color = self.theme_colors.get("bg_color", "#f0f0f0")
+                    # Use canvas_bg to match the studies scrollable area background
+                    bg_color = self.theme_colors.get("canvas_bg", self.theme_colors.get("bg", "#f0f0f0"))
                     time_row_frame = tk.Frame(study_frame, bg=bg_color, height=12)
                     time_row_frame.pack(fill=tk.X, pady=(0, 0), padx=0)
                     time_row_frame.pack_propagate(False)  # Prevent frame from expanding
@@ -3144,11 +3152,13 @@ class RVUCounterApp:
                     # Time ago label - left-justified, smaller font, lighter color, no padding
                     # Use tk.Label instead of ttk.Label for less padding
                     time_ago_text = self._format_time_ago(record.get("time_finished"))
+                    # Use theme color for secondary text
+                    text_color = self.theme_colors.get("text_secondary", "gray")
                     time_ago_label = tk.Label(
-                        time_row_frame, 
+                        time_row_frame,
                         text=time_ago_text, 
                         font=("Consolas", 7),
-                        fg="gray",
+                        fg=text_color,
                         bg=bg_color,
                         padx=0,
                         pady=0,
@@ -3163,7 +3173,7 @@ class RVUCounterApp:
                         time_row_frame,
                         text=duration_text,
                         font=("Consolas", 7),
-                        fg="gray",
+                        fg=text_color,
                         bg=bg_color,
                         padx=0,
                         pady=0,
@@ -3177,6 +3187,7 @@ class RVUCounterApp:
                     self.time_labels.append({
                         'time_ago_label': time_ago_label,
                         'duration_label': duration_label,
+                        'spacer_label': spacer_label,
                         'record': record,
                         'time_row_frame': time_row_frame
                     })
@@ -3342,6 +3353,7 @@ class RVUCounterApp:
             delete_btn_bg = "#3d3d3d"
             delete_btn_fg = "#aaaaaa"
             border_color = "#555555"
+            text_secondary = "#aaaaaa"  # Gray text for secondary info
         else:
             # Light mode colors
             bg_color = "#f0f0f0"
@@ -3359,6 +3371,7 @@ class RVUCounterApp:
             delete_btn_bg = "#f0f0f0"
             delete_btn_fg = "gray"
             border_color = "#acacac"
+            text_secondary = "gray"  # Gray text for secondary info
         
         # Store current theme colors for new widgets
         self.theme_colors = {
@@ -3374,6 +3387,7 @@ class RVUCounterApp:
             "delete_btn_bg": delete_btn_bg,
             "delete_btn_fg": delete_btn_fg,
             "border_color": border_color,
+            "text_secondary": text_secondary,
             "dark_mode": dark_mode
         }
         
@@ -3434,6 +3448,13 @@ class RVUCounterApp:
         canvas = getattr(self, 'studies_canvas', None)
         if canvas:
             canvas.configure(bg=canvas_bg)
+        
+        # Update studies_scrollable_frame style to use canvas_bg
+        # ttk.Frame uses TFrame style, but we need a specific style for the scrollable frame
+        self.style.configure("StudiesScrollable.TFrame", background=canvas_bg)
+        studies_frame = getattr(self, 'studies_scrollable_frame', None)
+        if studies_frame:
+            studies_frame.configure(style="StudiesScrollable.TFrame")
     
     def get_theme_colors(self):
         """Get current theme colors for use by other windows."""
@@ -3579,7 +3600,8 @@ class RVUCounterApp:
             }
             self._last_saved_main_x = current_x
             self._last_saved_main_y = current_y
-            self.data_manager.save()
+            # Only save settings (window positions), not records
+            self.data_manager.save(save_records=False)
         except Exception as e:
             logger.error(f"Error saving window position: {e}")
     
@@ -3592,10 +3614,32 @@ class RVUCounterApp:
                     try:
                         record = label_info['record']
                         time_ago_label = label_info['time_ago_label']
+                        duration_label = label_info.get('duration_label')
+                        time_row_frame = label_info.get('time_row_frame')
+                        spacer_label = label_info.get('spacer_label')
                         
-                        # Update time ago
+                        # Update time ago and ensure color matches theme
                         time_ago_text = self._format_time_ago(record.get("time_finished"))
-                        time_ago_label.config(text=time_ago_text)
+                        text_color = self.theme_colors.get("text_secondary", "gray")
+                        # Use canvas_bg to match the studies scrollable area background
+                        bg_color = self.theme_colors.get("canvas_bg", self.theme_colors.get("bg", "#f0f0f0"))
+                        
+                        # Update all labels and frames with theme colors
+                        time_ago_label.config(text=time_ago_text, fg=text_color, bg=bg_color)
+                        
+                        # Update duration label with theme colors
+                        if duration_label:
+                            duration_seconds = record.get("duration_seconds", 0)
+                            duration_text = self._format_duration(duration_seconds)
+                            duration_label.config(text=duration_text, fg=text_color, bg=bg_color)
+                        
+                        # Update spacer label background
+                        if spacer_label:
+                            spacer_label.config(bg=bg_color)
+                        
+                        # Update time row frame background
+                        if time_row_frame:
+                            time_row_frame.config(bg=bg_color)
                     except Exception as e:
                         logger.error(f"Error updating time display: {e}")
         
@@ -3662,21 +3706,33 @@ class SettingsWindow:
         
         settings = self.data_manager.data["settings"]
         
+        # Create two-column frame for general settings
+        general_settings_frame = ttk.Frame(main_frame)
+        general_settings_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Column 1: Auto-resume and Dark Mode
+        col1 = ttk.Frame(general_settings_frame)
+        col1.pack(side=tk.LEFT, anchor=tk.N, padx=(0, 20))
+        
         # Auto-start
         self.auto_start_var = tk.BooleanVar(value=settings["auto_start"])
-        ttk.Checkbutton(main_frame, text="Auto-resume shift on launch", variable=self.auto_start_var).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(col1, text="Auto-resume shift on launch", variable=self.auto_start_var).pack(anchor=tk.W, pady=2)
         
         # Dark mode
         self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
-        ttk.Checkbutton(main_frame, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(col1, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
+        
+        # Column 2: Show time and Stay on top
+        col2 = ttk.Frame(general_settings_frame)
+        col2.pack(side=tk.LEFT, anchor=tk.N)
         
         # Show time checkbox
         self.show_time_var = tk.BooleanVar(value=settings.get("show_time", False))
-        ttk.Checkbutton(main_frame, text="Show time", variable=self.show_time_var).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(col2, text="Show time", variable=self.show_time_var).pack(anchor=tk.W, pady=2)
         
         # Stay on top option
         self.stay_on_top_var = tk.BooleanVar(value=settings.get("stay_on_top", True))
-        ttk.Checkbutton(main_frame, text="Stay on top", variable=self.stay_on_top_var).pack(anchor=tk.W, pady=2)
+        ttk.Checkbutton(col2, text="Stay on top", variable=self.stay_on_top_var).pack(anchor=tk.W, pady=2)
         
         # Data source radio buttons (PowerScribe or Mosaic)
         data_source_frame = ttk.Frame(main_frame)
@@ -3946,6 +4002,373 @@ class SettingsWindow:
         self.window.destroy()
 
 
+class CanvasTable:
+    """Reusable Canvas-based sortable table widget."""
+    
+    def _get_theme_colors(self, widget):
+        """Get theme colors by traversing widget hierarchy to find app instance."""
+        current = widget
+        for _ in range(10):  # Limit traversal depth
+            if hasattr(current, 'app') and hasattr(current.app, 'theme_colors'):
+                return current.app.theme_colors
+            if hasattr(current, 'parent'):
+                current = current.parent
+            elif hasattr(current, 'master'):
+                current = current.master
+            else:
+                break
+        # Default fallback colors
+        return {
+            "canvas_bg": "#f0f0f0",
+            "button_bg": "#e1e1e1",
+            "entry_bg": "white",
+            "fg": "black",
+            "border_color": "#acacac"
+        }
+    
+    def __init__(self, parent, columns, sortable_columns=None, row_height=25, header_height=30, app=None):
+        """
+        Create a Canvas-based sortable table.
+        
+        Args:
+            parent: Parent widget
+            columns: List of (name, width, header_text) tuples or dict with 'name', 'width', 'text', 'sortable'
+            sortable_columns: Set of column names that are sortable (None = all sortable)
+            row_height: Height of each data row
+            header_height: Height of header row
+            app: Optional app instance for theme colors (if None, will try to find it)
+        """
+        self.parent = parent
+        self.row_height = row_height
+        self.header_height = header_height
+        self.app = app  # Store app reference for theme colors
+        
+        # Parse columns
+        self.columns = []
+        self.column_widths = {}
+        self.column_names = []
+        self.sortable = sortable_columns if sortable_columns is not None else set()
+        
+        for col in columns:
+            if isinstance(col, dict):
+                name = col['name']
+                width = col['width']
+                text = col.get('text', name)
+                sortable = col.get('sortable', True)
+            else:
+                name, width, text = col
+                sortable = True
+            
+            self.columns.append({'name': name, 'width': width, 'text': text, 'sortable': sortable})
+            self.column_widths[name] = width
+            self.column_names.append(name)
+            if sortable:
+                self.sortable.add(name)
+        
+        # Table dimensions
+        self.table_width = sum(self.column_widths.values())
+        
+        # Data storage
+        self.rows_data = []  # List of row dicts: {'cells': {col: value}, 'is_total': bool, 'tags': []}
+        self.sort_column = None
+        self.sort_reverse = False
+        
+        # Get theme colors - use app if provided, otherwise try to find it
+        if self.app and hasattr(self.app, 'theme_colors'):
+            theme_colors = self.app.theme_colors
+        else:
+            theme_colors = self._get_theme_colors(parent)
+        canvas_bg = theme_colors.get("canvas_bg", "#f0f0f0")
+        header_bg = theme_colors.get("button_bg", "#e1e1e1")
+        data_bg = theme_colors.get("entry_bg", "white")
+        text_fg = theme_colors.get("fg", "black")
+        border_color = theme_colors.get("border_color", "#acacac")
+        
+        # Store theme colors for use in drawing
+        self.theme_colors = theme_colors
+        
+        # Create frame with scrollbar
+        self.frame = ttk.Frame(parent)
+        self.canvas = tk.Canvas(self.frame, bg=canvas_bg, highlightthickness=1, highlightbackground=border_color)
+        self.scrollbar = ttk.Scrollbar(self.frame, orient="vertical", command=self.canvas.yview)
+        
+        # Inner frame for content
+        self.inner_frame = ttk.Frame(self.canvas)
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+        
+        # Configure scrolling
+        def configure_scroll_region(event):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+        def configure_canvas_width(event):
+            canvas_width = event.width
+            self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+        
+        self.inner_frame.bind("<Configure>", configure_scroll_region)
+        self.canvas.bind("<Configure>", configure_canvas_width)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        # Create header canvas
+        self.header_canvas = tk.Canvas(self.inner_frame, width=self.table_width, height=header_height,
+                                      bg=header_bg, highlightthickness=0)
+        self.header_canvas.pack(fill=tk.X)
+        
+        # Create data canvas
+        self.data_canvas = tk.Canvas(self.inner_frame, width=self.table_width,
+                                    bg=data_bg, highlightthickness=0)
+        self.data_canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Bind mouse wheel scrolling
+        def on_mousewheel(event):
+            # Windows/Linux: event.delta is in multiples of 120
+            # Mac: event.delta is in pixels
+            if event.delta:
+                delta = -1 * (event.delta / 120) if abs(event.delta) > 1 else -1 * event.delta
+            else:
+                delta = -1 if event.num == 4 else 1
+            self.canvas.yview_scroll(int(delta), "units")
+        
+        # Bind mouse wheel scrolling to the frame (not individual canvases)
+        # This ensures scrolling works even when mouse is over any part of the table
+        def bind_mousewheel_to_canvas(widget):
+            widget.bind("<MouseWheel>", on_mousewheel)
+            widget.bind("<Button-4>", on_mousewheel)  # Linux scroll up
+            widget.bind("<Button-5>", on_mousewheel)  # Linux scroll down
+        
+        # Bind to all components for comprehensive scrolling
+        bind_mousewheel_to_canvas(self.frame)
+        bind_mousewheel_to_canvas(self.canvas)
+        bind_mousewheel_to_canvas(self.inner_frame)
+        bind_mousewheel_to_canvas(self.header_canvas)
+        bind_mousewheel_to_canvas(self.data_canvas)
+        
+        # Draw headers
+        self._draw_headers()
+        
+        # Pack widgets
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    
+    def _draw_headers(self):
+        """Draw header row with clickable buttons."""
+        self.header_canvas.delete("all")
+        x = 0
+        
+        for col_info in self.columns:
+            col_name = col_info['name']
+            width = col_info['width']
+            text = col_info['text']
+            sortable = col_info.get('sortable', True)
+            
+            # Get theme colors
+            header_bg = self.theme_colors.get("button_bg", "#e1e1e1")
+            header_fg = self.theme_colors.get("fg", "black")
+            border_color = self.theme_colors.get("border_color", "#acacac")
+            
+            # Draw header rectangle
+            rect_id = self.header_canvas.create_rectangle(x, 0, x + width, self.header_height,
+                                                         fill=header_bg, outline=border_color, width=1,
+                                                         tags=f"header_{col_name}")
+            
+            # Add sort indicator if sorted
+            display_text = text
+            if col_name == self.sort_column and col_name in self.sortable:
+                indicator = " ▼" if self.sort_reverse else " ▲"
+                display_text = text + indicator
+            
+            # Draw text
+            self.header_canvas.create_text(x + width//2, self.header_height//2,
+                                         text=display_text, font=('Arial', 9, 'bold'),
+                                         anchor='center', fill=header_fg, tags=f"header_{col_name}")
+            
+            # Make clickable if sortable
+            if sortable and col_name in self.sortable:
+                self.header_canvas.tag_bind(f"header_{col_name}", "<Button-1>",
+                                          lambda e, c=col_name: self._on_header_click(c))
+                self.header_canvas.tag_bind(f"header_{col_name}", "<Enter>",
+                                          lambda e: self.header_canvas.config(cursor="hand2"))
+                self.header_canvas.tag_bind(f"header_{col_name}", "<Leave>",
+                                          lambda e: self.header_canvas.config(cursor=""))
+            
+            x += width
+    
+    def _on_header_click(self, col_name):
+        """Handle header click for sorting."""
+        if col_name not in self.sortable:
+            return  # Column is not sortable
+        
+        if self.sort_column == col_name:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_column = col_name
+            self.sort_reverse = False
+        
+        # Redraw headers to show sort indicator
+        self._draw_headers()
+        # Redraw data with new sort order
+        self._draw_data()
+    
+    def _draw_data(self):
+        """Draw data rows."""
+        self.data_canvas.delete("all")
+        
+        # Sort rows if needed
+        rows_to_draw = list(self.rows_data)
+        if self.sort_column and self.sort_column in self.sortable:
+            # Separate totals from regular rows
+            regular_rows = [r for r in rows_to_draw if not r.get('is_total', False)]
+            total_rows = [r for r in rows_to_draw if r.get('is_total', False)]
+            
+            # Sort regular rows
+            def get_sort_value(row):
+                val = row['cells'].get(self.sort_column, "")
+                # Try numeric sort first
+                try:
+                    if isinstance(val, str):
+                        # Remove parentheses content for duration strings
+                        val_clean = re.sub(r'\s*\(\d+\)$', '', val).strip()
+                        if val_clean and val_clean != "-":
+                            # Try parsing as duration (Xh Ym Zs)
+                            total_seconds = 0
+                            hours = re.search(r'(\d+)h', val_clean)
+                            minutes = re.search(r'(\d+)m', val_clean)
+                            seconds = re.search(r'(\d+)s', val_clean)
+                            if hours:
+                                total_seconds += int(hours.group(1)) * 3600
+                            if minutes:
+                                total_seconds += int(minutes.group(1)) * 60
+                            if seconds:
+                                total_seconds += int(seconds.group(1))
+                            return total_seconds if total_seconds > 0 else float('inf')
+                    return float(val)
+                except:
+                    pass
+                return str(val).lower()
+            
+            regular_rows.sort(key=get_sort_value, reverse=self.sort_reverse)
+            rows_to_draw = regular_rows + total_rows
+        else:
+            # Keep totals at bottom
+            regular_rows = [r for r in rows_to_draw if not r.get('is_total', False)]
+            total_rows = [r for r in rows_to_draw if r.get('is_total', False)]
+            rows_to_draw = regular_rows + total_rows
+        
+        # Get theme colors once (cache for performance)
+        data_bg = self.theme_colors.get("entry_bg", "white")
+        data_fg = self.theme_colors.get("fg", "black")
+        border_color = self.theme_colors.get("border_color", "#acacac")
+        total_bg = self.theme_colors.get("button_bg", "#e1e1e1")
+        
+        # Draw rows - draw all rows (for now, optimization can be added later if needed)
+        y = 0
+        for row in rows_to_draw:
+            cells = row['cells']
+            is_total = row.get('is_total', False)
+            cell_colors = row.get('cell_colors', {})  # Optional per-cell colors
+            
+            x = 0
+            for col_info in self.columns:
+                col_name = col_info['name']
+                width = col_info['width']
+                value = cells.get(col_name, "")
+                
+                # Get cell color (for heatmaps) - use theme colors if not specified
+                if col_name not in cell_colors:
+                    cell_color = total_bg if is_total else data_bg
+                else:
+                    cell_color = cell_colors.get(col_name)
+                
+                # Draw cell
+                self.data_canvas.create_rectangle(x, y, x + width, y + self.row_height,
+                                                 fill=cell_color, outline=border_color, width=1)
+                
+                # Draw text
+                font = ('Arial', 9, 'bold') if is_total else ('Arial', 9)
+                anchor = 'center'
+                self.data_canvas.create_text(x + width//2, y + self.row_height//2,
+                                           text=str(value), font=font, anchor=anchor, fill=data_fg)
+                x += width
+            
+            y += self.row_height
+        
+        # Set canvas height to accommodate all rows
+        self.data_canvas.config(height=y)
+    
+    def add_row(self, cells, is_total=False, cell_colors=None):
+        """Add a row of data (doesn't redraw - call update_data() or _draw_data() when done adding all rows)."""
+        self.rows_data.append({
+            'cells': cells,
+            'is_total': is_total,
+            'cell_colors': cell_colors or {}
+        })
+    
+    def update_data(self):
+        """Update the display after adding rows - this triggers a single redraw."""
+        self._draw_data()
+    
+    def clear(self):
+        """Clear all rows but keep headers visible."""
+        self.rows_data = []
+        self.sort_column = None
+        self.sort_reverse = False
+        # Clear only data canvas, keep headers
+        self.data_canvas.delete("all")
+        # Redraw headers to ensure they're visible
+        self._draw_headers()
+    
+    def update_theme(self):
+        """Update theme colors and redraw."""
+        # Get fresh theme colors
+        if self.app and hasattr(self.app, 'theme_colors'):
+            self.theme_colors = self.app.theme_colors
+        else:
+            self.theme_colors = self._get_theme_colors(self.parent)
+        
+        # Update canvas backgrounds
+        canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
+        header_bg = self.theme_colors.get("button_bg", "#e1e1e1")
+        data_bg = self.theme_colors.get("entry_bg", "white")
+        border_color = self.theme_colors.get("border_color", "#acacac")
+        
+        self.canvas.config(bg=canvas_bg, highlightbackground=border_color)
+        self.header_canvas.config(bg=header_bg)
+        self.data_canvas.config(bg=data_bg)
+        
+        # Redraw with new colors
+        self._draw_headers()
+        self._draw_data()
+    
+    def update_theme(self):
+        """Update theme colors and redraw."""
+        # Get fresh theme colors
+        if self.app and hasattr(self.app, 'theme_colors'):
+            self.theme_colors = self.app.theme_colors
+        else:
+            self.theme_colors = self._get_theme_colors(self.parent)
+        
+        # Update canvas backgrounds
+        canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
+        header_bg = self.theme_colors.get("button_bg", "#e1e1e1")
+        data_bg = self.theme_colors.get("entry_bg", "white")
+        border_color = self.theme_colors.get("border_color", "#acacac")
+        
+        self.canvas.config(bg=canvas_bg, highlightbackground=border_color)
+        self.header_canvas.config(bg=header_bg)
+        self.data_canvas.config(bg=data_bg)
+        
+        # Redraw with new colors
+        self._draw_headers()
+        self._draw_data()
+    
+    def pack(self, **kwargs):
+        """Pack the table frame."""
+        self.frame.pack(**kwargs)
+    
+    def pack_forget(self):
+        """Unpack the table frame."""
+        self.frame.pack_forget()
+
+
 class StatisticsWindow:
     """Statistics modal window for detailed stats."""
     
@@ -4032,6 +4455,8 @@ class StatisticsWindow:
         history_frame = ttk.LabelFrame(left_panel, text="Historical", padding="8")
         history_frame.pack(fill=tk.X, pady=(0, 10))
         
+        ttk.Radiobutton(history_frame, text="This Work Week", variable=self.selected_period,
+                       value="this_work_week", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last Work Week", variable=self.selected_period,
                        value="last_work_week", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last 2 Work Weeks", variable=self.selected_period,
@@ -4042,6 +4467,8 @@ class StatisticsWindow:
                        value="last_3_months", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last Year", variable=self.selected_period,
                        value="last_year", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="All Time", variable=self.selected_period,
+                       value="all_time", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         
         # Shifts List Section (with delete capability)
         shifts_frame = ttk.LabelFrame(left_panel, text="All Shifts", padding="8")
@@ -4173,6 +4600,7 @@ class StatisticsWindow:
             widget.destroy()
         
         shifts = self.get_all_shifts()
+        now = datetime.now()
         
         for i, shift in enumerate(shifts):
             shift_frame = ttk.Frame(self.shifts_list_frame)
@@ -4184,7 +4612,25 @@ class StatisticsWindow:
             else:
                 try:
                     start = datetime.fromisoformat(shift.get("shift_start", ""))
-                    label_text = start.strftime("%m/%d %I:%M%p")
+                    
+                    # Round down time to nearest hour (e.g., 10:23pm -> 10pm)
+                    start_rounded = start.replace(minute=0, second=0, microsecond=0)
+                    
+                    # Calculate days ago
+                    days_diff = (now.date() - start_rounded.date()).days
+                    
+                    # Format label based on how recent it is
+                    if days_diff == 0:
+                        label_text = "Today"
+                    elif days_diff == 1:
+                        label_text = "Yesterday"
+                    elif days_diff <= 7:
+                        # Show day name + xd ago (e.g., "Friday 2d ago")
+                        day_name = start_rounded.strftime("%A")
+                        label_text = f"{day_name} {days_diff}d ago"
+                    else:
+                        # Older shifts: show date with rounded time
+                        label_text = start_rounded.strftime("%m/%d %I%p").lower().replace(":00", "")
                 except:
                     label_text = shift.get("date", "Unknown")
             
@@ -4301,11 +4747,22 @@ class StatisticsWindow:
                 return shift.get("records", []), f"Shift: {desc}"
             return [], "No shift selected"
         
+        elif period == "this_work_week":
+            # Current work week: Monday 11pm to next Monday 8am
+            start, end = self._get_work_week_range(now, "this")
+            records = self._get_records_in_range(start, end)
+            return records, "This Work Week"
+        
         elif period == "last_work_week":
-            # Work week: Monday night to next Monday morning (7 on, 7 off)
-            # Find the most recent Monday that started a work week
-            records = self._get_records_in_range(now - timedelta(days=14), now)
+            # Previous work week: Monday 11pm to next Monday 8am
+            start, end = self._get_work_week_range(now, "last")
+            records = self._get_records_in_range(start, end)
             return records, "Last Work Week"
+        
+        elif period == "all_time":
+            # All records from all time
+            records = self._get_records_in_range(datetime.min.replace(year=2000), now)
+            return records, "All Time"
         
         elif period == "last_2_weeks":
             records = self._get_records_in_range(now - timedelta(days=28), now)
@@ -4324,6 +4781,46 @@ class StatisticsWindow:
             return records, "Last Year"
         
         return [], "Unknown period"
+    
+    def _get_work_week_range(self, target_date: datetime, which_week: str = "last") -> Tuple[datetime, datetime]:
+        """Calculate work week range (Monday 11pm to next Monday 8am).
+        
+        Args:
+            target_date: Reference date
+            which_week: "this" for current work week, "last" for previous work week
+            
+        Returns:
+            Tuple of (start_datetime, end_datetime) for the work week
+        """
+        # Work week: Monday 11pm to next Monday 8am
+        # Find the Monday that started the current work week
+        days_since_monday = target_date.weekday()  # Monday = 0
+        
+        # Determine which work week we're in
+        if days_since_monday == 0 and target_date.hour < 8:
+            # It's Monday before 8am - we're still in the previous work week
+            # Find last Monday 11pm (which is 8 days ago Monday 11pm)
+            work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=8)
+        else:
+            # After 8am Monday or later in week - find the Monday that started this week
+            if days_since_monday == 0:
+                # It's Monday after 8am - current work week started yesterday (last Monday 11pm)
+                work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)
+            else:
+                # It's Tuesday-Sunday - find the most recent Monday
+                work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
+        
+        # Work week starts Monday 11pm (23:00)
+        work_week_start = work_week_start_monday.replace(hour=23, minute=0, second=0, microsecond=0)
+        # Work week ends next Monday 8am
+        work_week_end = (work_week_start_monday + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
+        
+        if which_week == "last":
+            # Go back one week (7 days)
+            work_week_start = work_week_start - timedelta(days=7)
+            work_week_end = work_week_end - timedelta(days=7)
+        
+        return work_week_start, work_week_end
     
     def _get_records_in_range(self, start: datetime, end: datetime) -> List[dict]:
         """Get all records within a date range."""
@@ -4352,32 +4849,90 @@ class StatisticsWindow:
         
         return records
     
+    def _expand_multi_accession_records(self, records: List[dict]) -> List[dict]:
+        """Expand multi-accession records into individual modality records.
+        
+        For records with study_type like "Multiple XR", expand them into
+        multiple XR records based on accession_count.
+        """
+        expanded_records = []
+        for record in records:
+            study_type = record.get("study_type", "Unknown")
+            
+            # Check if this is a multi-accession record
+            if study_type.startswith("Multiple ") and record.get("is_multi_accession", False):
+                # Extract the actual modality (e.g., "XR" from "Multiple XR")
+                modality = study_type.replace("Multiple ", "").strip()
+                accession_count = record.get("accession_count", 1)
+                
+                # Expand into multiple records with the actual modality
+                # Split RVU and duration across the accessions
+                total_rvu = record.get("rvu", 0)
+                total_duration = record.get("duration_seconds", 0)
+                rvu_per_study = total_rvu / accession_count if accession_count > 0 else 0
+                duration_per_study = total_duration / accession_count if accession_count > 0 else 0
+                
+                # Get individual procedures if available
+                individual_procedures = record.get("individual_procedures", [])
+                
+                for i in range(accession_count):
+                    expanded_record = record.copy()
+                    expanded_record["study_type"] = modality
+                    expanded_record["rvu"] = rvu_per_study
+                    expanded_record["duration_seconds"] = duration_per_study
+                    expanded_record["is_multi_accession"] = False  # Mark as individual now
+                    
+                    # Update procedure text to show which one of the multiple studies this is
+                    if individual_procedures and i < len(individual_procedures):
+                        # Use the actual individual procedure name
+                        expanded_record["procedure"] = individual_procedures[i]
+                    else:
+                        # Fall back to showing "1/3", "2/3", etc.
+                        original_procedure = record.get("procedure", f"Multiple {modality}")
+                        # Extract the base procedure name (remove the "(3 studies)" part)
+                        base_procedure = original_procedure.split(" (")[0] if " (" in original_procedure else original_procedure
+                        expanded_record["procedure"] = f"{base_procedure} ({i+1}/{accession_count})"
+                    
+                    expanded_records.append(expanded_record)
+            else:
+                # Regular record, keep as-is
+                expanded_records.append(record)
+        
+        return expanded_records
+    
     def refresh_data(self):
         """Refresh the data display based on current selections."""
         records, period_desc = self.get_records_for_period()
         self.period_label.config(text=period_desc)
         
+        # Expand multi-accession records into individual modality records for statistics
+        records = self._expand_multi_accession_records(records)
+        
         view_mode = self.view_mode.get()
         
-        # Show/hide trees based on view mode
-        if view_mode == "efficiency":
-            # Hide regular tree and its scrollbars, show efficiency trees
-            self.tree.pack_forget()
-            self.tree_scrollbar_y.pack_forget()
-            self.tree_scrollbar_x.pack_forget()
-            if self.efficiency_frame:
-                self.efficiency_frame.pack(fill=tk.BOTH, expand=True)
-        else:
-            # Hide efficiency trees, show regular tree and its scrollbars
-            if self.efficiency_frame:
+        # Hide tree for all views (all use Canvas now)
+        self.tree.pack_forget()
+        self.tree_scrollbar_y.pack_forget()
+        self.tree_scrollbar_x.pack_forget()
+        
+        # Hide all Canvas tables and efficiency frame (they will be recreated/shown by each view)
+        canvas_tables = ['_summary_table', '_all_studies_table', '_by_modality_table', 
+                        '_by_patient_class_table', '_by_study_type_table', '_by_hour_table']
+        for table_attr in canvas_tables:
+            if hasattr(self, table_attr):
+                try:
+                    table = getattr(self, table_attr)
+                    if hasattr(table, 'frame'):
+                        table.frame.pack_forget()
+                except:
+                    pass
+        
+        # Hide efficiency frame
+        if self.efficiency_frame:
+            try:
                 self.efficiency_frame.pack_forget()
-            self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            self.tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
-            self.tree_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
-            
-            # Clear existing tree
-            for item in self.tree.get_children():
-                self.tree.delete(item)
+            except:
+                pass
         
         if view_mode == "by_hour":
             self._display_by_hour(records)
@@ -4404,22 +4959,8 @@ class StatisticsWindow:
         )
     
     def _display_by_hour(self, records: List[dict]):
-        """Display data broken down by hour."""
-        # Configure columns
-        self.tree["columns"] = ("hour", "studies", "rvu", "avg_rvu", "top_modality")
-        self.tree.heading("hour", text="Hour", command=lambda: self._sort_column("hour"))
-        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
-        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
-        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
-        self.tree.heading("top_modality", text="Top Modality", command=lambda: self._sort_column("top_modality"))
-        
-        self.tree.column("hour", width=120, anchor=tk.CENTER)
-        self.tree.column("studies", width=80, anchor=tk.CENTER)
-        self.tree.column("rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("top_modality", width=120, anchor=tk.CENTER)
-        
-        # Group by hour
+        """Display data broken down by hour using Canvas table."""
+        # Group by hour and collect all modalities first
         hour_data = {}
         all_modalities = {}
         for record in records:
@@ -4428,7 +4969,7 @@ class StatisticsWindow:
                 hour = rec_time.hour
             except:
                 continue
-            
+                
             if hour not in hour_data:
                 hour_data[hour] = {"studies": 0, "rvu": 0, "modalities": {}}
             
@@ -4440,6 +4981,33 @@ class StatisticsWindow:
             modality = study_type.split()[0] if study_type else "Unknown"
             hour_data[hour]["modalities"][modality] = hour_data[hour]["modalities"].get(modality, 0) + 1
             all_modalities[modality] = all_modalities.get(modality, 0) + 1
+        
+        # Sort modalities by name for consistent column order
+        sorted_modalities = sorted(all_modalities.keys())
+        
+        # Build dynamic columns: Hour, Studies, RVU, Avg/Study, then one column per modality
+        columns = [
+            {'name': 'hour', 'width': 120, 'text': 'Hour', 'sortable': True},
+            {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': True},
+            {'name': 'rvu', 'width': 80, 'text': 'RVU', 'sortable': True},
+            {'name': 'avg_rvu', 'width': 80, 'text': 'Avg/Study', 'sortable': True}
+        ]
+        for modality in sorted_modalities:
+            columns.append({'name': modality, 'width': 70, 'text': modality, 'sortable': True})
+        
+        # Clear/create Canvas table
+        if hasattr(self, '_by_hour_table'):
+            try:
+                self._by_hour_table.frame.pack_forget()
+                self._by_hour_table.frame.destroy()
+            except:
+                pass
+            delattr(self, '_by_hour_table')
+        
+        self._by_hour_table = CanvasTable(self.table_frame, columns, app=self.app)
+        # Ensure table is visible
+        self._by_hour_table.frame.pack_forget()  # Remove any existing packing
+        self._by_hour_table.pack(fill=tk.BOTH, expand=True)
         
         # Calculate totals
         total_studies = sum(d["studies"] for d in hour_data.values())
@@ -4458,48 +5026,66 @@ class StatisticsWindow:
             
             avg_rvu = data["rvu"] / data["studies"] if data["studies"] > 0 else 0
             
-            # Top modality
-            modalities = data["modalities"]
-            top_mod = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
+            # Build row cells
+            row_cells = {
+                'hour': hour_str,
+                'studies': str(data["studies"]),
+                'rvu': f"{data['rvu']:.1f}",
+                'avg_rvu': f"{avg_rvu:.2f}"
+            }
             
-            self.tree.insert("", tk.END, values=(
-                hour_str,
-                data["studies"],
-                f"{data['rvu']:.1f}",
-                f"{avg_rvu:.2f}",
-                top_mod
-            ))
+            # Add count for each modality
+            for modality in sorted_modalities:
+                count = data["modalities"].get(modality, 0)
+                row_cells[modality] = str(count) if count > 0 else ""
+            
+            self._by_hour_table.add_row(row_cells)
         
         # Add totals row
         if hour_data:
-            self.tree.insert("", tk.END, values=("─" * 10, "─" * 6, "─" * 6, "─" * 6, "─" * 10))
             total_avg = total_rvu / total_studies if total_studies > 0 else 0
-            top_overall = max(all_modalities.keys(), key=lambda k: all_modalities[k]) if all_modalities else "N/A"
-            self.tree.insert("", tk.END, values=(
-                "TOTAL",
-                total_studies,
-                f"{total_rvu:.1f}",
-                f"{total_avg:.2f}",
-                top_overall
-            ))
+            total_row = {
+                'hour': 'TOTAL',
+                'studies': str(total_studies),
+                'rvu': f"{total_rvu:.1f}",
+                'avg_rvu': f"{total_avg:.2f}"
+            }
+            # Add total counts for each modality
+            for modality in sorted_modalities:
+                total_count = all_modalities[modality]
+                total_row[modality] = str(total_count) if total_count > 0 else ""
+            self._by_hour_table.add_row(total_row, is_total=True)
+        
+        # Update display once after all rows are added
+        self._by_hour_table.update_data()
     
     def _display_by_modality(self, records: List[dict]):
-        """Display data broken down by modality."""
-        # Configure columns
-        self.tree["columns"] = ("modality", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("modality", text="Modality", command=lambda: self._sort_column("modality"))
-        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
-        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
-        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
-        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
-        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
+        """Display data broken down by modality using Canvas table."""
+        # Clear/create Canvas table
+        if hasattr(self, '_by_modality_table'):
+            try:
+                self._by_modality_table.clear()
+            except:
+                if hasattr(self, '_by_modality_table'):
+                    self._by_modality_table.frame.pack_forget()
+                    self._by_modality_table.frame.destroy()
+                    delattr(self, '_by_modality_table')
         
-        self.tree.column("modality", width=100, anchor=tk.CENTER)
-        self.tree.column("studies", width=80, anchor=tk.CENTER)
-        self.tree.column("rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        if not hasattr(self, '_by_modality_table'):
+            columns = [
+                {'name': 'modality', 'width': 100, 'text': 'Modality', 'sortable': True},
+                {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': True},
+                {'name': 'rvu', 'width': 80, 'text': 'RVU', 'sortable': True},
+                {'name': 'avg_rvu', 'width': 80, 'text': 'Avg/Study', 'sortable': True},
+                {'name': 'pct_studies', 'width': 80, 'text': '% Studies', 'sortable': True},
+                {'name': 'pct_rvu', 'width': 80, 'text': '% RVU', 'sortable': True}
+            ]
+            self._by_modality_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._by_modality_table.frame.pack_forget()  # Remove any existing packing
+        self._by_modality_table.pack(fill=tk.BOTH, expand=True)
+        self._by_modality_table.clear()
         
         # Group by modality
         modality_data = {}
@@ -4526,45 +5112,57 @@ class StatisticsWindow:
             pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
             pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
             
-            self.tree.insert("", tk.END, values=(
-                modality,
-                data["studies"],
-                f"{data['rvu']:.1f}",
-                f"{avg_rvu:.2f}",
-                f"{pct_studies:.1f}%",
-                f"{pct_rvu:.1f}%"
-            ))
+            self._by_modality_table.add_row({
+                'modality': modality,
+                'studies': str(data["studies"]),
+                'rvu': f"{data['rvu']:.1f}",
+                'avg_rvu': f"{avg_rvu:.2f}",
+                'pct_studies': f"{pct_studies:.1f}%",
+                'pct_rvu': f"{pct_rvu:.1f}%"
+            })
         
         # Add totals row
         if modality_data:
-            self.tree.insert("", tk.END, values=("─" * 8, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
             total_avg = total_rvu / total_studies if total_studies > 0 else 0
-            self.tree.insert("", tk.END, values=(
-                "TOTAL",
-                total_studies,
-                f"{total_rvu:.1f}",
-                f"{total_avg:.2f}",
-                "100%",
-                "100%"
-            ))
+            self._by_modality_table.add_row({
+                'modality': 'TOTAL',
+                'studies': str(total_studies),
+                'rvu': f"{total_rvu:.1f}",
+                'avg_rvu': f"{total_avg:.2f}",
+                'pct_studies': '100%',
+                'pct_rvu': '100%'
+            }, is_total=True)
+        
+        # Update display once after all rows are added
+        self._by_modality_table.update_data()
     
     def _display_by_patient_class(self, records: List[dict]):
-        """Display data broken down by patient class."""
-        # Configure columns
-        self.tree["columns"] = ("patient_class", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("patient_class", text="Patient Class", command=lambda: self._sort_column("patient_class"))
-        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
-        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
-        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
-        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
-        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
+        """Display data broken down by patient class using Canvas table."""
+        # Clear/create Canvas table
+        if hasattr(self, '_by_patient_class_table'):
+            try:
+                self._by_patient_class_table.clear()
+            except:
+                if hasattr(self, '_by_patient_class_table'):
+                    self._by_patient_class_table.frame.pack_forget()
+                    self._by_patient_class_table.frame.destroy()
+                    delattr(self, '_by_patient_class_table')
         
-        self.tree.column("patient_class", width=120, anchor=tk.CENTER)
-        self.tree.column("studies", width=80, anchor=tk.CENTER)
-        self.tree.column("rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        if not hasattr(self, '_by_patient_class_table'):
+            columns = [
+                {'name': 'patient_class', 'width': 120, 'text': 'Patient Class', 'sortable': True},
+                {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': True},
+                {'name': 'rvu', 'width': 80, 'text': 'RVU', 'sortable': True},
+                {'name': 'avg_rvu', 'width': 80, 'text': 'Avg/Study', 'sortable': True},
+                {'name': 'pct_studies', 'width': 80, 'text': '% Studies', 'sortable': True},
+                {'name': 'pct_rvu', 'width': 80, 'text': '% RVU', 'sortable': True}
+            ]
+            self._by_patient_class_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._by_patient_class_table.frame.pack_forget()  # Remove any existing packing
+        self._by_patient_class_table.pack(fill=tk.BOTH, expand=True)
+        self._by_patient_class_table.clear()
         
         # Group by patient class
         class_data = {}
@@ -4593,45 +5191,57 @@ class StatisticsWindow:
             pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
             pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
             
-            self.tree.insert("", tk.END, values=(
-                patient_class,
-                data["studies"],
-                f"{data['rvu']:.1f}",
-                f"{avg_rvu:.2f}",
-                f"{pct_studies:.1f}%",
-                f"{pct_rvu:.1f}%"
-            ))
+            self._by_patient_class_table.add_row({
+                'patient_class': patient_class,
+                'studies': str(data["studies"]),
+                'rvu': f"{data['rvu']:.1f}",
+                'avg_rvu': f"{avg_rvu:.2f}",
+                'pct_studies': f"{pct_studies:.1f}%",
+                'pct_rvu': f"{pct_rvu:.1f}%"
+            })
         
         # Add totals row
         if class_data:
-            self.tree.insert("", tk.END, values=("─" * 10, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
             total_avg = total_rvu / total_studies if total_studies > 0 else 0
-            self.tree.insert("", tk.END, values=(
-                "TOTAL",
-                total_studies,
-                f"{total_rvu:.1f}",
-                f"{total_avg:.2f}",
-                "100%",
-                "100%"
-            ))
+            self._by_patient_class_table.add_row({
+                'patient_class': 'TOTAL',
+                'studies': str(total_studies),
+                'rvu': f"{total_rvu:.1f}",
+                'avg_rvu': f"{total_avg:.2f}",
+                'pct_studies': '100%',
+                'pct_rvu': '100%'
+            }, is_total=True)
+        
+        # Update display once after all rows are added
+        self._by_patient_class_table.update_data()
     
     def _display_by_study_type(self, records: List[dict]):
-        """Display data broken down by study type."""
-        # Configure columns
-        self.tree["columns"] = ("study_type", "studies", "rvu", "avg_rvu", "pct_studies", "pct_rvu")
-        self.tree.heading("study_type", text="Study Type", command=lambda: self._sort_column("study_type"))
-        self.tree.heading("studies", text="Studies", command=lambda: self._sort_column("studies"))
-        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
-        self.tree.heading("avg_rvu", text="Avg/Study", command=lambda: self._sort_column("avg_rvu"))
-        self.tree.heading("pct_studies", text="% Studies", command=lambda: self._sort_column("pct_studies"))
-        self.tree.heading("pct_rvu", text="% RVU", command=lambda: self._sort_column("pct_rvu"))
+        """Display data broken down by study type using Canvas table."""
+        # Clear/create Canvas table
+        if hasattr(self, '_by_study_type_table'):
+            try:
+                self._by_study_type_table.clear()
+            except:
+                if hasattr(self, '_by_study_type_table'):
+                    self._by_study_type_table.frame.pack_forget()
+                    self._by_study_type_table.frame.destroy()
+                    delattr(self, '_by_study_type_table')
         
-        self.tree.column("study_type", width=150, anchor=tk.CENTER)
-        self.tree.column("studies", width=80, anchor=tk.CENTER)
-        self.tree.column("rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("avg_rvu", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_studies", width=80, anchor=tk.CENTER)
-        self.tree.column("pct_rvu", width=80, anchor=tk.CENTER)
+        if not hasattr(self, '_by_study_type_table'):
+            columns = [
+                {'name': 'study_type', 'width': 150, 'text': 'Study Type', 'sortable': True},
+                {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': True},
+                {'name': 'rvu', 'width': 80, 'text': 'RVU', 'sortable': True},
+                {'name': 'avg_rvu', 'width': 80, 'text': 'Avg/Study', 'sortable': True},
+                {'name': 'pct_studies', 'width': 80, 'text': '% Studies', 'sortable': True},
+                {'name': 'pct_rvu', 'width': 80, 'text': '% RVU', 'sortable': True}
+            ]
+            self._by_study_type_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._by_study_type_table.frame.pack_forget()  # Remove any existing packing
+        self._by_study_type_table.pack(fill=tk.BOTH, expand=True)
+        self._by_study_type_table.clear()
         
         # Group by study type
         type_data = {}
@@ -4660,27 +5270,29 @@ class StatisticsWindow:
             pct_studies = (data["studies"] / total_studies * 100) if total_studies > 0 else 0
             pct_rvu = (data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
             
-            self.tree.insert("", tk.END, values=(
-                study_type,
-                data["studies"],
-                f"{data['rvu']:.1f}",
-                f"{avg_rvu:.2f}",
-                f"{pct_studies:.1f}%",
-                f"{pct_rvu:.1f}%"
-            ))
+            self._by_study_type_table.add_row({
+                'study_type': study_type,
+                'studies': str(data["studies"]),
+                'rvu': f"{data['rvu']:.1f}",
+                'avg_rvu': f"{avg_rvu:.2f}",
+                'pct_studies': f"{pct_studies:.1f}%",
+                'pct_rvu': f"{pct_rvu:.1f}%"
+            })
         
         # Add totals row
         if type_data:
-            self.tree.insert("", tk.END, values=("─" * 12, "─" * 6, "─" * 6, "─" * 6, "─" * 6, "─" * 6))
             total_avg = total_rvu / total_studies if total_studies > 0 else 0
-            self.tree.insert("", tk.END, values=(
-                "TOTAL",
-                total_studies,
-                f"{total_rvu:.1f}",
-                f"{total_avg:.2f}",
-                "100%",
-                "100%"
-            ))
+            self._by_study_type_table.add_row({
+                'study_type': 'TOTAL',
+                'studies': str(total_studies),
+                'rvu': f"{total_rvu:.1f}",
+                'avg_rvu': f"{total_avg:.2f}",
+                'pct_studies': '100%',
+                'pct_rvu': '100%'
+            }, is_total=True)
+        
+        # Update display once after all rows are added
+        self._by_study_type_table.update_data()
     
     def _format_duration(self, seconds: float) -> str:
         """Format duration in seconds to a human-readable string (e.g., '5m 30s', '1h 23m')."""
@@ -4703,20 +5315,32 @@ class StatisticsWindow:
         return " ".join(parts) if parts else "0s"
     
     def _display_all_studies(self, records: List[dict]):
-        """Display all individual studies with Procedure, Study Type, RVU, and Time to Read columns."""
-        # Configure columns
-        self.tree["columns"] = ("procedure", "study_type", "rvu", "time_to_read")
-        self.tree.heading("procedure", text="Procedure", command=lambda: self._sort_column("procedure"))
-        self.tree.heading("study_type", text="Study Type", command=lambda: self._sort_column("study_type"))
-        self.tree.heading("rvu", text="RVU", command=lambda: self._sort_column("rvu"))
-        self.tree.heading("time_to_read", text="Time to Read", command=lambda: self._sort_column("time_to_read"))
+        """Display all individual studies using Canvas table."""
+        # Clear/create Canvas table
+        if hasattr(self, '_all_studies_table'):
+            try:
+                self._all_studies_table.clear()
+            except:
+                if hasattr(self, '_all_studies_table'):
+                    self._all_studies_table.frame.pack_forget()
+                    self._all_studies_table.frame.destroy()
+                    delattr(self, '_all_studies_table')
         
-        self.tree.column("procedure", width=350, anchor=tk.W)
-        self.tree.column("study_type", width=150, anchor=tk.CENTER)
-        self.tree.column("rvu", width=100, anchor=tk.CENTER)
-        self.tree.column("time_to_read", width=120, anchor=tk.CENTER)
+        if not hasattr(self, '_all_studies_table'):
+            columns = [
+                {'name': 'procedure', 'width': 350, 'text': 'Procedure', 'sortable': True},
+                {'name': 'study_type', 'width': 150, 'text': 'Study Type', 'sortable': True},
+                {'name': 'rvu', 'width': 100, 'text': 'RVU', 'sortable': True},
+                {'name': 'time_to_read', 'width': 120, 'text': 'Time to Read', 'sortable': True}
+            ]
+            self._all_studies_table = CanvasTable(self.table_frame, columns, app=self.app)
         
-        # Display all studies
+        # Always pack the table to ensure it's visible
+        self._all_studies_table.frame.pack_forget()  # Remove any existing packing
+        self._all_studies_table.pack(fill=tk.BOTH, expand=True)
+        self._all_studies_table.clear()
+        
+        # Add all studies
         for record in records:
             procedure = record.get("procedure", "Unknown")
             study_type = record.get("study_type", "Unknown")
@@ -4724,12 +5348,15 @@ class StatisticsWindow:
             duration = record.get("duration_seconds", 0)
             time_to_read = self._format_duration(duration)
             
-            self.tree.insert("", tk.END, values=(
-                procedure,
-                study_type,
-                f"{rvu:.1f}",
-                time_to_read
-            ))
+            self._all_studies_table.add_row({
+                'procedure': procedure,
+                'study_type': study_type,
+                'rvu': f"{rvu:.1f}",
+                'time_to_read': time_to_read
+            })
+        
+        # Update display once after all rows are added
+        self._all_studies_table.update_data()
     
     def _sort_column(self, col: str, reverse: bool = None):
         """Sort treeview by column. Toggles direction on each click."""
@@ -4835,41 +5462,44 @@ class StatisticsWindow:
                                  command=lambda c=column: self._sort_column(c))
     
     def _display_efficiency(self, records: List[dict]):
-        """Display efficiency view showing average duration by modality and hour of day.
-        Two separate Treeviews stacked vertically: 11pm-10am (night) and 11am-10pm (day).
-        Each Treeview has its own column headers with hour labels.
+        """Display efficiency view with Canvas-based spreadsheet showing per-cell heatmap coloring.
+        Two sections: 11pm-10am (night) and 11am-10pm (day), each with Modality + 12 hour columns.
         """
-        # Create efficiency frame if it doesn't exist
+        # Ensure efficiency frame exists
         if self.efficiency_frame is None:
             self.efficiency_frame = ttk.Frame(self.table_frame)
         
-        # Clear existing trees if they exist
-        for widget in self.efficiency_frame.winfo_children():
-            widget.destroy()
+        # Clear existing widgets
+        for widget in list(self.efficiency_frame.winfo_children()):
+            try:
+                widget.destroy()
+            except:
+                pass
         
-        # Define hour ranges: 11pm-10am (12 hours) and 11am-10pm (12 hours)
+        # Make sure efficiency frame is packed and visible
+        try:
+            self.efficiency_frame.pack_forget()
+        except:
+            pass
+        self.efficiency_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Define hour ranges
         night_hours = list(range(23, 24)) + list(range(0, 11))  # 11pm-10am (12 hours)
         day_hours = list(range(11, 23))  # 11am-10pm (12 hours)
-        
-        # Build hour columns - same column names for both trees
-        hour_columns = [f"h{i:02d}" for i in range(12)]  # 12 columns for hours
         
         # Build data structure: modality -> hour -> list of durations
         efficiency_data = {}
         
         for record in records:
-            # Get modality
             study_type = record.get("study_type", "Unknown")
             modality = study_type.split()[0] if study_type else "Unknown"
             
-            # Get hour from time_performed
             try:
                 rec_time = datetime.fromisoformat(record.get("time_performed", ""))
                 hour = rec_time.hour
             except:
                 continue
             
-            # Get duration
             duration = record.get("duration_seconds", 0)
             if duration and duration > 0:
                 if modality not in efficiency_data:
@@ -4878,166 +5508,301 @@ class StatisticsWindow:
                     efficiency_data[modality][hour] = []
                 efficiency_data[modality][hour].append(duration)
         
-        # Get all modalities sorted
         all_modalities = sorted(efficiency_data.keys())
         
-        # Helper function to create a treeview with data
-        def create_treeview(parent_frame, hours_list, tree_name):
-            """Create a Treeview with columns for modality + hours."""
-            # Frame for this treeview with scrollbars
-            tree_frame = ttk.Frame(parent_frame)
-            tree_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        # Helper function to get heatmap color (blue=low duration, red=high duration)
+        # Get theme colors for efficiency view
+        theme_colors = self.app.theme_colors if hasattr(self, 'app') and hasattr(self.app, 'theme_colors') else {}
+        data_bg = theme_colors.get("entry_bg", "white")
+        text_fg = theme_colors.get("fg", "black")
+        border_color = theme_colors.get("border_color", "#acacac")
+        total_bg = theme_colors.get("button_bg", "#e1e1e1")
+        
+        def get_heatmap_color(duration, min_dur, max_dur, range_val):
+            """Return hex color: light blue (low) to light red (high)."""
+            if duration is None or range_val == 0:
+                return data_bg  # Use theme background for empty
             
-            # Create Treeview (no horizontal scrolling needed)
-            tree = ttk.Treeview(tree_frame, show="headings")
-            tree_scrollbar_y = ttk.Scrollbar(tree_frame, orient="vertical", command=tree.yview)
-            tree.configure(yscrollcommand=tree_scrollbar_y.set)
+            normalized = (duration - min_dur) / range_val
+            # Light blue: RGB(227, 242, 253) = #E3F2FD
+            # Light red: RGB(255, 235, 238) = #FFEBEE
+            r = int(227 + (255 - 227) * normalized)
+            g = int(242 + (235 - 242) * normalized)
+            b = int(253 + (238 - 253) * normalized)
+            return f"#{r:02x}{g:02x}{b:02x}"
+        
+        # Helper to create Canvas-based spreadsheet table
+        def create_spreadsheet_table(parent_frame, hours_list, section_title):
+            """Create a Canvas-based spreadsheet table with per-cell heatmap coloring."""
+            # Frame with scrollbar
+            table_frame = ttk.Frame(parent_frame)
+            table_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
             
-            # Sort function that works with this specific tree
-            def sort_tree_column(col):
-                """Sort this specific tree by column."""
-                # Track sort state for this tree
-                sort_key = f"{tree_name}_{col}"
-                if not hasattr(self, '_tree_sort_state'):
-                    self._tree_sort_state = {}
-                if sort_key not in self._tree_sort_state:
-                    self._tree_sort_state[sort_key] = False
-                
-                # Toggle sort direction
-                reverse = self._tree_sort_state[sort_key] = not self._tree_sort_state[sort_key]
-                
-                # Get all items
-                items = [(tree.set(item, col), tree.item(item)['values']) for item in tree.get_children()]
-                
-                # Separate totals
-                regular_items = []
-                totals = []
-                for sort_val, values in items:
-                    is_total = any(("─" in str(v) or str(v).strip() == "TOTAL") for v in values if v)
-                    if is_total:
-                        totals.append((sort_val, values))
-                    else:
-                        regular_items.append((sort_val, values))
-                
-                # Sort regular items
-                try:
-                    if col.startswith("h"):  # Hour columns - parse duration
-                        def parse_duration(val_str):
-                            if not val_str or val_str == "-" or "─" in val_str:
-                                return float('-inf')
-                            val_str = re.sub(r'\s*\(\d+\)$', '', str(val_str)).strip()
-                            total_seconds = 0
-                            hours = re.search(r'(\d+)h', val_str)
-                            minutes = re.search(r'(\d+)m', val_str)
-                            seconds = re.search(r'(\d+)s', val_str)
-                            if hours:
-                                total_seconds += int(hours.group(1)) * 3600
-                            if minutes:
-                                total_seconds += int(minutes.group(1)) * 60
-                            if seconds:
-                                total_seconds += int(seconds.group(1))
-                            return total_seconds
-                        regular_items.sort(key=lambda t: parse_duration(t[0]), reverse=reverse)
-                    else:
-                        regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
-                except:
-                    regular_items.sort(key=lambda t: str(t[0]).lower() if t[0] else "", reverse=reverse)
-                
-                # Clear and repopulate
-                for item in tree.get_children():
-                    tree.delete(item)
-                for _, values in regular_items:
-                    tree.insert("", tk.END, values=values)
-                for _, values in totals:
-                    tree.insert("", tk.END, values=values)
-                
-                # Update headers
-                indicator = "▼ " if reverse else "▲ "
-                for column in tree["columns"]:
-                    heading_text = tree.heading(column)["text"].replace("▲ ", "").replace("▼ ", "").strip()
-                    if column == col:
-                        tree.heading(column, text=indicator + heading_text, command=lambda c=column: sort_tree_column(c))
-                    else:
-                        tree.heading(column, text=heading_text, command=lambda c=column: sort_tree_column(c))
+            # Get theme colors from app
+            theme_colors = self.app.theme_colors if hasattr(self, 'app') and hasattr(self.app, 'theme_colors') else {}
+            canvas_bg = theme_colors.get("canvas_bg", "#f0f0f0")
+            border_color = theme_colors.get("border_color", "#acacac")
+            canvas = tk.Canvas(table_frame, bg=canvas_bg, highlightthickness=1, highlightbackground=border_color)
+            scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=canvas.yview)
             
-            # Configure columns: Modality + 12 hour columns
-            tree["columns"] = ["modality"] + hour_columns
-            tree.heading("modality", text="Modality", command=lambda: sort_tree_column("modality"))
+            # Inner frame on canvas for content
+            inner_frame = ttk.Frame(canvas)
+            canvas_window = canvas.create_window((0, 0), window=inner_frame, anchor="nw")
             
-            # Set hour column headers with button-style headers
-            for idx, hour in enumerate(hours_list):
-                hour_12 = hour % 12 or 12
-                am_pm = "AM" if hour < 12 else "PM"
-                hour_label = f"{hour_12}{am_pm}"
-                col_name = hour_columns[idx]
-                tree.heading(col_name, text=hour_label, command=lambda c=col_name: sort_tree_column(c))
+            # Configure scrolling
+            def configure_scroll_region(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
             
-            # Set column widths (adjusted to fit without horizontal scrolling)
-            tree.column("modality", width=100, anchor=tk.CENTER, stretch=False)
-            for col in hour_columns:
-                tree.column(col, width=80, anchor=tk.CENTER, stretch=False)
+            def configure_canvas_width(event):
+                canvas_width = event.width
+                canvas.itemconfig(canvas_window, width=canvas_width)
             
-            # Display modality rows
+            inner_frame.bind("<Configure>", configure_scroll_region)
+            canvas.bind("<Configure>", configure_canvas_width)
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Table dimensions
+            modality_col_width = 100
+            hour_col_width = 75
+            row_height = 25
+            header_height = 30
+            
+            # Calculate table width
+            table_width = modality_col_width + (12 * hour_col_width)
+            
+            # Get theme colors for efficiency view
+            header_bg = theme_colors.get("button_bg", "#e1e1e1")
+            
+            # Create header row with button-style appearance
+            header_canvas = tk.Canvas(inner_frame, width=table_width, height=header_height, 
+                                     bg=header_bg, highlightthickness=0)
+            header_canvas.pack(fill=tk.X)
+            
+            # Store row data for sorting
+            row_data_list = []
+            total_row_data = None
+            
+            # Sort state
+            sort_column = None
+            sort_reverse = False
+            
+            def draw_headers():
+                """Draw headers with sort indicators."""
+                header_canvas.delete("all")
+                x = 0
+                # Modality header (sortable)
+                header_text = "Modality"
+                if sort_column == "modality":
+                    header_text += " ▼" if sort_reverse else " ▲"
+                rect_id = header_canvas.create_rectangle(x, 0, x + modality_col_width, header_height, 
+                                                         fill='#d0d0d0', outline='#a0a0a0', width=1,
+                                                         tags="header_modality")
+                header_fg = theme_colors.get("fg", "black")
+                header_border = theme_colors.get("border_color", "#acacac")
+                
+                header_canvas.create_text(x + modality_col_width//2, header_height//2, 
+                                         text=header_text, font=('Arial', 9, 'bold'), anchor='center',
+                                         fill=header_fg, tags="header_modality")
+                header_canvas.tag_bind("header_modality", "<Button-1>", lambda e: on_modality_click())
+                header_canvas.tag_bind("header_modality", "<Enter>", lambda e: header_canvas.config(cursor="hand2"))
+                header_canvas.tag_bind("header_modality", "<Leave>", lambda e: header_canvas.config(cursor=""))
+                x += modality_col_width
+                
+                # Hour headers (not sortable)
+                for hour in hours_list:
+                    hour_12 = hour % 12 or 12
+                    am_pm = "AM" if hour < 12 else "PM"
+                    hour_label = f"{hour_12}{am_pm}"
+                    header_canvas.create_rectangle(x, 0, x + hour_col_width, header_height,
+                                                  fill=header_bg, outline=header_border, width=1)
+                    header_canvas.create_text(x + hour_col_width//2, header_height//2,
+                                             text=hour_label, font=('Arial', 9, 'bold'), anchor='center',
+                                             fill=header_fg)
+                    x += hour_col_width
+            
+            def on_modality_click():
+                """Handle modality header click for sorting."""
+                nonlocal sort_column, sort_reverse
+                if sort_column == "modality":
+                    sort_reverse = not sort_reverse
+                else:
+                    sort_column = "modality"
+                    sort_reverse = False
+                draw_headers()
+                draw_rows()
+            
+            def draw_rows():
+                """Draw all rows, sorted if needed."""
+                rows_canvas.delete("all")
+                
+                # Sort row data if needed
+                rows_to_draw = list(row_data_list)
+                if sort_column == "modality":
+                    rows_to_draw.sort(key=lambda r: r['modality'].lower(), reverse=sort_reverse)
+                
+                y = 0
+                for row_data in rows_to_draw:
+                    modality = row_data['modality']
+                    row_cell_data = row_data['cell_data']
+                    min_duration = row_data['min_duration']
+                    max_duration = row_data['max_duration']
+                    duration_range = row_data['duration_range']
+                    
+                    # Draw row
+                    x = 0
+                    # Modality cell
+                    rows_canvas.create_rectangle(x, y, x + modality_col_width, y + row_height,
+                                               fill=data_bg, outline=border_color, width=1)
+                    rows_canvas.create_text(x + modality_col_width//2, y + row_height//2,
+                                           text=modality, font=('Arial', 9), anchor='center',
+                                           fill=text_fg)
+                    x += modality_col_width
+                    
+                    # Hour cells with heatmap
+                    for avg_duration, cell_text in row_cell_data:
+                        cell_color = get_heatmap_color(avg_duration, min_duration, max_duration, duration_range)
+                        rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
+                                                   fill=cell_color, outline=border_color, width=1)
+                        
+                        # Use dark text for shaded cells (light colored), theme text color for unshaded
+                        # Shaded cells are light (blue to red), so use dark text
+                        if cell_color != data_bg and avg_duration is not None:
+                            # Cell is shaded - use dark text for readability
+                            cell_text_color = "#000000"  # Black text for light colored cells
+                        else:
+                            # Cell is not shaded - use theme text color
+                            cell_text_color = text_fg
+                        
+                        rows_canvas.create_text(x + hour_col_width//2, y + row_height//2,
+                                               text=cell_text, font=('Arial', 8), anchor='center',
+                                               fill=cell_text_color)
+                        x += hour_col_width
+                    y += row_height
+                
+                # Draw TOTAL row
+                if total_row_data:
+                    y += 5
+                    x = 0
+                    rows_canvas.create_rectangle(x, y, x + modality_col_width, y + row_height,
+                                               fill=total_bg, outline=border_color, width=1)
+                    rows_canvas.create_text(x + modality_col_width//2, y + row_height//2,
+                                           text="average", font=('Arial', 9, 'bold'), anchor='center',
+                                           fill=text_fg)
+                    x += modality_col_width
+                    
+                    for cell_text in total_row_data['hour_cells']:
+                        rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
+                                                   fill=total_bg, outline=border_color, width=1)
+                        rows_canvas.create_text(x + hour_col_width//2, y + row_height//2,
+                                               text=cell_text, font=('Arial', 8, 'bold'), anchor='center',
+                                               fill=text_fg)
+                        x += hour_col_width
+                    y += row_height
+                
+                rows_canvas.config(height=y + 5)
+            
+            # Get data canvas background from theme
+            data_bg = theme_colors.get("entry_bg", "white")
+            
+            # Create data rows canvas (must be created before draw_rows is called)
+            rows_canvas = tk.Canvas(inner_frame, width=table_width, 
+                                   bg=data_bg, highlightthickness=0)
+            rows_canvas.pack(fill=tk.BOTH, expand=True)
+            
+            # Draw initial headers
+            draw_headers()
+            
+            # Build row data for all modalities
             for modality in all_modalities:
-                row_values = [modality]
+                modality_durations = []
+                row_cell_data = []
+                
                 for hour in hours_list:
                     if hour in efficiency_data[modality]:
                         durations = efficiency_data[modality][hour]
                         avg_duration = sum(durations) / len(durations)
                         count = len(durations)
                         duration_str = self._format_duration(avg_duration)
-                        cell_value = f"{duration_str} ({count})"
+                        cell_text = f"{duration_str} ({count})"
+                        modality_durations.append(avg_duration)
+                        row_cell_data.append((avg_duration, cell_text))
                     else:
-                        cell_value = "-"
-                    row_values.append(cell_value)
-                tree.insert("", tk.END, values=row_values)
+                        row_cell_data.append((None, "-"))
+                
+                # Calculate min/max for heatmap
+                if modality_durations:
+                    min_duration = min(modality_durations)
+                    max_duration = max(modality_durations)
+                    duration_range = max_duration - min_duration if max_duration > min_duration else 1
+                else:
+                    min_duration = max_duration = 0
+                    duration_range = 1
+                
+                row_data_list.append({
+                    'modality': modality,
+                    'cell_data': row_cell_data,
+                    'min_duration': min_duration,
+                    'max_duration': max_duration,
+                    'duration_range': duration_range
+                })
             
-            # Totals row
+            # Build TOTAL row data
             if efficiency_data:
-                row_values = ["TOTAL"]
+                total_hour_cells = []
                 for hour in hours_list:
                     hour_durations = []
-                    for modality in efficiency_data.keys():
-                        if hour in efficiency_data[modality]:
-                            hour_durations.extend(efficiency_data[modality][hour])
+                    for mod in efficiency_data.keys():
+                        if hour in efficiency_data[mod]:
+                            hour_durations.extend(efficiency_data[mod][hour])
                     
                     if hour_durations:
                         avg_duration = sum(hour_durations) / len(hour_durations)
                         count = len(hour_durations)
                         duration_str = self._format_duration(avg_duration)
-                        cell_value = f"{duration_str} ({count})"
+                        cell_text = f"{duration_str} ({count})"
                     else:
-                        cell_value = "-"
-                    row_values.append(cell_value)
-                tree.insert("", tk.END, values=row_values, tags=('total',))
+                        cell_text = "-"
+                    total_hour_cells.append(cell_text)
+                
+                total_row_data = {'hour_cells': total_hour_cells}
             
-            # Configure tags
-            try:
-                tree.tag_configure('total', font=('Arial', 9, 'bold'), background='#f5f5f5')
-            except:
-                pass
+            # Initial draw
+            draw_rows()
             
-            # Pack treeview and vertical scrollbar (only when needed)
-            tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            tree_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+            # Pack canvas and scrollbar
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             
-            return tree
+            return canvas
         
-        # === SECTION 1: NIGHT SHIFT (11pm-10am) ===
-        self.efficiency_night_tree = create_treeview(self.efficiency_frame, night_hours, "night")
-        
-        # === SECTION 2: DAY SHIFT (11am-10pm) ===
-        self.efficiency_day_tree = create_treeview(self.efficiency_frame, day_hours, "day")
+        # Create two spreadsheet tables
+        create_spreadsheet_table(self.efficiency_frame, night_hours, "Night Shift")
+        create_spreadsheet_table(self.efficiency_frame, day_hours, "Day Shift")
     
     def _display_summary(self, records: List[dict]):
-        """Display summary statistics."""
-        # Configure columns
-        self.tree["columns"] = ("metric", "value")
-        self.tree.heading("metric", text="Metric")
-        self.tree.heading("value", text="Value")
+        """Display summary statistics using Canvas table."""
+        # Clear any existing canvas table
+        if hasattr(self, '_summary_table'):
+            try:
+                self._summary_table.clear()
+            except:
+                if hasattr(self, '_summary_table'):
+                    self._summary_table.frame.pack_forget()
+                    self._summary_table.frame.destroy()
+                    delattr(self, '_summary_table')
         
-        self.tree.column("metric", width=250, anchor=tk.CENTER)
-        self.tree.column("value", width=150, anchor=tk.CENTER)
+        # Create Canvas table if it doesn't exist
+        if not hasattr(self, '_summary_table'):
+            columns = [
+                {'name': 'metric', 'width': 300, 'text': 'Metric', 'sortable': True},
+                {'name': 'value', 'width': 200, 'text': 'Value', 'sortable': True}
+            ]
+            self._summary_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._summary_table.frame.pack_forget()  # Remove any existing packing
+        self._summary_table.pack(fill=tk.BOTH, expand=True)
+        self._summary_table.clear()
         
         total_studies = len(records)
         total_rvu = sum(r.get("rvu", 0) for r in records)
@@ -5045,6 +5810,7 @@ class StatisticsWindow:
         
         # Calculate time span - sum of actual shift durations, not time from first to last record
         hours = 0.0
+        shifts_with_records = {}  # Initialize outside conditional
         if records:
             # Get all shifts (current and historical)
             all_shifts = []
@@ -5064,7 +5830,6 @@ class StatisticsWindow:
             if record_times:
                 # Find unique shifts that contain any of these records
                 # Use shift_start as unique identifier since each shift has a unique start time
-                shifts_with_records = {}
                 for record_time in record_times:
                     for shift in all_shifts:
                         try:
@@ -5133,22 +5898,192 @@ class StatisticsWindow:
         
         top_modality = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
         
-        # Insert summary rows
-        self.tree.insert("", tk.END, values=("Total Studies", str(total_studies)))
-        self.tree.insert("", tk.END, values=("Total RVU", f"{total_rvu:.1f}"))
-        self.tree.insert("", tk.END, values=("Average RVU per Study", f"{avg_rvu:.2f}"))
-        self.tree.insert("", tk.END, values=("", ""))  # Spacer
-        self.tree.insert("", tk.END, values=("Time Span", f"{hours:.1f} hours"))
-        self.tree.insert("", tk.END, values=("Studies per Hour", f"{studies_per_hour:.1f}"))
-        self.tree.insert("", tk.END, values=("RVU per Hour", f"{rvu_per_hour:.1f}"))
-        self.tree.insert("", tk.END, values=("", ""))  # Spacer
-        self.tree.insert("", tk.END, values=("Top Modality", f"{top_modality} ({modalities.get(top_modality, 0)} studies)"))
-        self.tree.insert("", tk.END, values=("Unique Modalities", str(len(modalities))))
+        # Calculate shift-level metrics (1, 2, 6)
+        shift_stats = []
+        if records and shifts_with_records:
+            for shift_start_str, shift in shifts_with_records.items():
+                shift_records = shift.get("records", [])
+                if not shift_records:
+                    continue
+                
+                shift_rvu = sum(r.get("rvu", 0) for r in shift_records)
+                shift_studies = len(shift_records)
+                
+                # Calculate shift duration
+                try:
+                    shift_start = datetime.fromisoformat(shift_start_str)
+                    shift_end_str = shift.get("shift_end")
+                    if shift_end_str:
+                        shift_end = datetime.fromisoformat(shift_end_str)
+                        shift_duration = (shift_end - shift_start).total_seconds() / 3600
+                    else:
+                        # Current shift - estimate from records
+                        shift_record_times = []
+                        for r in shift_records:
+                            try:
+                                shift_record_times.append(datetime.fromisoformat(r.get("time_performed", "")))
+                            except:
+                                pass
+                        if shift_record_times:
+                            latest_time = max(shift_record_times)
+                            shift_duration = (latest_time - shift_start).total_seconds() / 3600
+                        else:
+                            shift_duration = 0
+                    
+                    shift_rvu_per_hour = shift_rvu / shift_duration if shift_duration > 0 else 0
+                    
+                    # Format shift date
+                    shift_date = shift_start.strftime("%m/%d/%Y")
+                    
+                    shift_stats.append({
+                        'date': shift_date,
+                        'rvu': shift_rvu,
+                        'rvu_per_hour': shift_rvu_per_hour,
+                        'duration': shift_duration,
+                        'studies': shift_studies
+                    })
+                except:
+                    continue
+        
+        # Find highest RVU shift (1)
+        highest_rvu_shift = None
+        if shift_stats:
+            highest_rvu_shift = max(shift_stats, key=lambda s: s['rvu'])
+        
+        # Find most efficient shift (2)
+        most_efficient_shift = None
+        if shift_stats:
+            most_efficient_shift = max(shift_stats, key=lambda s: s['rvu_per_hour'])
+        
+        # Total shifts completed (6)
+        total_shifts_completed = len(shift_stats)
+        
+        # Average time to read overall (10)
+        all_durations = [r.get("duration_seconds", 0) for r in records if r.get("duration_seconds", 0) > 0]
+        avg_time_to_read = sum(all_durations) / len(all_durations) if all_durations else 0
+        
+        # Calculate hourly metrics (11, 12, 13, 14)
+        hourly_stats = {}
+        for r in records:
+            try:
+                time_performed = datetime.fromisoformat(r.get("time_performed", ""))
+                hour = time_performed.hour
+                
+                if hour not in hourly_stats:
+                    hourly_stats[hour] = {
+                        'studies': 0,
+                        'rvu': 0,
+                        'durations': []
+                    }
+                
+                hourly_stats[hour]['studies'] += 1
+                hourly_stats[hour]['rvu'] += r.get("rvu", 0)
+                duration = r.get("duration_seconds", 0)
+                if duration > 0:
+                    hourly_stats[hour]['durations'].append(duration)
+            except:
+                continue
+        
+        # Find busiest hour (11) - most studies
+        busiest_hour = None
+        if hourly_stats:
+            busiest_hour = max(hourly_stats.keys(), key=lambda h: hourly_stats[h]['studies'])
+        
+        # Find most productive hour (12) - highest RVU
+        most_productive_hour = None
+        if hourly_stats:
+            most_productive_hour = max(hourly_stats.keys(), key=lambda h: hourly_stats[h]['rvu'])
+        
+        # Find fastest hour (14) - shortest average time to read
+        fastest_hour = None
+        fastest_avg_duration = float('inf')
+        if hourly_stats:
+            for hour, stats in hourly_stats.items():
+                if stats['durations']:
+                    avg_duration = sum(stats['durations']) / len(stats['durations'])
+                    if avg_duration < fastest_avg_duration:
+                        fastest_avg_duration = avg_duration
+                        fastest_hour = hour
+        
+        # Calculate consistency score (20) - Coefficient of Variation
+        consistency_score = None
+        if shift_stats and len(shift_stats) > 1:
+            rvu_per_hour_values = [s['rvu_per_hour'] for s in shift_stats if s['rvu_per_hour'] > 0]
+            if rvu_per_hour_values:
+                mean_rvu_per_hour = sum(rvu_per_hour_values) / len(rvu_per_hour_values)
+                if mean_rvu_per_hour > 0:
+                    variance = sum((x - mean_rvu_per_hour) ** 2 for x in rvu_per_hour_values) / len(rvu_per_hour_values)
+                    std_dev = variance ** 0.5
+                    coefficient_of_variation = (std_dev / mean_rvu_per_hour) * 100
+                    consistency_score = coefficient_of_variation
+        
+        # Helper function to format hour
+        def format_hour(h):
+            if h is None:
+                return "N/A"
+            hour_12 = h % 12 or 12
+            am_pm = "AM" if h < 12 else "PM"
+            return f"{hour_12}{am_pm}"
+        
+        # Add summary rows to Canvas table
+        self._summary_table.add_row({'metric': 'Total Studies', 'value': str(total_studies)})
+        self._summary_table.add_row({'metric': 'Total RVU', 'value': f"{total_rvu:.1f}"})
+        self._summary_table.add_row({'metric': 'Average RVU per Study', 'value': f"{avg_rvu:.2f}"})
+        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+        
+        # Shift-level metrics section
+        self._summary_table.add_row({'metric': 'Time Span', 'value': f"{hours:.1f} hours"})
+        self._summary_table.add_row({'metric': 'Studies per Hour', 'value': f"{studies_per_hour:.1f}"})
+        self._summary_table.add_row({'metric': 'RVU per Hour', 'value': f"{rvu_per_hour:.1f}"})
+        self._summary_table.add_row({'metric': 'Total Shifts Completed', 'value': str(total_shifts_completed)})
+        
+        # Highest RVU shift (1)
+        if highest_rvu_shift:
+            self._summary_table.add_row({'metric': 'Highest RVU Shift', 'value': f"{highest_rvu_shift['date']}: {highest_rvu_shift['rvu']:.1f} RVU"})
+        else:
+            self._summary_table.add_row({'metric': 'Highest RVU Shift', 'value': 'N/A'})
+        
+        # Most efficient shift (2)
+        if most_efficient_shift:
+            self._summary_table.add_row({'metric': 'Most Efficient Shift', 'value': f"{most_efficient_shift['date']}: {most_efficient_shift['rvu_per_hour']:.1f} RVU/hr"})
+        else:
+            self._summary_table.add_row({'metric': 'Most Efficient Shift', 'value': 'N/A'})
+        
+        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+        
+        # Average time to read (10)
+        avg_time_formatted = self._format_duration(avg_time_to_read) if avg_time_to_read > 0 else "N/A"
+        self._summary_table.add_row({'metric': 'Average Time to Read', 'value': avg_time_formatted})
+        
+        # Hourly metrics section
+        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+        self._summary_table.add_row({'metric': 'Busiest Hour', 'value': f"{format_hour(busiest_hour)} ({hourly_stats.get(busiest_hour, {}).get('studies', 0)} studies)" if busiest_hour else "N/A"})
+        self._summary_table.add_row({'metric': 'Most Productive Hour', 'value': f"{format_hour(most_productive_hour)} ({hourly_stats.get(most_productive_hour, {}).get('rvu', 0):.1f} RVU)" if most_productive_hour else "N/A"})
+        
+        # Fastest hour (14)
+        if fastest_hour is not None:
+            fastest_formatted = self._format_duration(fastest_avg_duration)
+            fastest_studies = len(hourly_stats[fastest_hour]['durations'])
+            self._summary_table.add_row({'metric': 'Fastest Hour', 'value': f"{format_hour(fastest_hour)} ({fastest_formatted} avg, {fastest_studies} studies)"})
+        else:
+            self._summary_table.add_row({'metric': 'Fastest Hour', 'value': 'N/A'})
+        
+        # Consistency score (20)
+        if consistency_score is not None:
+            # Lower CV = more consistent (better)
+            consistency_label = "Excellent" if consistency_score < 10 else "Good" if consistency_score < 20 else "Fair" if consistency_score < 30 else "Variable"
+            self._summary_table.add_row({'metric': 'Consistency Score', 'value': f"{consistency_score:.1f}% ({consistency_label})"})
+        else:
+            self._summary_table.add_row({'metric': 'Consistency Score', 'value': 'N/A (need 2+ shifts)'})
+        
+        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+        self._summary_table.add_row({'metric': 'Top Modality', 'value': f"{top_modality} ({modalities.get(top_modality, 0)} studies)"})
+        self._summary_table.add_row({'metric': 'Unique Modalities', 'value': str(len(modalities))})
         
         # Add average time to read by modality
         if modality_durations:
-            self.tree.insert("", tk.END, values=("", ""))  # Spacer
-            self.tree.insert("", tk.END, values=("Average Time to Read by Modality", ""))
+            self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+            self._summary_table.add_row({'metric': 'Average Time to Read by Modality', 'value': ''})
             # Sort modalities by average duration (highest first)
             modality_avgs = []
             for mod, durations in modality_durations.items():
@@ -5159,7 +6094,10 @@ class StatisticsWindow:
             modality_avgs.sort(key=lambda x: x[1], reverse=True)
             for mod, avg_duration, count in modality_avgs:
                 avg_formatted = self._format_duration(avg_duration)
-                self.tree.insert("", tk.END, values=(f"  {mod}", f"{avg_formatted} ({count} studies)"))
+                self._summary_table.add_row({'metric': f"  {mod}", 'value': f"{avg_formatted} ({count} studies)"})
+        
+        # Update display once after all rows are added
+        self._summary_table.update_data()
     
     def on_configure(self, event):
         """Handle window configuration changes (move/resize)."""
@@ -5204,7 +6142,8 @@ class StatisticsWindow:
             }
             self.last_saved_x = x
             self.last_saved_y = y
-            self.data_manager.save()
+            # Only save settings (window positions), not records
+            self.data_manager.save(save_records=False)
         except Exception as e:
             logger.error(f"Error saving statistics window position: {e}")
     
