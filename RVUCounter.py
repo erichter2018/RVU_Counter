@@ -775,7 +775,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
                 rvu = rvu_table.get(study_type, 0.0)
                 classification_match_name = study_type
                 classification_match_rvu = rvu
-                logger.info(f"Matched classification rule for '{study_type}': {procedure_text} -> {study_type}")
+                logger.debug(f"Matched classification rule for '{study_type}': {procedure_text} -> {study_type}")
                 break  # Found a classification match, stop searching rules for this study_type
         
         # If we found a classification match, stop searching other study_types
@@ -784,7 +784,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     # If classification rule matched, return it immediately (highest priority)
     if classification_match_name:
-        logger.info(f"Matched classification rule: {procedure_text} -> {classification_match_name} ({classification_match_rvu} RVU)")
+        logger.debug(f"Matched classification rule: {procedure_text} -> {classification_match_name} ({classification_match_rvu} RVU)")
         return classification_match_name, classification_match_rvu
     
     # SECOND: Check direct/exact lookups (exact procedure name matches)
@@ -794,7 +794,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             if lookup_procedure.lower().strip() == procedure_lower:
                 direct_match_rvu = rvu_value
                 direct_match_name = lookup_procedure
-                logger.info(f"Matched direct lookup: {procedure_text} -> {rvu_value} RVU")
+                logger.debug(f"Matched direct lookup: {procedure_text} -> {rvu_value} RVU")
                 break
     
     # If direct lookup matched, return it
@@ -1969,7 +1969,7 @@ class RVUCounterApp:
                         is_new_study = not any(acc == self._last_clario_accession for acc in all_accessions)
                         last_accession = self._last_clario_accession
                     
-                    logger.info(f"Checking Clario: current_accession='{current_accession}', all_accessions={list(all_accessions)}, last_clario_accession='{last_accession}', is_new_study={is_new_study}")
+                    logger.debug(f"Checking Clario: current_accession='{current_accession}', all_accessions={list(all_accessions)}, last_clario_accession='{last_accession}', is_new_study={is_new_study}")
                     
                     if is_new_study:
                         # New study detected - query Clario (don't pass target_accession for multi-accession, let it match any)
