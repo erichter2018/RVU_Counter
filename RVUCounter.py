@@ -18,6 +18,13 @@ from typing import Dict, List, Optional, Tuple
 import threading
 import re
 
+# Try to import tkcalendar for date picker
+try:
+    from tkcalendar import DateEntry
+    HAS_TKCALENDAR = True
+except ImportError:
+    HAS_TKCALENDAR = False
+
 
 # Configure logging
 log_file = os.path.join(os.path.dirname(__file__), "rvu_counter.log")
@@ -1668,46 +1675,9 @@ class RVUCounterApp:
         self.settings_btn = ttk.Button(buttons_frame, text="Settings", command=self.open_settings, width=8)
         self.settings_btn.pack(side=tk.LEFT, padx=3)
         
-        # Recent studies frame
-        self.recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
-        self.recent_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        # Canvas with scrollbar for recent studies
-        canvas_frame = ttk.Frame(self.recent_frame)
-        canvas_frame.pack(fill=tk.BOTH, expand=True)
-        
-        canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
-        canvas = tk.Canvas(canvas_frame, height=100, highlightthickness=0, bd=0, bg=canvas_bg)
-        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
-        # Use a custom style for the scrollable frame to match canvas_bg
-        self.style.configure("StudiesScrollable.TFrame", background=canvas_bg)
-        self.studies_scrollable_frame = ttk.Frame(canvas, style="StudiesScrollable.TFrame")
-        
-        canvas_window = canvas.create_window((0, 0), window=self.studies_scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Store study widgets for deletion
-        self.study_widgets = []
-        
-        def configure_scroll_region(event):
-            canvas.configure(scrollregion=canvas.bbox("all"))
-        
-        def configure_canvas_width(event):
-            # Make the canvas window match the canvas width
-            canvas.itemconfig(canvas_window, width=event.width)
-        
-        self.studies_scrollable_frame.bind("<Configure>", configure_scroll_region)
-        canvas.bind("<Configure>", configure_canvas_width)
-        
-        # Store canvas reference for scrolling
-        self.studies_canvas = canvas
-        
-        # Current Study frame at bottom
+        # Current Study frame - pack first so it reserves space at bottom
         debug_frame = ttk.LabelFrame(main_frame, text="Current Study", padding="3")
-        debug_frame.pack(fill=tk.X, pady=(5, 0))
+        debug_frame.pack(fill=tk.X, pady=(5, 0), side=tk.BOTTOM)
         
         self.debug_accession_label = ttk.Label(debug_frame, text="Accession: -", font=("Consolas", 8), foreground="gray")
         self.debug_accession_label.pack(anchor=tk.W)
@@ -1731,11 +1701,54 @@ class RVUCounterApp:
         self.debug_study_rvu_label = ttk.Label(study_type_frame, text="", font=("Consolas", 8), foreground="gray")
         self.debug_study_rvu_label.pack(side=tk.RIGHT, anchor=tk.E)
         
-        # Store study widgets for deletion (initialized in create_ui)
-        self.study_widgets = []
-        
         # Store debug_frame reference for resizing
         self.debug_frame = debug_frame
+        
+        # Recent studies frame - pack after Current Study so it fills remaining space above
+        self.recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
+        self.recent_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+        
+        # Canvas with scrollbar for recent studies
+        canvas_frame = ttk.Frame(self.recent_frame)
+        canvas_frame.pack(fill=tk.BOTH, expand=True)
+        
+        canvas_bg = self.theme_colors.get("canvas_bg", "#f0f0f0")
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0, bd=0, bg=canvas_bg)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        # Use a custom style for the scrollable frame to match canvas_bg
+        self.style.configure("StudiesScrollable.TFrame", background=canvas_bg)
+        self.studies_scrollable_frame = ttk.Frame(canvas, style="StudiesScrollable.TFrame")
+        
+        canvas_window = canvas.create_window((0, 0), window=self.studies_scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Store study widgets for deletion
+        self.study_widgets = []
+        
+        def configure_scroll_region(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Also update canvas height if needed
+            canvas.update_idletasks()
+        
+        def configure_canvas_width(event):
+            # Make the canvas window match the canvas width
+            canvas.itemconfig(canvas_window, width=event.width)
+            # Update scroll region when canvas is configured
+            canvas.after_idle(lambda: canvas.configure(scrollregion=canvas.bbox("all")))
+        
+        self.studies_scrollable_frame.bind("<Configure>", configure_scroll_region)
+        canvas.bind("<Configure>", configure_canvas_width)
+        # Also bind to parent frame to ensure proper sizing
+        self.recent_frame.bind("<Configure>", lambda e: canvas.update_idletasks())
+        
+        # Store canvas reference for scrolling
+        self.studies_canvas = canvas
+        
+        # Store study widgets for deletion (initialized in create_ui)
+        self.study_widgets = []
         
         # Bind resize event to recalculate truncation
         self.root.bind("<Configure>", self._on_window_resize)
@@ -4272,7 +4285,7 @@ class CanvasTable:
                 width = col_info['width']
                 value = cells.get(col_name, "")
                 
-                # Get cell color (for heatmaps) - use theme colors if not specified
+                # Get cell color (for color coding) - use theme colors if not specified
                 if col_name not in cell_colors:
                     cell_color = total_bg if is_total else data_bg
                 else:
@@ -4420,8 +4433,11 @@ class StatisticsWindow:
         """Create the statistics UI."""
         # State variables
         self.selected_period = tk.StringVar(value="current_shift")
-        self.view_mode = tk.StringVar(value="by_hour")
+        self.view_mode = tk.StringVar(value="efficiency")
         self.selected_shift_index = None  # For shift list selection
+        
+        # Track previous period to show/hide custom date frame
+        self.previous_period = "current_shift"
         
         main_frame = ttk.Frame(self.window, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
@@ -4459,8 +4475,8 @@ class StatisticsWindow:
                        value="this_work_week", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last Work Week", variable=self.selected_period,
                        value="last_work_week", command=self.refresh_data).pack(anchor=tk.W, pady=2)
-        ttk.Radiobutton(history_frame, text="Last 2 Work Weeks", variable=self.selected_period,
-                       value="last_2_weeks", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        ttk.Radiobutton(history_frame, text="This Month", variable=self.selected_period,
+                       value="this_month", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last Month", variable=self.selected_period,
                        value="last_month", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="Last 3 Months", variable=self.selected_period,
@@ -4469,6 +4485,64 @@ class StatisticsWindow:
                        value="last_year", command=self.refresh_data).pack(anchor=tk.W, pady=2)
         ttk.Radiobutton(history_frame, text="All Time", variable=self.selected_period,
                        value="all_time", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        
+        # Custom date range option
+        ttk.Radiobutton(history_frame, text="Custom Date Range", variable=self.selected_period,
+                       value="custom_date_range", command=self.on_custom_date_selected).pack(anchor=tk.W, pady=2)
+        
+        # Custom date range input frame (hidden by default)
+        self.custom_date_frame = ttk.Frame(history_frame)
+        
+        # Start date
+        ttk.Label(self.custom_date_frame, text="From:").grid(row=0, column=0, padx=(20, 5), pady=2, sticky=tk.W)
+        if HAS_TKCALENDAR:
+            self.custom_start_date_entry = DateEntry(
+                self.custom_date_frame,
+                width=12,
+                background='darkblue',
+                foreground='white',
+                borderwidth=2,
+                date_pattern='mm/dd/yyyy',
+                year=datetime.now().year,
+                month=datetime.now().month,
+                day=datetime.now().day
+            )
+            self.custom_start_date_entry.grid(row=0, column=1, padx=5, pady=2)
+            self.custom_start_date_entry.bind("<<DateEntrySelected>>", lambda e: self.on_date_change())
+        else:
+            # Fallback to entry field if tkcalendar not available
+            self.custom_start_date = tk.StringVar()
+            self.custom_start_entry = ttk.Entry(self.custom_date_frame, textvariable=self.custom_start_date, width=12)
+            self.custom_start_entry.grid(row=0, column=1, padx=5, pady=2)
+            self.custom_start_entry.insert(0, datetime.now().strftime("%m/%d/%Y"))
+            self.custom_start_entry.bind("<FocusOut>", lambda e: self.on_date_change())
+        
+        # End date
+        ttk.Label(self.custom_date_frame, text="To:").grid(row=1, column=0, padx=(20, 5), pady=2, sticky=tk.W)
+        if HAS_TKCALENDAR:
+            self.custom_end_date_entry = DateEntry(
+                self.custom_date_frame,
+                width=12,
+                background='darkblue',
+                foreground='white',
+                borderwidth=2,
+                date_pattern='mm/dd/yyyy',
+                year=datetime.now().year,
+                month=datetime.now().month,
+                day=datetime.now().day
+            )
+            self.custom_end_date_entry.grid(row=1, column=1, padx=5, pady=2)
+            self.custom_end_date_entry.bind("<<DateEntrySelected>>", lambda e: self.on_date_change())
+        else:
+            # Fallback to entry field if tkcalendar not available
+            self.custom_end_date = tk.StringVar()
+            self.custom_end_entry = ttk.Entry(self.custom_date_frame, textvariable=self.custom_end_date, width=12)
+            self.custom_end_entry.grid(row=1, column=1, padx=5, pady=2)
+            self.custom_end_entry.insert(0, datetime.now().strftime("%m/%d/%Y"))
+            self.custom_end_entry.bind("<FocusOut>", lambda e: self.on_date_change())
+        
+        # Initially hide the custom date frame (don't pack it yet)
+        # It will be shown when custom_date_range is selected
         
         # Shifts List Section (with delete capability)
         shifts_frame = ttk.LabelFrame(left_panel, text="All Shifts", padding="8")
@@ -4497,6 +4571,8 @@ class StatisticsWindow:
         view_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Label(view_frame, text="View:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(view_frame, text="Efficiency", variable=self.view_mode,
+                       value="efficiency", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Hour", variable=self.view_mode,
                        value="by_hour", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Modality", variable=self.view_mode,
@@ -4507,14 +4583,24 @@ class StatisticsWindow:
                        value="by_study_type", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="All Studies", variable=self.view_mode,
                        value="all_studies", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(view_frame, text="Efficiency", variable=self.view_mode,
-                       value="efficiency", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
                        value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         
-        # Period label
-        self.period_label = ttk.Label(right_panel, text="", font=("Arial", 12, "bold"))
-        self.period_label.pack(anchor=tk.W, pady=(0, 10))
+        # Period label with checkboxes for efficiency view
+        period_frame = ttk.Frame(right_panel)
+        period_frame.pack(fill=tk.X, pady=(0, 10))
+        self.period_label = ttk.Label(period_frame, text="", font=("Arial", 12, "bold"))
+        self.period_label.pack(side=tk.LEFT, anchor=tk.W)
+        
+        # Checkboxes for efficiency color coding (will be shown/hidden based on view mode)
+        self.efficiency_checkboxes_frame = ttk.Frame(period_frame)
+        self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
+        
+        # Efficiency color coding options (created when efficiency view is shown)
+        self.show_duration_heatmap = tk.BooleanVar(value=True)  # Default: show duration colors
+        self.show_study_count_heatmap = tk.BooleanVar(value=False)
+        self.duration_heatmap_checkbox = None
+        self.study_count_heatmap_checkbox = None
         
         # Data table frame
         self.table_frame = ttk.Frame(right_panel)
@@ -4716,6 +4802,12 @@ class StatisticsWindow:
         self.populate_shifts_list()
         self.refresh_data()
     
+    def _format_date_range(self, start: datetime, end: datetime) -> str:
+        """Format a date range as MM/DD/YYYY - MM/DD/YYYY."""
+        start_str = start.strftime("%m/%d/%Y")
+        end_str = end.strftime("%m/%d/%Y")
+        return f"{start_str} - {end_str}"
+    
     def get_records_for_period(self) -> Tuple[List[dict], str]:
         """Get records for the selected period. Returns (records, period_description)."""
         period = self.selected_period.get()
@@ -4723,6 +4815,15 @@ class StatisticsWindow:
         
         if period == "current_shift":
             records = self.data_manager.data.get("current_shift", {}).get("records", [])
+            # Get shift start time if available
+            shift_start_str = self.data_manager.data.get("current_shift", {}).get("shift_start")
+            if shift_start_str:
+                try:
+                    start = datetime.fromisoformat(shift_start_str)
+                    date_range = self._format_date_range(start, now)
+                    return records, f"Current Shift - {date_range}"
+                except:
+                    pass
             return records, "Current Shift"
         
         elif period == "prior_shift":
@@ -4730,7 +4831,19 @@ class StatisticsWindow:
             # Find the first non-current shift
             for shift in shifts:
                 if not shift.get("is_current"):
-                    return shift.get("records", []), f"Prior Shift ({shift.get('date', '')})"
+                    records = shift.get("records", [])
+                    try:
+                        start = datetime.fromisoformat(shift.get("shift_start", ""))
+                        end_str = shift.get("shift_end", "")
+                        if end_str:
+                            end = datetime.fromisoformat(end_str)
+                        else:
+                            end = start + timedelta(hours=12)  # Default end if not available
+                        date_range = self._format_date_range(start, end)
+                        return records, f"Prior Shift - {date_range}"
+                    except:
+                        pass
+                    return records, f"Prior Shift ({shift.get('date', '')})"
             return [], "Prior Shift (none found)"
         
         elif period == "specific_shift":
@@ -4738,47 +4851,145 @@ class StatisticsWindow:
             if self.selected_shift_index is not None and self.selected_shift_index < len(shifts):
                 shift = shifts[self.selected_shift_index]
                 if shift.get("is_current"):
+                    # Same as current shift logic
+                    shift_start_str = self.data_manager.data.get("current_shift", {}).get("shift_start")
+                    if shift_start_str:
+                        try:
+                            start = datetime.fromisoformat(shift_start_str)
+                            date_range = self._format_date_range(start, now)
+                            return shift.get("records", []), f"Current Shift - {date_range}"
+                        except:
+                            pass
                     return shift.get("records", []), "Current Shift"
                 try:
                     start = datetime.fromisoformat(shift.get("shift_start", ""))
+                    end_str = shift.get("shift_end", "")
+                    if end_str:
+                        end = datetime.fromisoformat(end_str)
+                    else:
+                        end = start + timedelta(hours=12)
+                    date_range = self._format_date_range(start, end)
                     desc = start.strftime("%B %d, %Y %I:%M %p")
+                    return shift.get("records", []), f"Shift: {desc} - {date_range}"
                 except:
                     desc = shift.get("date", "")
-                return shift.get("records", []), f"Shift: {desc}"
+                    return shift.get("records", []), f"Shift: {desc}"
             return [], "No shift selected"
         
         elif period == "this_work_week":
             # Current work week: Monday 11pm to next Monday 8am
             start, end = self._get_work_week_range(now, "this")
             records = self._get_records_in_range(start, end)
-            return records, "This Work Week"
+            date_range = self._format_date_range(start, end)
+            return records, f"This Work Week - {date_range}"
         
         elif period == "last_work_week":
             # Previous work week: Monday 11pm to next Monday 8am
             start, end = self._get_work_week_range(now, "last")
             records = self._get_records_in_range(start, end)
-            return records, "Last Work Week"
+            date_range = self._format_date_range(start, end)
+            return records, f"Last Work Week - {date_range}"
         
         elif period == "all_time":
             # All records from all time
-            records = self._get_records_in_range(datetime.min.replace(year=2000), now)
-            return records, "All Time"
+            start = datetime.min.replace(year=2000)
+            records = self._get_records_in_range(start, now)
+            date_range = self._format_date_range(start, now)
+            return records, f"All Time - {date_range}"
         
-        elif period == "last_2_weeks":
-            records = self._get_records_in_range(now - timedelta(days=28), now)
-            return records, "Last 2 Work Weeks"
+        elif period == "custom_date_range":
+            # Custom date range - get dates from date pickers or entry fields
+            try:
+                if HAS_TKCALENDAR:
+                    # Use DateEntry objects
+                    start_date = self.custom_start_date_entry.get_date()
+                    end_date = self.custom_end_date_entry.get_date()
+                    start = datetime.combine(start_date, datetime.min.time())
+                    end = datetime.combine(end_date, datetime.max.time().replace(microsecond=999999))
+                else:
+                    # Fallback to entry fields
+                    start_str = self.custom_start_date.get().strip()
+                    end_str = self.custom_end_date.get().strip()
+                    # Parse dates (MM/DD/YYYY format)
+                    start = datetime.strptime(start_str, "%m/%d/%Y")
+                    end = datetime.strptime(end_str, "%m/%d/%Y")
+                    # Set time to start/end of day
+                    start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                    end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+                
+                # Validate: start should be before end
+                if start > end:
+                    return [], f"Custom Date Range - Invalid (start date must be before end date)"
+                
+                records = self._get_records_in_range(start, end)
+                date_range = self._format_date_range(start, end)
+                return records, f"Custom Date Range - {date_range}"
+            except ValueError as e:
+                return [], f"Custom Date Range - Invalid date format (use MM/DD/YYYY)"
+            except Exception as e:
+                return [], f"Custom Date Range - Error: {str(e)}"
+        
+        elif period == "this_month":
+            # This month: 1st of current month to end of current month
+            start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            # End of current month: first day of next month minus 1 day, at 23:59:59
+            if now.month == 12:
+                next_month = now.replace(year=now.year + 1, month=1, day=1)
+            else:
+                next_month = now.replace(month=now.month + 1, day=1)
+            end = (next_month - timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            records = self._get_records_in_range(start, end)
+            date_range = self._format_date_range(start, end)
+            return records, f"This Month - {date_range}"
         
         elif period == "last_month":
-            records = self._get_records_in_range(now - timedelta(days=30), now)
-            return records, "Last Month"
+            # Last month: 1st of last month to end of last month
+            if now.month == 1:
+                last_month_start = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+                # End of December
+                end = now.replace(month=1, day=1) - timedelta(microseconds=1)
+            else:
+                last_month_start = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                # End of last month: first day of current month minus 1 day
+                end = now.replace(day=1) - timedelta(microseconds=1)
+            start = last_month_start
+            end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+            records = self._get_records_in_range(start, end)
+            date_range = self._format_date_range(start, end)
+            return records, f"Last Month - {date_range}"
         
         elif period == "last_3_months":
-            records = self._get_records_in_range(now - timedelta(days=90), now)
-            return records, "Last 3 Months"
+            # Last 3 months: 1st of the month 3 months ago to end of current month
+            current_month = now.month
+            current_year = now.year
+            
+            # Calculate month 3 months ago
+            months_back = 3
+            target_month = current_month - months_back
+            target_year = current_year
+            
+            while target_month <= 0:
+                target_month += 12
+                target_year -= 1
+            
+            start = datetime(target_year, target_month, 1, 0, 0, 0, 0)
+            
+            # End of current month
+            if now.month == 12:
+                next_month = now.replace(year=now.year + 1, month=1, day=1)
+            else:
+                next_month = now.replace(month=now.month + 1, day=1)
+            end = (next_month - timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=999999)
+            
+            records = self._get_records_in_range(start, end)
+            date_range = self._format_date_range(start, end)
+            return records, f"Last 3 Months - {date_range}"
         
         elif period == "last_year":
-            records = self._get_records_in_range(now - timedelta(days=365), now)
-            return records, "Last Year"
+            start = now - timedelta(days=365)
+            records = self._get_records_in_range(start, now)
+            date_range = self._format_date_range(start, now)
+            return records, f"Last Year - {date_range}"
         
         return [], "Unknown period"
     
@@ -4900,8 +5111,28 @@ class StatisticsWindow:
         
         return expanded_records
     
+    def on_custom_date_selected(self):
+        """Handle when custom date range radio is selected."""
+        # Show the custom date frame
+        self.custom_date_frame.pack(fill=tk.X, pady=(5, 0))
+        self.refresh_data()
+    
+    def on_date_change(self):
+        """Handle when custom date entry fields are changed."""
+        # Only refresh if custom date range is selected
+        if self.selected_period.get() == "custom_date_range":
+            self.refresh_data()
+    
     def refresh_data(self):
         """Refresh the data display based on current selections."""
+        current_period = self.selected_period.get()
+        
+        # Show/hide custom date frame based on selection
+        if current_period == "custom_date_range":
+            self.custom_date_frame.pack(fill=tk.X, pady=(5, 0))
+        else:
+            self.custom_date_frame.pack_forget()
+        
         records, period_desc = self.get_records_for_period()
         self.period_label.config(text=period_desc)
         
@@ -4933,6 +5164,30 @@ class StatisticsWindow:
                 self.efficiency_frame.pack_forget()
             except:
                 pass
+        
+        # Show/hide efficiency checkboxes based on view mode
+        if view_mode == "efficiency":
+            # Make sure checkboxes frame is visible and create checkboxes if needed
+            if self.duration_heatmap_checkbox is None:
+                self.duration_heatmap_checkbox = ttk.Checkbutton(
+                    self.efficiency_checkboxes_frame,
+                    text="Duration Colors",
+                    variable=self.show_duration_heatmap,
+                    command=self.refresh_data
+                )
+                self.duration_heatmap_checkbox.pack(side=tk.RIGHT, padx=(10, 0))
+                
+                self.study_count_heatmap_checkbox = ttk.Checkbutton(
+                    self.efficiency_checkboxes_frame,
+                    text="Study Count Colors",
+                    variable=self.show_study_count_heatmap,
+                    command=self.refresh_data
+                )
+                self.study_count_heatmap_checkbox.pack(side=tk.RIGHT, padx=(10, 0))
+            self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
+        else:
+            if self.efficiency_checkboxes_frame:
+                self.efficiency_checkboxes_frame.pack_forget()
         
         if view_mode == "by_hour":
             self._display_by_hour(records)
@@ -5462,9 +5717,12 @@ class StatisticsWindow:
                                  command=lambda c=column: self._sort_column(c))
     
     def _display_efficiency(self, records: List[dict]):
-        """Display efficiency view with Canvas-based spreadsheet showing per-cell heatmap coloring.
+        """Display efficiency view with Canvas-based spreadsheet showing per-cell color coding.
         Two sections: 11pm-10am (night) and 11am-10pm (day), each with Modality + 12 hour columns.
         """
+        # Checkboxes are now shown/hidden in refresh_data() method
+        # No need to manage them here
+        
         # Ensure efficiency frame exists
         if self.efficiency_frame is None:
             self.efficiency_frame = ttk.Frame(self.table_frame)
@@ -5487,8 +5745,9 @@ class StatisticsWindow:
         night_hours = list(range(23, 24)) + list(range(0, 11))  # 11pm-10am (12 hours)
         day_hours = list(range(11, 23))  # 11am-10pm (12 hours)
         
-        # Build data structure: modality -> hour -> list of durations
+        # Build data structure: modality -> hour -> list of durations and counts
         efficiency_data = {}
+        study_count_data = {}  # modality -> hour -> count
         
         for record in records:
             study_type = record.get("study_type", "Unknown")
@@ -5500,6 +5759,7 @@ class StatisticsWindow:
             except:
                 continue
             
+            # Track duration data
             duration = record.get("duration_seconds", 0)
             if duration and duration > 0:
                 if modality not in efficiency_data:
@@ -5507,10 +5767,18 @@ class StatisticsWindow:
                 if hour not in efficiency_data[modality]:
                     efficiency_data[modality][hour] = []
                 efficiency_data[modality][hour].append(duration)
+            
+            # Track study count data (all studies, not just those with duration)
+            if modality not in study_count_data:
+                study_count_data[modality] = {}
+            if hour not in study_count_data[modality]:
+                study_count_data[modality][hour] = 0
+            study_count_data[modality][hour] += 1
         
-        all_modalities = sorted(efficiency_data.keys())
+        # Combine modalities from both data sources
+        all_modalities = sorted(set(list(efficiency_data.keys()) + list(study_count_data.keys())))
         
-        # Helper function to get heatmap color (blue=low duration, red=high duration)
+        # Helper function to get color coding (blue=low, red=high by default)
         # Get theme colors for efficiency view
         theme_colors = self.app.theme_colors if hasattr(self, 'app') and hasattr(self.app, 'theme_colors') else {}
         data_bg = theme_colors.get("entry_bg", "white")
@@ -5518,12 +5786,18 @@ class StatisticsWindow:
         border_color = theme_colors.get("border_color", "#acacac")
         total_bg = theme_colors.get("button_bg", "#e1e1e1")
         
-        def get_heatmap_color(duration, min_dur, max_dur, range_val):
-            """Return hex color: light blue (low) to light red (high)."""
-            if duration is None or range_val == 0:
+        def get_heatmap_color(value, min_val, max_val, range_val, reverse=False):
+            """Return hex color: light blue (low) to light red (high) by default.
+            Set reverse=True to invert (blue=high, red=low).
+            Works for both duration and count values.
+            """
+            if value is None or range_val == 0:
                 return data_bg  # Use theme background for empty
             
-            normalized = (duration - min_dur) / range_val
+            normalized = (value - min_val) / range_val
+            if reverse:
+                normalized = 1.0 - normalized  # Reverse the color mapping
+            
             # Light blue: RGB(227, 242, 253) = #E3F2FD
             # Light red: RGB(255, 235, 238) = #FFEBEE
             r = int(227 + (255 - 227) * normalized)
@@ -5533,7 +5807,9 @@ class StatisticsWindow:
         
         # Helper to create Canvas-based spreadsheet table
         def create_spreadsheet_table(parent_frame, hours_list, section_title):
-            """Create a Canvas-based spreadsheet table with per-cell heatmap coloring."""
+            """Create a Canvas-based spreadsheet table with per-cell color coding.
+            Supports both duration and study count colors based on checkbox states.
+            """
             # Frame with scrollbar
             table_frame = ttk.Frame(parent_frame)
             table_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
@@ -5635,6 +5911,10 @@ class StatisticsWindow:
                 """Draw all rows, sorted if needed."""
                 rows_canvas.delete("all")
                 
+                # Get checkbox states
+                show_duration = self.show_duration_heatmap.get()
+                show_count = self.show_study_count_heatmap.get()
+                
                 # Sort row data if needed
                 rows_to_draw = list(row_data_list)
                 if sort_column == "modality":
@@ -5644,9 +5924,13 @@ class StatisticsWindow:
                 for row_data in rows_to_draw:
                     modality = row_data['modality']
                     row_cell_data = row_data['cell_data']
+                    row_count_data = row_data.get('count_data', [])
                     min_duration = row_data['min_duration']
                     max_duration = row_data['max_duration']
                     duration_range = row_data['duration_range']
+                    min_count = row_data.get('min_count', 0)
+                    max_count = row_data.get('max_count', 0)
+                    count_range = row_data.get('count_range', 1)
                     
                     # Draw row
                     x = 0
@@ -5658,15 +5942,43 @@ class StatisticsWindow:
                                            fill=text_fg)
                     x += modality_col_width
                     
-                    # Hour cells with heatmap
-                    for avg_duration, cell_text in row_cell_data:
-                        cell_color = get_heatmap_color(avg_duration, min_duration, max_duration, duration_range)
+                    # Hour cells with color coding
+                    for idx, (avg_duration, cell_text) in enumerate(row_cell_data):
+                        # Determine cell color based on active heatmaps
+                        cell_color = data_bg  # Default to background
+                        
+                        # Apply duration colors if enabled (blue=fast, red=slow)
+                        if show_duration and avg_duration is not None:
+                            cell_color = get_heatmap_color(avg_duration, min_duration, max_duration, duration_range, reverse=False)
+                        
+                        # Apply study count colors if enabled (blue=high count, red=low count - reversed from duration)
+                        if show_count and idx < len(row_count_data):
+                            count = row_count_data[idx]
+                            if count is not None and count > 0:
+                                if show_duration:
+                                    # Both enabled - blend colors (average them)
+                                    count_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
+                                    # Simple blending: average RGB values
+                                    if cell_color != data_bg:
+                                        # Parse both colors and average
+                                        c1 = int(cell_color[1:3], 16), int(cell_color[3:5], 16), int(cell_color[5:7], 16)
+                                        c2 = int(count_color[1:3], 16), int(count_color[3:5], 16), int(count_color[5:7], 16)
+                                        r = (c1[0] + c2[0]) // 2
+                                        g = (c1[1] + c2[1]) // 2
+                                        b = (c1[2] + c2[2]) // 2
+                                        cell_color = f"#{r:02x}{g:02x}{b:02x}"
+                                    else:
+                                        cell_color = count_color
+                                else:
+                                    # Only count colors enabled (reversed: blue=high, red=low)
+                                    cell_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
+                        
                         rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
                                                    fill=cell_color, outline=border_color, width=1)
                         
                         # Use dark text for shaded cells (light colored), theme text color for unshaded
                         # Shaded cells are light (blue to red), so use dark text
-                        if cell_color != data_bg and avg_duration is not None:
+                        if cell_color != data_bg:
                             # Cell is shaded - use dark text for readability
                             cell_text_color = "#000000"  # Black text for light colored cells
                         else:
@@ -5713,38 +6025,86 @@ class StatisticsWindow:
             draw_headers()
             
             # Build row data for all modalities
+            modality_counts = []  # For calculating global count min/max
             for modality in all_modalities:
                 modality_durations = []
+                modality_counts_row = []
                 row_cell_data = []
                 
                 for hour in hours_list:
-                    if hour in efficiency_data[modality]:
+                    # Get duration data
+                    avg_duration = None
+                    duration_count = 0
+                    if modality in efficiency_data and hour in efficiency_data[modality]:
                         durations = efficiency_data[modality][hour]
                         avg_duration = sum(durations) / len(durations)
-                        count = len(durations)
+                        duration_count = len(durations)
+                    
+                    # Get study count data
+                    study_count = study_count_data.get(modality, {}).get(hour, 0) if modality in study_count_data else 0
+                    modality_counts_row.append(study_count)
+                    if study_count > 0:
+                        modality_counts.append(study_count)
+                    
+                    # Build cell text
+                    if avg_duration is not None:
                         duration_str = self._format_duration(avg_duration)
-                        cell_text = f"{duration_str} ({count})"
-                        modality_durations.append(avg_duration)
-                        row_cell_data.append((avg_duration, cell_text))
+                        cell_text = f"{duration_str} ({duration_count})"
+                    elif study_count > 0:
+                        cell_text = f"({study_count})"
                     else:
-                        row_cell_data.append((None, "-"))
+                        cell_text = "-"
+                    
+                    modality_durations.append(avg_duration)
+                    row_cell_data.append((avg_duration, cell_text))
                 
-                # Calculate min/max for heatmap
-                if modality_durations:
-                    min_duration = min(modality_durations)
-                    max_duration = max(modality_durations)
+                # Calculate min/max for duration colors
+                valid_durations = [d for d in modality_durations if d is not None]
+                if valid_durations:
+                    min_duration = min(valid_durations)
+                    max_duration = max(valid_durations)
                     duration_range = max_duration - min_duration if max_duration > min_duration else 1
                 else:
                     min_duration = max_duration = 0
                     duration_range = 1
                 
+                # Calculate min/max for count colors for this row
+                valid_counts = [c for c in modality_counts_row if c > 0]
+                if valid_counts:
+                    min_count = min(valid_counts)
+                    max_count = max(valid_counts)
+                    count_range = max_count - min_count if max_count > min_count else 1
+                else:
+                    min_count = max_count = 0
+                    count_range = 1
+                
                 row_data_list.append({
                     'modality': modality,
                     'cell_data': row_cell_data,
+                    'count_data': modality_counts_row,
                     'min_duration': min_duration,
                     'max_duration': max_duration,
-                    'duration_range': duration_range
+                    'duration_range': duration_range,
+                    'min_count': min_count,
+                    'max_count': max_count,
+                    'count_range': count_range
                 })
+            
+            # Calculate global min/max for count colors (across all modalities)
+            if modality_counts:
+                global_min_count = min(modality_counts)
+                global_max_count = max(modality_counts)
+                global_count_range = global_max_count - global_min_count if global_max_count > global_min_count else 1
+            else:
+                global_min_count = global_max_count = 0
+                global_count_range = 1
+            
+            # Update row data with global count range for consistent coloring
+            for row_data in row_data_list:
+                if row_data['max_count'] > 0:
+                    row_data['min_count'] = global_min_count
+                    row_data['max_count'] = global_max_count
+                    row_data['count_range'] = global_count_range
             
             # Build TOTAL row data
             if efficiency_data:
