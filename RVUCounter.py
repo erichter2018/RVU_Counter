@@ -4082,7 +4082,7 @@ class CanvasTable:
         self.table_width = sum(self.column_widths.values())
         
         # Data storage
-        self.rows_data = []  # List of row dicts: {'cells': {col: value}, 'is_total': bool, 'tags': []}
+        self.rows_data = []  # List of row dicts: {'cells': {col: value}, 'is_total': bool, 'tags': [], 'cell_text_colors': {}}
         self.sort_column = None
         self.sort_reverse = False
         
@@ -4272,12 +4272,13 @@ class CanvasTable:
         border_color = self.theme_colors.get("border_color", "#acacac")
         total_bg = self.theme_colors.get("button_bg", "#e1e1e1")
         
-        # Draw rows - draw all rows (for now, optimization can be added later if needed)
+            # Draw rows - draw all rows (for now, optimization can be added later if needed)
         y = 0
         for row in rows_to_draw:
             cells = row['cells']
             is_total = row.get('is_total', False)
-            cell_colors = row.get('cell_colors', {})  # Optional per-cell colors
+            cell_colors = row.get('cell_colors', {})  # Optional per-cell background colors
+            cell_text_colors = row.get('cell_text_colors', {})  # Optional per-cell text colors
             
             x = 0
             for col_info in self.columns:
@@ -4291,15 +4292,75 @@ class CanvasTable:
                 else:
                     cell_color = cell_colors.get(col_name)
                 
+                # Get text color - use cell_text_colors if specified, otherwise use theme default
+                text_color = cell_text_colors.get(col_name, data_fg)
+                
                 # Draw cell
                 self.data_canvas.create_rectangle(x, y, x + width, y + self.row_height,
                                                  fill=cell_color, outline=border_color, width=1)
                 
-                # Draw text
+                # Draw text - support partial coloring for dollar amounts
                 font = ('Arial', 9, 'bold') if is_total else ('Arial', 9)
-                anchor = 'center'
-                self.data_canvas.create_text(x + width//2, y + self.row_height//2,
-                                           text=str(value), font=font, anchor=anchor, fill=data_fg)
+                value_str = str(value)
+                
+                # Check if we need partial coloring (when text_color is specified and value contains $)
+                if col_name in cell_text_colors and '$' in value_str:
+                    # Parse out the dollar amount and render separately
+                    import re
+                    # Find dollar amount pattern ($number with optional commas)
+                    dollar_match = re.search(r'(\$\d[\d,]*\.?\d*)', value_str)
+                    if dollar_match:
+                        dollar_amount = dollar_match.group(1)
+                        dollar_start = dollar_match.start()
+                        dollar_end = dollar_match.end()
+                        
+                        # Split text into parts
+                        before_dollar = value_str[:dollar_start]
+                        after_dollar = value_str[dollar_end:]
+                        
+                        # Get text metrics for positioning
+                        test_text = self.data_canvas.create_text(0, 0, text=before_dollar, font=font, anchor='w')
+                        before_bbox = self.data_canvas.bbox(test_text)
+                        before_width = before_bbox[2] - before_bbox[0] if before_bbox else 0
+                        self.data_canvas.delete(test_text)
+                        
+                        test_text = self.data_canvas.create_text(0, 0, text=dollar_amount, font=font, anchor='w')
+                        dollar_bbox = self.data_canvas.bbox(test_text)
+                        dollar_width = dollar_bbox[2] - dollar_bbox[0] if dollar_bbox else 0
+                        self.data_canvas.delete(test_text)
+                        
+                        # Calculate starting x position (center alignment)
+                        total_width = before_width + dollar_width
+                        if after_dollar:
+                            test_text = self.data_canvas.create_text(0, 0, text=after_dollar, font=font, anchor='w')
+                            after_bbox = self.data_canvas.bbox(test_text)
+                            after_width = after_bbox[2] - after_bbox[0] if after_bbox else 0
+                            self.data_canvas.delete(test_text)
+                            total_width += after_width
+                        
+                        start_x = x + (width - total_width) // 2
+                        text_y = y + self.row_height // 2
+                        
+                        # Draw text parts
+                        if before_dollar:
+                            self.data_canvas.create_text(start_x, text_y, text=before_dollar, font=font, anchor='w', fill=data_fg)
+                            start_x += before_width
+                        
+                        self.data_canvas.create_text(start_x, text_y, text=dollar_amount, font=font, anchor='w', fill=text_color)
+                        start_x += dollar_width
+                        
+                        if after_dollar:
+                            self.data_canvas.create_text(start_x, text_y, text=after_dollar, font=font, anchor='w', fill=data_fg)
+                    else:
+                        # No dollar match, render normally
+                        anchor = 'center'
+                        self.data_canvas.create_text(x + width//2, y + self.row_height//2,
+                                                   text=value_str, font=font, anchor=anchor, fill=text_color)
+                else:
+                    # Normal rendering - entire text in one color
+                    anchor = 'center'
+                    self.data_canvas.create_text(x + width//2, y + self.row_height//2,
+                                               text=value_str, font=font, anchor=anchor, fill=text_color)
                 x += width
             
             y += self.row_height
@@ -4307,12 +4368,13 @@ class CanvasTable:
         # Set canvas height to accommodate all rows
         self.data_canvas.config(height=y)
     
-    def add_row(self, cells, is_total=False, cell_colors=None):
+    def add_row(self, cells, is_total=False, cell_colors=None, cell_text_colors=None):
         """Add a row of data (doesn't redraw - call update_data() or _draw_data() when done adding all rows)."""
         self.rows_data.append({
             'cells': cells,
             'is_total': is_total,
-            'cell_colors': cell_colors or {}
+            'cell_colors': cell_colors or {},
+            'cell_text_colors': cell_text_colors or {}
         })
     
     def update_data(self):
@@ -4436,6 +4498,11 @@ class StatisticsWindow:
         self.view_mode = tk.StringVar(value="efficiency")
         self.selected_shift_index = None  # For shift list selection
         
+        # Projection variables
+        self.projection_days = tk.IntVar(value=14)
+        self.projection_extra_days = tk.IntVar(value=0)
+        self.projection_extra_hours = tk.IntVar(value=0)
+        
         # Track previous period to show/hide custom date frame
         self.previous_period = "current_shift"
         
@@ -4466,6 +4533,17 @@ class StatisticsWindow:
         
         ttk.Radiobutton(shift_frame, text="Prior Shift", variable=self.selected_period,
                        value="prior_shift", command=self.refresh_data).pack(anchor=tk.W, pady=2)
+        
+        # Projection Section (only visible in compensation view)
+        projection_frame = ttk.LabelFrame(left_panel, text="Projection", padding="8")
+        projection_frame.pack(fill=tk.X, pady=(0, 10))
+        self.projection_frame = projection_frame  # Store reference to show/hide
+        
+        self.projection_radio = ttk.Radiobutton(projection_frame, text="Monthly Projection", variable=self.selected_period,
+                       value="projection", command=self.refresh_data)
+        self.projection_radio.pack(anchor=tk.W, pady=2)
+        # Initially hide projection section (only show when compensation view is selected)
+        projection_frame.pack_forget()
         
         # Historical Section
         history_frame = ttk.LabelFrame(left_panel, text="Historical", padding="8")
@@ -4565,6 +4643,7 @@ class StatisticsWindow:
         # === RIGHT PANEL (Main Content) ===
         right_panel = ttk.Frame(paned, padding="5")
         paned.add(right_panel, weight=1)
+        self.right_panel = right_panel  # Store reference for projection settings
         
         # View mode toggle
         view_frame = ttk.Frame(right_panel)
@@ -4573,6 +4652,8 @@ class StatisticsWindow:
         ttk.Label(view_frame, text="View:", font=("Arial", 10, "bold")).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Radiobutton(view_frame, text="Efficiency", variable=self.view_mode,
                        value="efficiency", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="Compensation", variable=self.view_mode,
+                       value="compensation", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Hour", variable=self.view_mode,
                        value="by_hour", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Modality", variable=self.view_mode,
@@ -4897,6 +4978,10 @@ class StatisticsWindow:
             date_range = self._format_date_range(start, now)
             return records, f"All Time - {date_range}"
         
+        elif period == "projection":
+            # Projection - return empty records for now, projection will use historical data
+            # This is handled separately in _display_projection
+            return [], "Monthly Projection"
         elif period == "custom_date_range":
             # Custom date range - get dates from date pickers or entry fields
             try:
@@ -4943,16 +5028,18 @@ class StatisticsWindow:
             return records, f"This Month - {date_range}"
         
         elif period == "last_month":
-            # Last month: 1st of last month to end of last month
+            # Last month: 1st of last month to last day of last month (end of last month)
             if now.month == 1:
-                last_month_start = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
-                # End of December
-                end = now.replace(month=1, day=1) - timedelta(microseconds=1)
+                # Last month was December of previous year
+                start = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+                # End of December: first day of current month (Jan 1) minus 1 day
+                end = now.replace(month=1, day=1) - timedelta(days=1)
             else:
-                last_month_start = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                # Last month is previous month of current year
+                start = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
                 # End of last month: first day of current month minus 1 day
-                end = now.replace(day=1) - timedelta(microseconds=1)
-            start = last_month_start
+                end = now.replace(day=1) - timedelta(days=1)
+            # Set end to last moment of the last day
             end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
             records = self._get_records_in_range(start, end)
             date_range = self._format_date_range(start, end)
@@ -5146,9 +5233,10 @@ class StatisticsWindow:
         self.tree_scrollbar_y.pack_forget()
         self.tree_scrollbar_x.pack_forget()
         
-        # Hide all Canvas tables and efficiency frame (they will be recreated/shown by each view)
+        # Hide all Canvas tables and frames (they will be recreated/shown by each view)
         canvas_tables = ['_summary_table', '_all_studies_table', '_by_modality_table', 
-                        '_by_patient_class_table', '_by_study_type_table', '_by_hour_table']
+                        '_by_patient_class_table', '_by_study_type_table', '_by_hour_table',
+                        '_compensation_table', '_projection_table']
         for table_attr in canvas_tables:
             if hasattr(self, table_attr):
                 try:
@@ -5162,6 +5250,48 @@ class StatisticsWindow:
         if self.efficiency_frame:
             try:
                 self.efficiency_frame.pack_forget()
+            except:
+                pass
+        
+        # Hide compensation frame
+        if hasattr(self, 'compensation_frame') and self.compensation_frame:
+            try:
+                self.compensation_frame.pack_forget()
+            except:
+                pass
+        
+        # Show/hide projection section in left panel based on view mode
+        if hasattr(self, 'projection_frame'):
+            if view_mode == "compensation":
+                # Show projection section when in compensation view
+                try:
+                    # Find historical frame to pack before it
+                    left_panel = self.projection_frame.master
+                    for widget in left_panel.winfo_children():
+                        if isinstance(widget, ttk.LabelFrame) and widget.cget("text") == "Historical":
+                            self.projection_frame.pack(fill=tk.X, pady=(0, 10), before=widget)
+                            break
+                except:
+                    pass
+            else:
+                # Hide projection section in other views (efficiency, etc.)
+                try:
+                    self.projection_frame.pack_forget()
+                    # If projection was selected, switch to a default period
+                    if current_period == "projection":
+                        self.selected_period.set("current_shift")
+                        records, period_desc = self.get_records_for_period()
+                except:
+                    pass
+        
+        # Show/hide projection settings frame in right panel based on mode
+        if hasattr(self, 'projection_settings_frame'):
+            try:
+                if view_mode == "compensation" and current_period == "projection":
+                    # Settings will be shown in _display_projection
+                    pass
+                else:
+                    self.projection_settings_frame.pack_forget()
             except:
                 pass
         
@@ -5201,6 +5331,11 @@ class StatisticsWindow:
             self._display_all_studies(records)
         elif view_mode == "efficiency":
             self._display_efficiency(records)
+        elif view_mode == "compensation":
+            if self.selected_period.get() == "projection":
+                self._display_projection(records)
+            else:
+                self._display_compensation(records)
         elif view_mode == "summary":
             self._display_summary(records)
         
@@ -6458,6 +6593,324 @@ class StatisticsWindow:
         
         # Update display once after all rows are added
         self._summary_table.update_data()
+    
+    def _calculate_study_compensation(self, record: dict) -> float:
+        """Calculate compensation for a single study based on when it was finished."""
+        try:
+            time_finished = datetime.fromisoformat(record.get("time_finished", record.get("time_performed", "")))
+            rate = self.app._get_compensation_rate(time_finished)
+            return record.get("rvu", 0) * rate
+        except (KeyError, ValueError, AttributeError):
+            return 0.0
+    
+    def _display_compensation(self, records: List[dict]):
+        """Display compensation view with study count, modality breakdown, and total compensation."""
+        # Clear/create Canvas table
+        if hasattr(self, '_compensation_table'):
+            try:
+                self._compensation_table.clear()
+            except:
+                if hasattr(self, '_compensation_table'):
+                    self._compensation_table.frame.pack_forget()
+                    self._compensation_table.frame.destroy()
+                    delattr(self, '_compensation_table')
+        
+        if not hasattr(self, '_compensation_table'):
+            columns = [
+                {'name': 'category', 'width': 300, 'text': 'Category', 'sortable': False},
+                {'name': 'value', 'width': 250, 'text': 'Value', 'sortable': False}
+            ]
+            self._compensation_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._compensation_table.frame.pack_forget()  # Remove any existing packing
+        self._compensation_table.pack(fill=tk.BOTH, expand=True)
+        self._compensation_table.clear()
+        
+        # Calculate total compensation
+        total_compensation = sum(self._calculate_study_compensation(r) for r in records)
+        total_studies = len(records)
+        total_rvu = sum(r.get("rvu", 0) for r in records)
+        
+        # Get compensation color from theme (dark green for light mode, lighter green for dark mode)
+        comp_color = "dark green"
+        if self.app and hasattr(self.app, 'theme_colors'):
+            comp_color = self.app.theme_colors.get("comp_color", "dark green")
+        
+        # Add summary rows
+        self._compensation_table.add_row({'category': 'Total Studies', 'value': str(total_studies)})
+        self._compensation_table.add_row({'category': 'Total RVU', 'value': f"{total_rvu:.2f}"})
+        self._compensation_table.add_row(
+            {'category': 'Total Compensation', 'value': f"${total_compensation:,.2f}"},
+            cell_text_colors={'value': comp_color}
+        )
+        self._compensation_table.add_row({'category': '', 'value': ''})  # Spacer
+        
+        # Modality breakdown
+        modality_stats = {}
+        for r in records:
+            st = r.get("study_type", "Unknown")
+            mod = st.split()[0] if st else "Unknown"
+            if mod not in modality_stats:
+                modality_stats[mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+            modality_stats[mod]['count'] += 1
+            modality_stats[mod]['rvu'] += r.get("rvu", 0)
+            modality_stats[mod]['compensation'] += self._calculate_study_compensation(r)
+        
+        # Sort modalities by compensation (highest first)
+        sorted_modalities = sorted(modality_stats.items(), key=lambda x: x[1]['compensation'], reverse=True)
+        
+        self._compensation_table.add_row({'category': 'Modality Breakdown', 'value': ''})
+        for mod, stats in sorted_modalities:
+            # Format value with dollar amount at the end (will be colored green)
+            comp_value = f"${stats['compensation']:,.2f}"
+            value_text = f"{stats['count']} studies, {stats['rvu']:.2f} RVU, {comp_value}"
+            # cell_text_colors will only color the dollar amount part
+            self._compensation_table.add_row({
+                'category': f"  {mod}",
+                'value': value_text
+            }, cell_text_colors={'value': comp_color})
+        
+        self._compensation_table.update_data()
+    
+    def _display_projection(self, records: List[dict]):
+        """Display projection view with configurable days/hours and projected compensation."""
+        # Projection settings frame - place in right panel (period_frame area or above table)
+        # First, ensure we have a settings frame in the right panel
+        if not hasattr(self, 'projection_settings_frame'):
+            # Create settings frame in the right panel, below period_frame
+            # We'll need to pack it above the table_frame
+            self.projection_settings_frame = ttk.LabelFrame(self.right_panel, text="Projection Settings", padding="10")
+        
+        # Clear existing widgets in settings frame
+        for widget in self.projection_settings_frame.winfo_children():
+            widget.destroy()
+        
+        # Pack settings frame above table (before table_frame)
+        self.projection_settings_frame.pack_forget()  # Remove from any previous location
+        self.projection_settings_frame.pack(fill=tk.X, pady=(0, 10), before=self.table_frame)
+        
+        settings_frame = self.projection_settings_frame
+        
+        # Create or reuse compensation frame for results
+        if not hasattr(self, 'compensation_frame') or self.compensation_frame is None:
+            self.compensation_frame = ttk.Frame(self.table_frame)
+        else:
+            # Clear existing widgets
+            for widget in self.compensation_frame.winfo_children():
+                widget.destroy()
+        
+        self.compensation_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Ensure projection variables are initialized (should already be done in create_ui)
+        if not hasattr(self, 'projection_days'):
+            self.projection_days = tk.IntVar(value=14)
+        if not hasattr(self, 'projection_extra_days'):
+            self.projection_extra_days = tk.IntVar(value=0)
+        if not hasattr(self, 'projection_extra_hours'):
+            self.projection_extra_hours = tk.IntVar(value=0)
+        
+        ttk.Label(settings_frame, text="Base Days:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        days_spinbox = ttk.Spinbox(settings_frame, from_=1, to=31, width=10, 
+                                   textvariable=self.projection_days, command=self.refresh_data)
+        days_spinbox.grid(row=0, column=1, padx=5, pady=5)
+        
+        ttk.Label(settings_frame, text="Extra Days:").grid(row=0, column=2, sticky=tk.W, padx=5, pady=5)
+        extra_days_spinbox = ttk.Spinbox(settings_frame, from_=0, to=31, width=10,
+                                         textvariable=self.projection_extra_days, command=self.refresh_data)
+        extra_days_spinbox.grid(row=0, column=3, padx=5, pady=5)
+        
+        ttk.Label(settings_frame, text="Extra Hours:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        extra_hours_spinbox = ttk.Spinbox(settings_frame, from_=0, to=100, width=10,
+                                          textvariable=self.projection_extra_hours, command=self.refresh_data)
+        extra_hours_spinbox.grid(row=1, column=1, padx=5, pady=5)
+        
+        ttk.Label(settings_frame, text="Hours per Day: 9 (11pm-8am)", font=("Arial", 9)).grid(
+            row=1, column=2, columnspan=2, sticky=tk.W, padx=5, pady=5)
+        
+        # Calculate projection based on historical data
+        total_days = self.projection_days.get() + self.projection_extra_days.get()
+        base_hours = total_days * 9  # 9 hours per day (11pm-8am)
+        total_hours = base_hours + self.projection_extra_hours.get()
+        
+        # Use historical data to project
+        # Get recent historical data (last 3 months or available)
+        now = datetime.now()
+        start_date = now - timedelta(days=90)  # Last 3 months
+        historical_records = self._get_records_in_range(start_date, now)
+        
+        if not historical_records:
+            # No historical data
+            results_frame = ttk.LabelFrame(self.compensation_frame, text="Projected Results", padding="10")
+            results_frame.pack(fill=tk.BOTH, expand=True)
+            ttk.Label(results_frame, text="No historical data available for projection.", 
+                     font=("Arial", 10)).pack(pady=20)
+            return
+        
+        # Calculate averages from historical data
+        historical_studies = len(historical_records)
+        historical_rvu = sum(r.get("rvu", 0) for r in historical_records)
+        historical_compensation = sum(self._calculate_study_compensation(r) for r in historical_records)
+        
+        # Calculate historical hours worked
+        historical_hours = self._calculate_historical_hours(historical_records)
+        
+        if historical_hours > 0:
+            rvu_per_hour = historical_rvu / historical_hours
+            studies_per_hour = historical_studies / historical_hours
+            compensation_per_hour = historical_compensation / historical_hours
+        else:
+            rvu_per_hour = 0
+            studies_per_hour = 0
+            compensation_per_hour = 0
+        
+        # Project for total_hours
+        projected_rvu = rvu_per_hour * total_hours
+        projected_studies = studies_per_hour * total_hours
+        projected_compensation = compensation_per_hour * total_hours
+        
+        # Project by study type based on historical distribution
+        study_type_distribution = {}
+        for r in historical_records:
+            st = r.get("study_type", "Unknown")
+            if st not in study_type_distribution:
+                study_type_distribution[st] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+            study_type_distribution[st]['count'] += 1
+            study_type_distribution[st]['rvu'] += r.get("rvu", 0)
+            study_type_distribution[st]['compensation'] += self._calculate_study_compensation(r)
+        
+        # Normalize distribution
+        if historical_studies > 0:
+            for st in study_type_distribution:
+                study_type_distribution[st]['percentage'] = study_type_distribution[st]['count'] / historical_studies
+        
+        # Results frame
+        results_frame = ttk.LabelFrame(self.compensation_frame, text="Projected Results", padding="10")
+        results_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Create Canvas table for projection results
+        if hasattr(self, '_projection_table'):
+            try:
+                self._projection_table.clear()
+            except:
+                if hasattr(self, '_projection_table'):
+                    self._projection_table.frame.pack_forget()
+                    self._projection_table.frame.destroy()
+                    delattr(self, '_projection_table')
+        
+        if not hasattr(self, '_projection_table'):
+            columns = [
+                {'name': 'metric', 'width': 300, 'text': 'Metric', 'sortable': True},
+                {'name': 'value', 'width': 250, 'text': 'Projected Value', 'sortable': True}
+            ]
+            self._projection_table = CanvasTable(results_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._projection_table.frame.pack_forget()  # Remove any existing packing
+        self._projection_table.pack(fill=tk.BOTH, expand=True)
+        self._projection_table.clear()
+        
+        # Get compensation color from theme (dark green for light mode, lighter green for dark mode)
+        comp_color = "dark green"
+        if self.app and hasattr(self.app, 'theme_colors'):
+            comp_color = self.app.theme_colors.get("comp_color", "dark green")
+        
+        # Add projection summary
+        self._projection_table.add_row({'metric': 'Projected Hours', 'value': f"{total_hours:.1f} hours ({total_days} days)"})
+        self._projection_table.add_row({'metric': 'Projected Studies', 'value': f"{projected_studies:.1f}"})
+        self._projection_table.add_row({'metric': 'Projected RVU', 'value': f"{projected_rvu:.2f}"})
+        self._projection_table.add_row(
+            {'metric': 'Projected Compensation', 'value': f"${projected_compensation:,.2f}"},
+            cell_text_colors={'value': comp_color}
+        )
+        self._projection_table.add_row({'metric': '', 'value': ''})  # Spacer
+        
+        # Add historical averages used for projection
+        self._projection_table.add_row({'metric': 'Based on Historical Data:', 'value': ''})
+        self._projection_table.add_row({'metric': '', 'value': f"{historical_studies} studies over {historical_hours:.1f} hours"})
+        self._projection_table.add_row({'metric': '', 'value': f"Average: {studies_per_hour:.2f} studies/hour"})
+        self._projection_table.add_row({'metric': '', 'value': f"Average: {rvu_per_hour:.2f} RVU/hour"})
+        self._projection_table.add_row(
+            {'metric': '', 'value': f"Average: ${compensation_per_hour:.2f}/hour"},
+            cell_text_colors={'value': comp_color}
+        )
+        self._projection_table.add_row({'metric': '', 'value': ''})  # Spacer
+        
+        # Projected study type breakdown
+        self._projection_table.add_row({'metric': 'Projected Study Type Breakdown:', 'value': ''})
+        sorted_study_types = sorted(study_type_distribution.items(), 
+                                   key=lambda x: x[1]['compensation'] * (x[1]['percentage'] if historical_studies > 0 else 0), 
+                                   reverse=True)
+        
+        for st, stats in sorted_study_types[:10]:  # Top 10 study types
+            projected_count = stats['percentage'] * projected_studies if historical_studies > 0 else 0
+            projected_rvu_type = stats['percentage'] * projected_rvu if historical_studies > 0 else 0
+            projected_comp_type = stats['percentage'] * projected_compensation if historical_studies > 0 else 0
+            # Format with dollar amount - only the dollar amount will be colored green
+            self._projection_table.add_row({
+                'metric': f"  {st}",
+                'value': f"{projected_count:.1f} studies, {projected_rvu_type:.2f} RVU, ${projected_comp_type:,.2f}"
+            }, cell_text_colors={'value': comp_color})
+        
+        self._projection_table.update_data()
+    
+    def _calculate_historical_hours(self, records: List[dict]) -> float:
+        """Calculate total hours worked from historical records."""
+        # Get all shifts that contain these records
+        all_shifts = []
+        current_shift = self.data_manager.data.get("current_shift", {})
+        if current_shift.get("shift_start"):
+            all_shifts.append(current_shift)
+        all_shifts.extend(self.data_manager.data.get("shifts", []))
+        
+        # Find unique shifts
+        shifts_with_records = {}
+        for r in records:
+            try:
+                record_time = datetime.fromisoformat(r.get("time_performed", ""))
+                for shift in all_shifts:
+                    shift_start_str = shift.get("shift_start")
+                    if not shift_start_str:
+                        continue
+                    shift_start = datetime.fromisoformat(shift_start_str)
+                    shift_end_str = shift.get("shift_end")
+                    if shift_end_str:
+                        shift_end = datetime.fromisoformat(shift_end_str)
+                        if shift_start <= record_time <= shift_end:
+                            shifts_with_records[shift_start_str] = shift
+                    else:
+                        if record_time >= shift_start:
+                            shifts_with_records[shift_start_str] = shift
+            except:
+                continue
+        
+        # Sum durations
+        total_hours = 0.0
+        for shift_start_str, shift in shifts_with_records.items():
+            try:
+                shift_start = datetime.fromisoformat(shift_start_str)
+                shift_end_str = shift.get("shift_end")
+                if shift_end_str:
+                    shift_end = datetime.fromisoformat(shift_end_str)
+                    total_hours += (shift_end - shift_start).total_seconds() / 3600
+                else:
+                    # Current shift - estimate from records
+                    shift_records = shift.get("records", [])
+                    if shift_records:
+                        record_times = []
+                        for r in shift_records:
+                            try:
+                                record_times.append(datetime.fromisoformat(r.get("time_performed", "")))
+                            except:
+                                pass
+                        if record_times:
+                            latest_time = max(record_times)
+                            if latest_time > shift_start:
+                                total_hours += (latest_time - shift_start).total_seconds() / 3600
+            except:
+                continue
+        
+        return total_hours
     
     def on_configure(self, event):
         """Handle window configuration changes (move/resize)."""
