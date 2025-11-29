@@ -20,10 +20,11 @@ import re
 
 # Try to import tkcalendar for date picker
 try:
-    from tkcalendar import DateEntry
+    from tkcalendar import DateEntry, Calendar
     HAS_TKCALENDAR = True
-except ImportError:
+except ImportError as e:
     HAS_TKCALENDAR = False
+    print(f"Warning: tkcalendar not available: {e}")
 
 
 # Configure logging
@@ -1068,7 +1069,7 @@ class RVUData:
             window_sizes = {
                 "main": {"width": 240, "height": 500},
                 "settings": {"width": 450, "height": 580},
-                "statistics": {"width": 1350, "height": 700}
+                "statistics": {"width": 1350, "height": 800}
             }
             
             if "window_positions" not in data:
@@ -1679,8 +1680,15 @@ class RVUCounterApp:
         debug_frame = ttk.LabelFrame(main_frame, text="Current Study", padding="3")
         debug_frame.pack(fill=tk.X, pady=(5, 0), side=tk.BOTTOM)
         
-        self.debug_accession_label = ttk.Label(debug_frame, text="Accession: -", font=("Consolas", 8), foreground="gray")
-        self.debug_accession_label.pack(anchor=tk.W)
+        # Accession row with duration on the right
+        accession_frame = ttk.Frame(debug_frame)
+        accession_frame.pack(fill=tk.X)
+        
+        self.debug_accession_label = ttk.Label(accession_frame, text="Accession: -", font=("Consolas", 8), foreground="gray")
+        self.debug_accession_label.pack(side=tk.LEFT, anchor=tk.W)
+        
+        self.debug_duration_label = ttk.Label(accession_frame, text="", font=("Consolas", 8), foreground="gray")
+        self.debug_duration_label.pack(side=tk.RIGHT, anchor=tk.E)
         
         self.debug_patient_class_label = ttk.Label(debug_frame, text="Patient Class: -", font=("Consolas", 8), foreground="gray")
         self.debug_patient_class_label.pack(anchor=tk.W)
@@ -1774,17 +1782,60 @@ class RVUCounterApp:
         self.refresh_data()
         self.root.after(self.refresh_interval, self.setup_refresh)
     
+    def _record_or_update_study(self, study_record: dict):
+        """
+        Record a study, or update existing record if same accession already exists.
+        If updating, keeps the highest duration among all openings.
+        """
+        accession = study_record.get("accession", "")
+        if not accession:
+            return
+        
+        records = self.data_manager.data["current_shift"]["records"]
+        
+        # Find existing record with same accession
+        existing_index = None
+        for i, record in enumerate(records):
+            if record.get("accession") == accession:
+                existing_index = i
+                break
+        
+        new_duration = study_record.get("duration_seconds", 0)
+        
+        if existing_index is not None:
+            # Update existing record if new duration is higher
+            existing_duration = records[existing_index].get("duration_seconds", 0)
+            if new_duration > existing_duration:
+                # Update with higher duration, but keep original time_performed
+                records[existing_index]["duration_seconds"] = new_duration
+                records[existing_index]["time_finished"] = study_record.get("time_finished")
+                # Update other fields that might have changed
+                if study_record.get("procedure"):
+                    records[existing_index]["procedure"] = study_record["procedure"]
+                if study_record.get("patient_class"):
+                    records[existing_index]["patient_class"] = study_record["patient_class"]
+                if study_record.get("study_type"):
+                    records[existing_index]["study_type"] = study_record["study_type"]
+                if study_record.get("rvu") is not None:
+                    records[existing_index]["rvu"] = study_record["rvu"]
+                self.data_manager.save()
+                logger.info(f"Updated study duration for {accession}: {existing_duration:.1f}s -> {new_duration:.1f}s (kept higher duration)")
+            else:
+                logger.debug(f"Study {accession} already recorded with higher duration ({existing_duration:.1f}s >= {new_duration:.1f}s), skipping")
+        else:
+            # New study - record it
+            records.append(study_record)
+            self.data_manager.save()
+            logger.info(f"Recorded new study: {accession} - {study_record.get('study_type', 'Unknown')} ({study_record.get('rvu', 0):.1f} RVU) - Duration: {new_duration:.1f}s")
+    
     def _record_multi_accession_study(self, current_time):
         """Record a completed multi-accession study."""
         if not self.multi_accession_data:
             return
         
-        # Check if all accessions are already seen (duplicate detection)
+        # Allow multi-accession studies to be recorded again
+        # When recorded, _record_or_update_study will update existing record with maximum duration
         all_accessions = list(self.multi_accession_data.keys())
-        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-        if ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in all_accessions):
-            logger.info(f"Skipping recording of duplicate multi-accession study: all {len(all_accessions)} accessions already seen: {all_accessions}")
-            return
         
         total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
         
@@ -1832,8 +1883,9 @@ class RVUCounterApp:
             "individual_procedures": all_procedures,
         }
         
-        self.data_manager.data["current_shift"]["records"].append(study_record)
-        self.data_manager.save()
+        # For multi-accession, use the accession string as the key for duplicate checking
+        # This ensures multiple openings of the same multi-accession group update the same record
+        self._record_or_update_study(study_record)
         self.undo_used = False
         self.undo_btn.config(state=tk.NORMAL)
         
@@ -2456,11 +2508,9 @@ class RVUCounterApp:
                                 "time_finished": completed_study["end_time"].isoformat(),
                                 "duration_seconds": completed_study["duration"],
                             }
-                            self.data_manager.data["current_shift"]["records"].append(study_record)
-                            self.data_manager.save()
+                            self._record_or_update_study(study_record)
                             self.undo_used = False
                             self.undo_btn.config(state=tk.NORMAL)
-                            logger.info(f"Recorded completed study (N/A trigger): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
                     # Clear all active studies
                     self.tracker.active_studies.clear()
                     self.update_display()
@@ -2546,12 +2596,10 @@ class RVUCounterApp:
                     "time_finished": study["end_time"].isoformat(),    # Time study was finished
                     "duration_seconds": study["duration"],              # Time taken to finish
                 }
-                self.data_manager.data["current_shift"]["records"].append(study_record)
-                self.data_manager.save()
-                # Reset undo button when new study is added
+                self._record_or_update_study(study_record)
+                # Reset undo button when new study is added or updated
                 self.undo_used = False
                 self.undo_btn.config(state=tk.NORMAL)
-                logger.info(f"Recorded completed study: {study['accession']} - {study['study_type']} ({study['rvu']} RVU) - Duration: {study['duration']:.1f}s")
                 self.update_display()
             
             # Now handle current study
@@ -2580,11 +2628,9 @@ class RVUCounterApp:
                                         "time_finished": completed_study["end_time"].isoformat(),
                                         "duration_seconds": completed_study["duration"],
                                     }
-                                    self.data_manager.data["current_shift"]["records"].append(study_record)
-                                    self.data_manager.save()
+                                    self._record_or_update_study(study_record)
                                     self.undo_used = False
                                     self.undo_btn.config(state=tk.NORMAL)
-                                    logger.info(f"Recorded completed Mosaic study (no study visible): {completed_study['accession']} - {completed_study['study_type']} ({completed_study['rvu']} RVU) - Duration: {duration:.1f}s")
                                     del self.tracker.active_studies[acc]
                     if self.tracker.active_studies:
                         self.update_display()
@@ -2613,14 +2659,14 @@ class RVUCounterApp:
                 # The completion check happens above, so we can return now
                 return
             
-            # If study was already completed in this shift, ignore it
-            if self.tracker.should_ignore(accession, ignore_duplicates):
-                logger.debug(f"Ignoring duplicate accession: {accession}")
-                return
+            # Allow study to be tracked again even if previously seen
+            # When it completes, _record_or_update_study will update existing record with maximum duration
+            # Mark as seen to track that we've encountered this accession
+            if accession not in self.tracker.seen_accessions:
+                self.tracker.mark_seen(accession)
             
-            # New study - add it
+            # Add or update study tracking (allows reopening of previously seen studies)
             self.tracker.add_study(accession, procedure, current_time, rvu_table, classification_rules, direct_lookups, self.current_patient_class)
-            self.tracker.mark_seen(accession)
             
             if self.is_running:
                 self.root.title("RVU Counter - Running")
@@ -3223,8 +3269,11 @@ class RVUCounterApp:
         # Check if procedure is "n/a" - if so, don't display anything
         is_na = self.current_procedure and self.current_procedure.strip().lower() in ["n/a", "na", "none", ""]
         
+        show_time = self.data_manager.data["settings"].get("show_time", False)
+        
         if is_na or not self.current_procedure:
             self.debug_accession_label.config(text="")
+            self.debug_duration_label.config(text="")
             self.debug_procedure_label.config(text="", foreground="gray")
             self.debug_patient_class_label.config(text="")
             self.debug_study_type_prefix_label.config(text="")
@@ -3253,7 +3302,31 @@ class RVUCounterApp:
                 acc_display = ", ".join(acc_display_list)
                 if len(self.current_multiple_accessions) > 2:
                     acc_display += f" (+{len(self.current_multiple_accessions) - 2})"
+                
+                # Calculate duration for current study
+                duration_text = ""
+                if show_time and (self.current_accession or self.multi_accession_mode):
+                    duration_text = self._get_current_study_duration()
+                
+                # Truncate accession if needed to make room for duration
+                if show_time and duration_text:
+                    # Calculate available width for accession
+                    frame_width = self.root.winfo_width()
+                    if frame_width > 100:
+                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
+                        duration_chars = 8
+                        prefix_chars = len("Accession: ")
+                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
+                        usable_width = max(frame_width - reserved, 50)
+                        char_width = 8 * 0.75
+                        max_chars = int(usable_width / char_width)
+                        max_chars = max(10, min(max_chars, 100))
+                        
+                        if len(acc_display) > max_chars:
+                            acc_display = self._truncate_text(acc_display, max_chars)
+                
                 self.debug_accession_label.config(text=f"Accession: {acc_display}")
+                self.debug_duration_label.config(text=duration_text if show_time else "")
                 
                 # Check if this is Mosaic multi-accession (no multi_accession_mode, but has multiple)
                 data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
@@ -3299,7 +3372,33 @@ class RVUCounterApp:
                         modality = parts[0] if parts else "Studies"
                         self.debug_procedure_label.config(text=f"Procedure: Multiple {modality}", foreground="gray")
             else:
-                self.debug_accession_label.config(text=f"Accession: {self.current_accession if self.current_accession else '-'}")
+                accession_text = self.current_accession if self.current_accession else '-'
+                
+                # Calculate duration for current study
+                duration_text = ""
+                if show_time and (self.current_accession or self.multi_accession_mode):
+                    duration_text = self._get_current_study_duration()
+                
+                # Truncate accession if needed to make room for duration
+                if show_time and duration_text:
+                    # Calculate available width for accession
+                    frame_width = self.root.winfo_width()
+                    if frame_width > 100:
+                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
+                        duration_chars = 8
+                        prefix_chars = len("Accession: ")
+                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
+                        usable_width = max(frame_width - reserved, 50)
+                        char_width = 8 * 0.75
+                        max_chars = int(usable_width / char_width)
+                        max_chars = max(10, min(max_chars, 100))
+                        
+                        if len(accession_text) > max_chars:
+                            accession_text = self._truncate_text(accession_text, max_chars)
+                
+                self.debug_accession_label.config(text=f"Accession: {accession_text}")
+                self.debug_duration_label.config(text=duration_text if show_time else "")
+                
                 # No truncation for procedure - show full name
                 procedure_display = self.current_procedure if self.current_procedure else '-'
                 self.debug_procedure_label.config(text=f"Procedure: {procedure_display}", foreground="gray")
@@ -3561,6 +3660,28 @@ class RVUCounterApp:
         else:
             return f"{seconds}s"
     
+    def _get_current_study_duration(self) -> str:
+        """Get the duration of the currently active study.
+        
+        Returns formatted duration string (e.g., "5m 23s") or empty string if not available.
+        """
+        # For multi-accession mode, use multi_accession_start_time
+        if self.multi_accession_mode and self.multi_accession_start_time:
+            current_time = datetime.now()
+            duration_seconds = (current_time - self.multi_accession_start_time).total_seconds()
+            return self._format_duration(duration_seconds)
+        
+        # For single accession, check if this study is in active_studies
+        if self.current_accession and self.current_accession in self.tracker.active_studies:
+            study = self.tracker.active_studies[self.current_accession]
+            start_time = study.get("start_time")
+            if start_time:
+                current_time = datetime.now()
+                duration_seconds = (current_time - start_time).total_seconds()
+                return self._format_duration(duration_seconds)
+        
+        return ""
+    
     def start_drag(self, event):
         """Start dragging window."""
         self.drag_start_x = event.x
@@ -3619,9 +3740,19 @@ class RVUCounterApp:
             logger.error(f"Error saving window position: {e}")
     
     def _update_time_display(self):
-        """Update time display for recent studies every 5 seconds."""
+        """Update time display for recent studies and current study duration every second."""
+        show_time = self.data_manager.data["settings"].get("show_time", False)
+        
+        # Update current study duration if show_time is enabled
+        if show_time and hasattr(self, 'debug_duration_label'):
+            duration_text = self._get_current_study_duration()
+            if duration_text:
+                # Update duration
+                self.debug_duration_label.config(text=duration_text)
+            else:
+                self.debug_duration_label.config(text="")
+        
         if hasattr(self, 'time_labels') and self.time_labels:
-            show_time = self.data_manager.data["settings"].get("show_time", False)
             if show_time:
                 for label_info in self.time_labels:
                     try:
@@ -3656,8 +3787,8 @@ class RVUCounterApp:
                     except Exception as e:
                         logger.error(f"Error updating time display: {e}")
         
-        # Schedule next update in 5 seconds
-        self.root.after(5000, self._update_time_display)
+        # Schedule next update in 1 second for current study duration
+        self.root.after(1000, self._update_time_display)
     
     def on_closing(self):
         """Handle window closing."""
@@ -4459,22 +4590,22 @@ class StatisticsWindow:
         self.window.grab_set()
         
         # Make window larger for detailed stats
-        self.window.geometry("1350x700")
+        self.window.geometry("1350x800")
         self.window.minsize(800, 500)
         
         # Restore saved position or center on screen
         positions = self.data_manager.data.get("window_positions", {})
         if "statistics" in positions:
             pos = positions["statistics"]
-            self.window.geometry(f"1350x700+{pos['x']}+{pos['y']}")
+            self.window.geometry(f"1350x800+{pos['x']}+{pos['y']}")
         else:
             # Center on screen
             parent.update_idletasks()
             screen_width = parent.winfo_screenwidth()
             screen_height = parent.winfo_screenheight()
             x = (screen_width - 1350) // 2
-            y = (screen_height - 700) // 2
-            self.window.geometry(f"1350x700+{x}+{y}")
+            y = (screen_height - 800) // 2
+            self.window.geometry(f"1350x800+{x}+{y}")
         
         # Track position for saving
         self.last_saved_x = self.window.winfo_x()
@@ -4571,53 +4702,99 @@ class StatisticsWindow:
         # Custom date range input frame (hidden by default)
         self.custom_date_frame = ttk.Frame(history_frame)
         
-        # Start date
+        # Start date with calendar button
         ttk.Label(self.custom_date_frame, text="From:").grid(row=0, column=0, padx=(20, 5), pady=2, sticky=tk.W)
-        if HAS_TKCALENDAR:
-            self.custom_start_date_entry = DateEntry(
-                self.custom_date_frame,
-                width=12,
-                background='darkblue',
-                foreground='white',
-                borderwidth=2,
-                date_pattern='mm/dd/yyyy',
-                year=datetime.now().year,
-                month=datetime.now().month,
-                day=datetime.now().day
-            )
-            self.custom_start_date_entry.grid(row=0, column=1, padx=5, pady=2)
-            self.custom_start_date_entry.bind("<<DateEntrySelected>>", lambda e: self.on_date_change())
-        else:
-            # Fallback to entry field if tkcalendar not available
-            self.custom_start_date = tk.StringVar()
-            self.custom_start_entry = ttk.Entry(self.custom_date_frame, textvariable=self.custom_start_date, width=12)
-            self.custom_start_entry.grid(row=0, column=1, padx=5, pady=2)
-            self.custom_start_entry.insert(0, datetime.now().strftime("%m/%d/%Y"))
-            self.custom_start_entry.bind("<FocusOut>", lambda e: self.on_date_change())
+        start_date_frame = ttk.Frame(self.custom_date_frame)
+        start_date_frame.grid(row=0, column=1, padx=5, pady=2, sticky=tk.W)
         
-        # End date
-        ttk.Label(self.custom_date_frame, text="To:").grid(row=1, column=0, padx=(20, 5), pady=2, sticky=tk.W)
+        self.custom_start_date = tk.StringVar(value=datetime.now().strftime("%m/%d/%Y"))
+        self.custom_start_entry = ttk.Entry(start_date_frame, textvariable=self.custom_start_date, width=12)
+        self.custom_start_entry.pack(side=tk.LEFT)
+        
         if HAS_TKCALENDAR:
-            self.custom_end_date_entry = DateEntry(
-                self.custom_date_frame,
-                width=12,
-                background='darkblue',
-                foreground='white',
-                borderwidth=2,
-                date_pattern='mm/dd/yyyy',
-                year=datetime.now().year,
-                month=datetime.now().month,
-                day=datetime.now().day
-            )
-            self.custom_end_date_entry.grid(row=1, column=1, padx=5, pady=2)
-            self.custom_end_date_entry.bind("<<DateEntrySelected>>", lambda e: self.on_date_change())
-        else:
-            # Fallback to entry field if tkcalendar not available
-            self.custom_end_date = tk.StringVar()
-            self.custom_end_entry = ttk.Entry(self.custom_date_frame, textvariable=self.custom_end_date, width=12)
-            self.custom_end_entry.grid(row=1, column=1, padx=5, pady=2)
-            self.custom_end_entry.insert(0, datetime.now().strftime("%m/%d/%Y"))
-            self.custom_end_entry.bind("<FocusOut>", lambda e: self.on_date_change())
+            def open_start_calendar():
+                cal_dialog = tk.Toplevel(self.window)
+                cal_dialog.title("Select Start Date")
+                cal_dialog.transient(self.window)
+                cal_dialog.grab_set()
+                
+                try:
+                    # Parse current date or use today
+                    current_val = self.custom_start_date.get()
+                    try:
+                        current_dt = datetime.strptime(current_val, "%m/%d/%Y")
+                    except:
+                        current_dt = datetime.now()
+                    
+                    cal = Calendar(cal_dialog, selectmode='day', 
+                                 year=current_dt.year, month=current_dt.month, day=current_dt.day)
+                    cal.pack(padx=10, pady=10)
+                    
+                    def set_start_date():
+                        selected_date = cal.selection_get()
+                        self.custom_start_date.set(selected_date.strftime("%m/%d/%Y"))
+                        cal_dialog.destroy()
+                        self.on_date_change()
+                    
+                    btn_frame = ttk.Frame(cal_dialog)
+                    btn_frame.pack(pady=5)
+                    ttk.Button(btn_frame, text="OK", command=set_start_date).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text="Cancel", command=cal_dialog.destroy).pack(side=tk.LEFT, padx=5)
+                except Exception as e:
+                    logger.error(f"Error opening calendar: {e}")
+                    cal_dialog.destroy()
+            
+            start_cal_btn = ttk.Button(start_date_frame, text="📅", width=3, command=open_start_calendar)
+            start_cal_btn.pack(side=tk.LEFT, padx=(2, 0))
+        
+        self.custom_start_entry.bind("<FocusOut>", lambda e: self.on_date_change())
+        
+        # End date with calendar button
+        ttk.Label(self.custom_date_frame, text="To:").grid(row=1, column=0, padx=(20, 5), pady=2, sticky=tk.W)
+        end_date_frame = ttk.Frame(self.custom_date_frame)
+        end_date_frame.grid(row=1, column=1, padx=5, pady=2, sticky=tk.W)
+        
+        self.custom_end_date = tk.StringVar(value=datetime.now().strftime("%m/%d/%Y"))
+        self.custom_end_entry = ttk.Entry(end_date_frame, textvariable=self.custom_end_date, width=12)
+        self.custom_end_entry.pack(side=tk.LEFT)
+        
+        if HAS_TKCALENDAR:
+            def open_end_calendar():
+                cal_dialog = tk.Toplevel(self.window)
+                cal_dialog.title("Select End Date")
+                cal_dialog.transient(self.window)
+                cal_dialog.grab_set()
+                
+                try:
+                    # Parse current date or use today
+                    current_val = self.custom_end_date.get()
+                    try:
+                        current_dt = datetime.strptime(current_val, "%m/%d/%Y")
+                    except:
+                        current_dt = datetime.now()
+                    
+                    cal = Calendar(cal_dialog, selectmode='day',
+                                 year=current_dt.year, month=current_dt.month, day=current_dt.day)
+                    cal.pack(padx=10, pady=10)
+                    
+                    def set_end_date():
+                        selected_date = cal.selection_get()
+                        self.custom_end_date.set(selected_date.strftime("%m/%d/%Y"))
+                        cal_dialog.destroy()
+                        self.on_date_change()
+                    
+                    btn_frame = ttk.Frame(cal_dialog)
+                    btn_frame.pack(pady=5)
+                    ttk.Button(btn_frame, text="OK", command=set_end_date).pack(side=tk.LEFT, padx=5)
+                    ttk.Button(btn_frame, text="Cancel", command=cal_dialog.destroy).pack(side=tk.LEFT, padx=5)
+                except Exception as e:
+                    logger.error(f"Error opening calendar: {e}")
+                    cal_dialog.destroy()
+            
+            end_cal_btn = ttk.Button(end_date_frame, text="📅", width=3, command=open_end_calendar)
+            end_cal_btn.pack(side=tk.LEFT, padx=(2, 0))
+        
+        self.custom_end_entry.bind("<FocusOut>", lambda e: self.on_date_change())
         
         # Initially hide the custom date frame (don't pack it yet)
         # It will be shown when custom_date_range is selected
@@ -4715,6 +4892,12 @@ class StatisticsWindow:
         
         ttk.Button(button_frame, text="Refresh", command=self.refresh_data, width=12).pack(side=tk.LEFT, padx=2)
         ttk.Button(button_frame, text="Close", command=self.on_closing, width=12).pack(side=tk.RIGHT, padx=2)
+        
+        # Center frame for backup buttons
+        center_frame = ttk.Frame(button_frame)
+        center_frame.pack(expand=True)
+        ttk.Button(center_frame, text="Backup Data", command=self.backup_study_data, width=16).pack(side=tk.LEFT, padx=2)
+        ttk.Button(center_frame, text="Load Backup Data", command=self.load_backup_data, width=16).pack(side=tk.LEFT, padx=2)
         
         # Initial data load
         self.populate_shifts_list()
@@ -4983,24 +5166,16 @@ class StatisticsWindow:
             # This is handled separately in _display_projection
             return [], "Monthly Projection"
         elif period == "custom_date_range":
-            # Custom date range - get dates from date pickers or entry fields
+            # Custom date range - get dates from entry fields
             try:
-                if HAS_TKCALENDAR:
-                    # Use DateEntry objects
-                    start_date = self.custom_start_date_entry.get_date()
-                    end_date = self.custom_end_date_entry.get_date()
-                    start = datetime.combine(start_date, datetime.min.time())
-                    end = datetime.combine(end_date, datetime.max.time().replace(microsecond=999999))
-                else:
-                    # Fallback to entry fields
-                    start_str = self.custom_start_date.get().strip()
-                    end_str = self.custom_end_date.get().strip()
-                    # Parse dates (MM/DD/YYYY format)
-                    start = datetime.strptime(start_str, "%m/%d/%Y")
-                    end = datetime.strptime(end_str, "%m/%d/%Y")
-                    # Set time to start/end of day
-                    start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-                    end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+                start_str = self.custom_start_date.get().strip()
+                end_str = self.custom_end_date.get().strip()
+                # Parse dates (MM/DD/YYYY format)
+                start = datetime.strptime(start_str, "%m/%d/%Y")
+                end = datetime.strptime(end_str, "%m/%d/%Y")
+                # Set time to start/end of day
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
                 
                 # Validate: start should be before end
                 if start > end:
@@ -5202,6 +5377,8 @@ class StatisticsWindow:
         """Handle when custom date range radio is selected."""
         # Show the custom date frame
         self.custom_date_frame.pack(fill=tk.X, pady=(5, 0))
+        # Update the window to ensure DateEntry widgets render properly
+        self.window.update_idletasks()
         self.refresh_data()
     
     def on_date_change(self):
@@ -5217,6 +5394,8 @@ class StatisticsWindow:
         # Show/hide custom date frame based on selection
         if current_period == "custom_date_range":
             self.custom_date_frame.pack(fill=tk.X, pady=(5, 0))
+            # Update the window to ensure widgets render properly
+            self.window.update_idletasks()
         else:
             self.custom_date_frame.pack_forget()
         
@@ -6752,8 +6931,8 @@ class StatisticsWindow:
         historical_rvu = sum(r.get("rvu", 0) for r in historical_records)
         historical_compensation = sum(self._calculate_study_compensation(r) for r in historical_records)
         
-        # Calculate historical hours worked
-        historical_hours = self._calculate_historical_hours(historical_records)
+        # Calculate historical hours worked (clipped to the date range)
+        historical_hours = self._calculate_historical_hours(historical_records, start_date, now)
         
         if historical_hours > 0:
             rvu_per_hour = historical_rvu / historical_hours
@@ -6854,8 +7033,15 @@ class StatisticsWindow:
         
         self._projection_table.update_data()
     
-    def _calculate_historical_hours(self, records: List[dict]) -> float:
-        """Calculate total hours worked from historical records."""
+    def _calculate_historical_hours(self, records: List[dict], date_range_start: datetime = None, date_range_end: datetime = None) -> float:
+        """
+        Calculate total hours worked from historical records.
+        
+        Args:
+            records: List of records in the date range
+            date_range_start: Start of the date range being analyzed (to clip shifts)
+            date_range_end: End of the date range being analyzed (to clip shifts)
+        """
         # Get all shifts that contain these records
         all_shifts = []
         current_shift = self.data_manager.data.get("current_shift", {})
@@ -6884,15 +7070,17 @@ class StatisticsWindow:
             except:
                 continue
         
-        # Sum durations
+        # Sum durations, clipping to date range to avoid counting overlapping/shared time
         total_hours = 0.0
+        # Track time periods to merge overlaps
+        time_periods = []
+        
         for shift_start_str, shift in shifts_with_records.items():
             try:
                 shift_start = datetime.fromisoformat(shift_start_str)
                 shift_end_str = shift.get("shift_end")
                 if shift_end_str:
                     shift_end = datetime.fromisoformat(shift_end_str)
-                    total_hours += (shift_end - shift_start).total_seconds() / 3600
                 else:
                     # Current shift - estimate from records
                     shift_records = shift.get("records", [])
@@ -6904,13 +7092,241 @@ class StatisticsWindow:
                             except:
                                 pass
                         if record_times:
-                            latest_time = max(record_times)
-                            if latest_time > shift_start:
-                                total_hours += (latest_time - shift_start).total_seconds() / 3600
+                            shift_end = max(record_times)
+                        else:
+                            continue
+                    else:
+                        continue
+                
+                # Clip shift to date range if provided
+                if date_range_start is not None:
+                    shift_start = max(shift_start, date_range_start)
+                if date_range_end is not None:
+                    shift_end = min(shift_end, date_range_end)
+                
+                # Only count if shift still has valid duration after clipping
+                if shift_start < shift_end:
+                    time_periods.append((shift_start, shift_end))
             except:
                 continue
         
+        # Merge overlapping time periods to avoid double-counting
+        if time_periods:
+            # Sort by start time
+            time_periods.sort(key=lambda x: x[0])
+            
+            # Merge overlaps
+            merged_periods = []
+            current_start, current_end = time_periods[0]
+            
+            for start, end in time_periods[1:]:
+                if start <= current_end:
+                    # Overlaps or adjacent - merge
+                    current_end = max(current_end, end)
+                else:
+                    # No overlap - save current and start new
+                    merged_periods.append((current_start, current_end))
+                    current_start, current_end = start, end
+            
+            # Don't forget the last period
+            merged_periods.append((current_start, current_end))
+            
+            # Sum the merged periods
+            for start, end in merged_periods:
+                total_hours += (end - start).total_seconds() / 3600
+        
         return total_hours
+    
+    def backup_study_data(self):
+        """Create a backup copy of rvu_records.json with timestamp."""
+        try:
+            records_file = self.data_manager.records_file
+            if not os.path.exists(records_file):
+                messagebox.showwarning("Backup Failed", "No records file found to backup.")
+                return
+            
+            # Generate backup filename with timestamp
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            backup_dir = os.path.dirname(records_file)
+            backup_filename = f"rvu_records_backup_{timestamp}.json"
+            backup_path = os.path.join(backup_dir, backup_filename)
+            
+            # Copy the file
+            shutil.copy2(records_file, backup_path)
+            
+            messagebox.showinfo("Backup Created", f"Study data backed up successfully!\n\nBackup file: {backup_filename}")
+            logger.info(f"Backup created: {backup_path}")
+        except Exception as e:
+            error_msg = f"Error creating backup: {str(e)}"
+            messagebox.showerror("Backup Failed", error_msg)
+            logger.error(error_msg)
+    
+    def load_backup_data(self):
+        """Show dialog to select and load a backup file."""
+        try:
+            records_file = self.data_manager.records_file
+            backup_dir = os.path.dirname(records_file)
+            
+            # Find all backup files
+            backup_files = []
+            if os.path.exists(backup_dir):
+                for filename in os.listdir(backup_dir):
+                    if filename.startswith("rvu_records_backup_") and filename.endswith(".json"):
+                        backup_path = os.path.join(backup_dir, filename)
+                        try:
+                            # Try to extract timestamp from filename
+                            # Format: rvu_records_backup_YYYY-MM-DD_HH-MM-SS.json
+                            timestamp_str = filename.replace("rvu_records_backup_", "").replace(".json", "")
+                            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
+                            # Get file modification time for sorting
+                            mtime = os.path.getmtime(backup_path)
+                            backup_files.append({
+                                "filename": filename,
+                                "path": backup_path,
+                                "timestamp": timestamp,
+                                "mtime": mtime,
+                                "display": timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                        except:
+                            # If we can't parse timestamp, use file mtime
+                            mtime = os.path.getmtime(backup_path)
+                            backup_files.append({
+                                "filename": filename,
+                                "path": backup_path,
+                                "timestamp": datetime.fromtimestamp(mtime),
+                                "mtime": mtime,
+                                "display": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                            })
+            
+            if not backup_files:
+                messagebox.showinfo("No Backups", "No backup files found.")
+                return
+            
+            # Sort by modification time (newest first)
+            backup_files.sort(key=lambda x: x["mtime"], reverse=True)
+            
+            # Create selection dialog
+            self._show_backup_selection_dialog(backup_files)
+            
+        except Exception as e:
+            error_msg = f"Error loading backup list: {str(e)}"
+            messagebox.showerror("Error", error_msg)
+            logger.error(error_msg)
+    
+    def _show_backup_selection_dialog(self, backup_files: List[dict]):
+        """Show a dialog with list of backups to select from."""
+        # Create dialog window
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Select Backup to Load")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        dialog.geometry("500x400")
+        
+        # Center dialog on parent window
+        dialog.update_idletasks()
+        x = self.window.winfo_x() + (self.window.winfo_width() // 2) - (dialog.winfo_width() // 2)
+        y = self.window.winfo_y() + (self.window.winfo_height() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Frame for listbox and scrollbar
+        list_frame = ttk.Frame(dialog, padding="10")
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Label
+        label = ttk.Label(list_frame, text="Select a backup to restore:", font=("Arial", 10))
+        label.pack(anchor=tk.W, pady=(0, 5))
+        
+        # Listbox with scrollbar
+        scrollbar = ttk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Consolas", 9))
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=listbox.yview)
+        
+        # Populate listbox
+        for backup in backup_files:
+            listbox.insert(tk.END, backup["display"])
+        
+        # Store backup files for retrieval
+        listbox.backup_files = backup_files
+        
+        # Buttons frame
+        buttons_frame = ttk.Frame(dialog, padding="10")
+        buttons_frame.pack(fill=tk.X)
+        
+        def on_load():
+            selection = listbox.curselection()
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a backup file.")
+                return
+            
+            selected_index = selection[0]
+            selected_backup = backup_files[selected_index]
+            
+            # Confirm overwrite
+            response = messagebox.askyesno(
+                "Confirm Overwrite",
+                f"Are you sure you want to restore this backup?\n\n"
+                f"Backup: {selected_backup['display']}\n\n"
+                f"This will REPLACE your current study data. This action cannot be undone.\n\n"
+                f"Consider creating a backup of your current data first.",
+                icon="warning"
+            )
+            
+            if response:
+                try:
+                    # Load the backup file
+                    with open(selected_backup["path"], 'r', encoding='utf-8') as f:
+                        backup_data = json.load(f)
+                    
+                    # Replace current records data
+                    self.data_manager.records_data = backup_data
+                    
+                    # Update the merged data structure
+                    self.data_manager.data["records"] = backup_data.get("records", [])
+                    self.data_manager.data["current_shift"] = backup_data.get("current_shift", {
+                        "shift_start": None,
+                        "shift_end": None,
+                        "records": []
+                    })
+                    self.data_manager.data["shifts"] = backup_data.get("shifts", [])
+                    
+                    # Save to current records file
+                    self.data_manager.save(save_records=True)
+                    
+                    # Refresh the app
+                    self.app.update_display()
+                    
+                    # Refresh statistics window
+                    self.populate_shifts_list()
+                    self.refresh_data()
+                    
+                    messagebox.showinfo("Backup Restored", f"Backup restored successfully!\n\nRestored from: {selected_backup['display']}")
+                    logger.info(f"Backup restored: {selected_backup['path']}")
+                    
+                    dialog.destroy()
+                except Exception as e:
+                    error_msg = f"Error restoring backup: {str(e)}"
+                    messagebox.showerror("Restore Failed", error_msg)
+                    logger.error(error_msg)
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        ttk.Button(buttons_frame, text="Load Selected Backup", command=on_load, width=20).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.RIGHT, padx=5)
+        
+        # Double-click to load
+        def on_double_click(event):
+            on_load()
+        
+        listbox.bind("<Double-Button-1>", on_double_click)
+        
+        # Focus on listbox
+        listbox.focus_set()
+        if backup_files:
+            listbox.selection_set(0)
     
     def on_configure(self, event):
         """Handle window configuration changes (move/resize)."""

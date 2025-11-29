@@ -88,7 +88,8 @@
         ],
         "excluded_keywords": [
           "CTA",
-          "neck"
+          "neck",
+          "angiography"
         ]
       },
       {
@@ -98,7 +99,8 @@
         ],
         "excluded_keywords": [
           "CTA",
-          "neck"
+          "neck",
+          "angiography"
         ]
       }
     ],
@@ -140,6 +142,26 @@
         "required_keywords": [
           "CTA",
           "head"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "brain",
+          "angiography"
         ],
         "excluded_keywords": [
           "neck"
@@ -498,8 +520,8 @@
   },
   "window_positions": {
     "main": {
-      "x": 4987,
-      "y": -352,
+      "x": 5019,
+      "y": 517,
       "width": 240,
       "height": 500
     },
