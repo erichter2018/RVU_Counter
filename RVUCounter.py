@@ -526,11 +526,12 @@ def extract_clario_patient_class(target_accession=None):
         # Staggered depth search: try 12, then 18, then 25, stopping if data is found
         # Use a helper function to get elements (similar to get_mosaic_elements)
         def get_all_elements_clario(element, depth=0, max_depth=15):
-            """Recursively get all UI elements from a window."""
+            """Recursively get all UI elements from a window. EXACT COPY from testClario.py."""
             elements = []
             if depth > max_depth:
                 return elements
             try:
+                # Get element info - EXACT COPY from testClario.py
                 try:
                     automation_id = element.element_info.automation_id or ""
                 except:
@@ -540,32 +541,24 @@ def extract_clario_patient_class(target_accession=None):
                 except:
                     name = ""
                 try:
-                    text = _window_text_with_timeout(element, timeout=0.5, element_name="clario element") or ""
+                    # Use direct window_text() like testClario.py - Clario extraction runs in separate thread
+                    text = element.window_text() or ""
                 except:
                     text = ""
+                
+                # Only include elements with some meaningful content
                 if automation_id or name or text:
                     elements.append({
                         'depth': depth,
                         'automation_id': automation_id,
                         'name': name,
-                        'text': text
+                        'text': text[:100] if text else "",  # Limit text length like testClario
                     })
+                
+                # Recursively get children - EXACT COPY from testClario.py
                 try:
-                    # Limit iteration to prevent blocking
-                    children_list = []
-                    try:
-                        children_gen = element.children()
-                        count = 0
-                        for child_elem in children_gen:
-                            children_list.append(child_elem)
-                            count += 1
-                            if count >= 50:  # Limit to prevent blocking
-                                break
-                    except Exception as e:
-                        logger.debug(f"element.children() iteration failed in get_all_elements_clario: {e}")
-                        children_list = []
-                    
-                    for child in children_list:
+                    children = element.children()
+                    for child in children:
                         elements.extend(get_all_elements_clario(child, depth + 1, max_depth))
                 except:
                     pass
@@ -577,6 +570,11 @@ def extract_clario_patient_class(target_accession=None):
             """Extract priority, class, and accession from element data."""
             data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
             
+            # Log all automation_ids that contain "class" to debug
+            class_automation_ids = [e.get('automation_id', '') for e in element_data if 'class' in e.get('automation_id', '').lower()]
+            if class_automation_ids:
+                logger.debug(f"Clario: Found {len(class_automation_ids)} elements with 'class' in automation_id: {class_automation_ids[:5]}")
+            
             for i, elem in enumerate(element_data):
                 if data['priority'] and data['class'] and data['accession']:
                     break
@@ -584,6 +582,10 @@ def extract_clario_patient_class(target_accession=None):
                 name = elem['name']
                 text = elem['text']
                 automation_id = elem['automation_id']
+                
+                # Log when we find a Class automation_id
+                if automation_id and 'class' in automation_id.lower() and 'priority' not in automation_id.lower():
+                    logger.debug(f"Clario: Found Class automation_id='{automation_id}' at index {i}, name='{name}', text='{text}'")
                 
                 # PRIORITY
                 if not data['priority']:
@@ -606,7 +608,7 @@ def extract_clario_patient_class(target_accession=None):
                                 data['priority'] = next_name
                                 break
                 
-                # CLASS
+                # CLASS - EXACT COPY from testClario.py
                 if not data['class']:
                     if automation_id and 'class' in automation_id.lower() and 'priority' not in automation_id.lower():
                         for j in range(i+1, min(i+10, len(element_data))):
@@ -650,7 +652,7 @@ def extract_clario_patient_class(target_accession=None):
             
             return data
         
-        # Staggered depth search: 12, then 18, then 25, stopping if all data found
+        # Staggered depth search: try 12, then 18, then 25, stopping if all three are found
         data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
         search_depths = [12, 18, 25]
         
@@ -658,7 +660,7 @@ def extract_clario_patient_class(target_accession=None):
             logger.debug(f"Clario: Searching at depth {max_depth}")
             all_elements = get_all_elements_clario(content_area, max_depth=max_depth)
             
-            # Convert to list
+            # Convert to list - EXACT COPY from testClario.py
             element_data = []
             for elem in all_elements:
                 name = elem.get('name', '').strip()
@@ -668,15 +670,27 @@ def extract_clario_patient_class(target_accession=None):
                     element_data.append({
                         'name': name,
                         'text': text,
-                        'automation_id': automation_id
+                        'automation_id': automation_id,
+                        'depth': elem.get('depth', 0)
                     })
             
             # Extract data from elements at this depth
-            data = extract_data_from_elements(element_data)
+            extracted_data = extract_data_from_elements(element_data)
             
-            # Stop if we found all required data
+            # Update data with any newly found values
+            if not data['priority'] and extracted_data['priority']:
+                data['priority'] = extracted_data['priority']
+                logger.debug(f"Clario: Found Priority='{data['priority']}' at depth {max_depth}")
+            if not data['class'] and extracted_data['class']:
+                data['class'] = extracted_data['class']
+                logger.debug(f"Clario: Found Class='{data['class']}' at depth {max_depth}")
+            if not data['accession'] and extracted_data['accession']:
+                data['accession'] = extracted_data['accession']
+                logger.debug(f"Clario: Found Accession='{data['accession']}' at depth {max_depth}")
+            
+            # Stop if we found all three required values
             if data['priority'] and data['class'] and data['accession']:
-                logger.debug(f"Clario: Found all data at depth {max_depth}, stopping search")
+                logger.debug(f"Clario: Found all three values at depth {max_depth}, stopping search")
                 break
         
         # Check if we found all required data
@@ -684,10 +698,13 @@ def extract_clario_patient_class(target_accession=None):
             logger.debug(f"Clario: No priority or class found. Priority='{data['priority']}', Class='{data['class']}'")
             return None
         
+        # Log raw extracted data BEFORE combining (helps debug if class is missing)
+        logger.info(f"Clario: Extracted raw data - Priority='{data['priority']}', Class='{data['class']}', Accession='{data['accession']}'")
+        
         # Combine priority and class
         _combine_priority_and_class_clario(data)
         
-        logger.debug(f"Clario: Extracted - Priority='{data['priority']}', Class='{data['class']}', Combined='{data['patient_class']}', Accession='{data['accession']}'")
+        logger.debug(f"Clario: After combining - Priority='{data['priority']}', Class='{data['class']}', Combined='{data['patient_class']}', Accession='{data['accession']}'")
         
         # If target_accession provided, verify it matches
         # If target_accession is None, we'll accept any accession (for multi-accession matching)
