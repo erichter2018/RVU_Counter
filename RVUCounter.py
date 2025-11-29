@@ -72,6 +72,50 @@ RVU_TABLE = {
 # Global cached desktop object - creating Desktop() is slow
 _cached_desktop = None
 
+
+def _window_text_with_timeout(element, timeout=1.0, element_name=""):
+    """Read window_text() with a timeout to prevent blocking.
+    
+    When PowerScribe transitions between studies, window_text() can block for
+    extended periods (10-18 seconds). This wrapper prevents the worker thread
+    from freezing by timing out after the specified duration.
+    
+    Args:
+        element: The UI element to read text from
+        timeout: Maximum time to wait in seconds (default 1.0)
+        element_name: Name/ID of element for logging (optional)
+    
+    Returns:
+        str: The window text, or empty string if timeout/failure occurs
+    """
+    import time
+    result = [None]
+    exception = [None]
+    start = time.time()
+    
+    def read_text():
+        try:
+            result[0] = element.window_text()
+        except Exception as e:
+            exception[0] = e
+    
+    thread = threading.Thread(target=read_text, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    elapsed = time.time() - start
+    
+    if thread.is_alive():
+        # Thread is still running - window_text() is blocking
+        logger.warning(f"window_text() call timed out after {timeout}s for {element_name}")
+        return ""
+    
+    if exception[0]:
+        logger.debug(f"window_text() exception for {element_name}: {exception[0]}")
+        raise exception[0]
+    
+    return result[0] if result[0] else ""
+
+
 def find_powerscribe_window():
     """Find PowerScribe 360 window by title."""
     global _cached_desktop
@@ -95,7 +139,8 @@ def find_powerscribe_window():
             windows = desktop.windows(title=title, visible_only=True)
             for window in windows:
                 try:
-                    if "RVU Counter" not in window.window_text():
+                    window_text = _window_text_with_timeout(window, timeout=1.0, element_name="PowerScribe window check")
+                    if "RVU Counter" not in window_text:
                         return window
                 except:
                     continue
@@ -118,7 +163,7 @@ def find_mosaic_window():
         all_windows = desktop.windows(visible_only=True)
         for window in all_windows:
             try:
-                window_text = window.window_text().lower()
+                window_text = _window_text_with_timeout(window, timeout=1.0, element_name="Mosaic window check").lower()
                 # Exclude test/viewer windows and RVU Counter
                 if ("rvu counter" in window_text or 
                     "test" in window_text or 
@@ -149,8 +194,21 @@ def find_mosaic_webview_element(main_window):
     """Find the WebView2 control inside the Mosaic main window."""
     try:
         # The WebView2 has automation_id = "webView"
-        children = main_window.children()
-        for child in children:
+        # Limit iteration to prevent blocking
+        children_list = []
+        try:
+            children_gen = main_window.children()
+            count = 0
+            for child_elem in children_gen:
+                children_list.append(child_elem)
+                count += 1
+                if count >= 50:  # Limit to prevent blocking
+                    break
+        except Exception as e:
+            logger.debug(f"main_window.children() iteration failed: {e}")
+            children_list = []
+        
+        for child in children_list:
             try:
                 automation_id = child.element_info.automation_id
                 if automation_id == "webView":
@@ -162,7 +220,21 @@ def find_mosaic_webview_element(main_window):
     
     # Fallback: search recursively
     try:
-        for child in main_window.descendants():
+        # Limit iteration to prevent blocking
+        descendants_list = []
+        try:
+            descendants_gen = main_window.descendants()
+            count = 0
+            for elem in descendants_gen:
+                descendants_list.append(elem)
+                count += 1
+                if count >= 1000:  # Limit to prevent excessive blocking
+                    break
+        except Exception as e:
+            logger.debug(f"main_window.descendants() iteration failed: {e}")
+            descendants_list = []
+        
+        for child in descendants_list:
             try:
                 automation_id = child.element_info.automation_id
                 if automation_id == "webView":
@@ -193,7 +265,7 @@ def get_mosaic_elements(webview_element, depth=0, max_depth=20):
             name = ""
         
         try:
-            text = webview_element.window_text() or ""
+            text = _window_text_with_timeout(webview_element, timeout=0.5, element_name="mosaic element") or ""
         except:
             text = ""
         
@@ -208,8 +280,21 @@ def get_mosaic_elements(webview_element, depth=0, max_depth=20):
         
         # Recursively get children
         try:
-            children = webview_element.children()
-            for child in children:
+            # Limit iteration to prevent blocking
+            children_list = []
+            try:
+                children_gen = webview_element.children()
+                count = 0
+                for child_elem in children_gen:
+                    children_list.append(child_elem)
+                    count += 1
+                    if count >= 50:  # Limit to prevent blocking
+                        break
+            except Exception as e:
+                logger.debug(f"webview_element.children() iteration failed: {e}")
+                children_list = []
+            
+            for child in children_list:
                 elements.extend(get_mosaic_elements(child, depth + 1, max_depth))
         except:
             pass
@@ -236,7 +321,7 @@ def find_clario_chrome_window(use_cache=True):
     # Check cache first
     if use_cache and _clario_cache['chrome_window']:
         try:
-            _ = _clario_cache['chrome_window'].window_text()
+            _ = _window_text_with_timeout(_clario_cache['chrome_window'], timeout=1.0, element_name="Clario cache validation")
             return _clario_cache['chrome_window']
         except:
             _clario_cache['chrome_window'] = None
@@ -249,7 +334,7 @@ def find_clario_chrome_window(use_cache=True):
         all_windows = desktop.windows(visible_only=True)
         for window in all_windows:
             try:
-                window_text = window.window_text().lower()
+                window_text = _window_text_with_timeout(window, timeout=1.0, element_name="Clario window check").lower()
                 # Exclude test/viewer windows and RVU Counter
                 if ("rvu counter" in window_text or 
                     "test" in window_text or 
@@ -294,7 +379,21 @@ def find_clario_content_area(chrome_window, use_cache=True):
     
     try:
         # Look for elements with control_type "Document" or "Pane"
-        for child in chrome_window.descendants():
+        # Limit iteration to prevent blocking
+        descendants_list = []
+        try:
+            descendants_gen = chrome_window.descendants()
+            count = 0
+            for elem in descendants_gen:
+                descendants_list.append(elem)
+                count += 1
+                if count >= 1000:  # Limit to prevent excessive blocking
+                    break
+        except Exception as e:
+            logger.debug(f"chrome_window.descendants() iteration failed: {e}")
+            descendants_list = []
+        
+        for child in descendants_list:
             try:
                 control_type = child.element_info.control_type
                 if control_type in ["Document", "Pane"]:
@@ -312,7 +411,21 @@ def find_clario_content_area(chrome_window, use_cache=True):
     
     # Fallback: try to find by automation_id patterns
     try:
-        for child in chrome_window.descendants():
+        # Limit iteration to prevent blocking
+        descendants_list = []
+        try:
+            descendants_gen = chrome_window.descendants()
+            count = 0
+            for elem in descendants_gen:
+                descendants_list.append(elem)
+                count += 1
+                if count >= 1000:  # Limit to prevent excessive blocking
+                    break
+        except Exception as e:
+            logger.debug(f"chrome_window.descendants() fallback iteration failed: {e}")
+            descendants_list = []
+        
+        for child in descendants_list:
             try:
                 automation_id = child.element_info.automation_id or ""
                 if "content" in automation_id.lower() or "render" in automation_id.lower():
@@ -410,7 +523,7 @@ def extract_clario_patient_class(target_accession=None):
             logger.info("Clario: Content area not found")
             return None
         
-        # Shallow scan (depth 15) for label-based search
+        # Staggered depth search: try 12, then 18, then 25, stopping if data is found
         # Use a helper function to get elements (similar to get_mosaic_elements)
         def get_all_elements_clario(element, depth=0, max_depth=15):
             """Recursively get all UI elements from a window."""
@@ -427,7 +540,7 @@ def extract_clario_patient_class(target_accession=None):
                 except:
                     name = ""
                 try:
-                    text = element.window_text() or ""
+                    text = _window_text_with_timeout(element, timeout=0.5, element_name="clario element") or ""
                 except:
                     text = ""
                 if automation_id or name or text:
@@ -438,8 +551,21 @@ def extract_clario_patient_class(target_accession=None):
                         'text': text
                     })
                 try:
-                    children = element.children()
-                    for child in children:
+                    # Limit iteration to prevent blocking
+                    children_list = []
+                    try:
+                        children_gen = element.children()
+                        count = 0
+                        for child_elem in children_gen:
+                            children_list.append(child_elem)
+                            count += 1
+                            if count >= 50:  # Limit to prevent blocking
+                                break
+                    except Exception as e:
+                        logger.debug(f"element.children() iteration failed in get_all_elements_clario: {e}")
+                        children_list = []
+                    
+                    for child in children_list:
                         elements.extend(get_all_elements_clario(child, depth + 1, max_depth))
                 except:
                     pass
@@ -447,94 +573,111 @@ def extract_clario_patient_class(target_accession=None):
                 pass
             return elements
         
-        shallow_elements = get_all_elements_clario(content_area, max_depth=15)
-        
-        # Convert to list
-        element_data = []
-        for elem in shallow_elements:
-            name = elem.get('name', '').strip()
-            text = elem.get('text', '').strip()
-            automation_id = elem.get('automation_id', '').strip()
-            if name or text or automation_id:
-                element_data.append({
-                    'name': name,
-                    'text': text,
-                    'automation_id': automation_id
-                })
-        
-        # Label-based search
-        data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
-        
-        for i, elem in enumerate(element_data):
-            if data['priority'] and data['class'] and data['accession']:
-                break
+        def extract_data_from_elements(element_data):
+            """Extract priority, class, and accession from element data."""
+            data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
+            
+            for i, elem in enumerate(element_data):
+                if data['priority'] and data['class'] and data['accession']:
+                    break
+                    
+                name = elem['name']
+                text = elem['text']
+                automation_id = elem['automation_id']
                 
-            name = elem['name']
-            text = elem['text']
-            automation_id = elem['automation_id']
+                # PRIORITY
+                if not data['priority']:
+                    if automation_id and 'priority' in automation_id.lower():
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            next_text = next_elem['text']
+                            if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                                data['priority'] = next_name
+                                break
+                            elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
+                                data['priority'] = next_text
+                                break
+                    elif name and 'priority' in name.lower() and ':' in name:
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                                data['priority'] = next_name
+                                break
+                
+                # CLASS
+                if not data['class']:
+                    if automation_id and 'class' in automation_id.lower() and 'priority' not in automation_id.lower():
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            next_text = next_elem['text']
+                            if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                                data['class'] = next_name
+                                break
+                            elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
+                                data['class'] = next_text
+                                break
+                    elif name and 'class' in name.lower() and ':' in name and 'priority' not in name.lower():
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
+                                data['class'] = next_name
+                                break
+                
+                # ACCESSION
+                if not data['accession']:
+                    if automation_id and 'accession' in automation_id.lower():
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            next_text = next_elem['text']
+                            if next_name and ':' not in next_name and len(next_name) > 5 and ' ' not in next_name:
+                                data['accession'] = next_name
+                                break
+                            elif next_text and ':' not in next_text and len(next_text) > 5 and ' ' not in next_text:
+                                data['accession'] = next_text
+                                break
+                    elif name and 'accession' in name.lower() and ':' in name:
+                        for j in range(i+1, min(i+10, len(element_data))):
+                            next_elem = element_data[j]
+                            next_name = next_elem['name']
+                            if next_name and ':' not in next_name and len(next_name) > 5 and ' ' not in next_name:
+                                data['accession'] = next_name
+                                break
             
-            # PRIORITY
-            if not data['priority']:
-                if automation_id and 'priority' in automation_id.lower():
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        next_text = next_elem['text']
-                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
-                            data['priority'] = next_name
-                            break
-                        elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
-                            data['priority'] = next_text
-                            break
-                elif name and 'priority' in name.lower() and ':' in name:
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
-                            data['priority'] = next_name
-                            break
+            return data
+        
+        # Staggered depth search: 12, then 18, then 25, stopping if all data found
+        data = {'priority': '', 'class': '', 'accession': '', 'patient_class': ''}
+        search_depths = [12, 18, 25]
+        
+        for max_depth in search_depths:
+            logger.debug(f"Clario: Searching at depth {max_depth}")
+            all_elements = get_all_elements_clario(content_area, max_depth=max_depth)
             
-            # CLASS
-            if not data['class']:
-                if automation_id and 'class' in automation_id.lower() and 'priority' not in automation_id.lower():
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        next_text = next_elem['text']
-                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
-                            data['class'] = next_name
-                            break
-                        elif next_text and ':' not in next_text and next_text.lower() not in ['priority', 'class', 'accession']:
-                            data['class'] = next_text
-                            break
-                elif name and 'class' in name.lower() and ':' in name and 'priority' not in name.lower():
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        if next_name and ':' not in next_name and next_name.lower() not in ['priority', 'class', 'accession']:
-                            data['class'] = next_name
-                            break
+            # Convert to list
+            element_data = []
+            for elem in all_elements:
+                name = elem.get('name', '').strip()
+                text = elem.get('text', '').strip()
+                automation_id = elem.get('automation_id', '').strip()
+                if name or text or automation_id:
+                    element_data.append({
+                        'name': name,
+                        'text': text,
+                        'automation_id': automation_id
+                    })
             
-            # ACCESSION
-            if not data['accession']:
-                if automation_id and 'accession' in automation_id.lower():
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        next_text = next_elem['text']
-                        if next_name and ':' not in next_name and len(next_name) > 5 and ' ' not in next_name:
-                            data['accession'] = next_name
-                            break
-                        elif next_text and ':' not in next_text and len(next_text) > 5 and ' ' not in next_text:
-                            data['accession'] = next_text
-                            break
-                elif name and 'accession' in name.lower() and ':' in name:
-                    for j in range(i+1, min(i+10, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name']
-                        if next_name and ':' not in next_name and len(next_name) > 5:
-                            data['accession'] = next_name
-                            break
+            # Extract data from elements at this depth
+            data = extract_data_from_elements(element_data)
+            
+            # Stop if we found all required data
+            if data['priority'] and data['class'] and data['accession']:
+                logger.debug(f"Clario: Found all data at depth {max_depth}, stopping search")
+                break
         
         # Check if we found all required data
         if not (data['priority'] or data['class']):
@@ -688,7 +831,7 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
         if cached_elements and auto_id in cached_elements:
             try:
                 cached_elem = cached_elements[auto_id]['element']
-                text_content = cached_elem.window_text()
+                text_content = _window_text_with_timeout(cached_elem, timeout=1.0, element_name=auto_id)
                 found_elements[auto_id] = {
                     'element': cached_elem,
                     'text': text_content.strip() if text_content else '',
@@ -703,13 +846,27 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
     if ids_needing_search:
         try:
             remaining = set(ids_needing_search)
-            for element in window.descendants():
+            # Limit iteration to prevent blocking
+            descendants_list = []
+            try:
+                descendants_gen = window.descendants()
+                count = 0
+                for elem in descendants_gen:
+                    descendants_list.append(elem)
+                    count += 1
+                    if count >= 1000:  # Limit to prevent excessive blocking
+                        break
+            except Exception as e:
+                logger.debug(f"window.descendants() iteration failed: {e}")
+                descendants_list = []
+            
+            for element in descendants_list:
                 if not remaining:
                     break
                 try:
                     elem_auto_id = element.element_info.automation_id
                     if elem_auto_id and elem_auto_id in remaining:
-                        text_content = element.window_text()
+                        text_content = _window_text_with_timeout(element, timeout=1.0, element_name=elem_auto_id)
                         found_elements[elem_auto_id] = {
                             'element': element,
                             'text': text_content.strip() if text_content else '',
@@ -1399,8 +1556,11 @@ class StudyTracker:
         
         return completed
     
-    def should_ignore(self, accession: str, ignore_duplicates: bool) -> bool:
-        """Check if study should be ignored (only if already completed, not if currently active)."""
+    def should_ignore(self, accession: str, ignore_duplicates: bool, data_manager=None) -> bool:
+        """Check if study should be ignored (only if already completed, not if currently active).
+        
+        Also checks if accession was part of a previously recorded multi-accession study.
+        """
         if not accession:
             return True
         
@@ -1409,6 +1569,48 @@ class StudyTracker:
         if ignore_duplicates and accession in self.seen_accessions and accession not in self.active_studies:
             logger.debug(f"Ignoring duplicate completed accession: {accession}")
             return True
+        
+        # Also check if this accession was part of a multi-accession study that was already recorded
+        if ignore_duplicates and data_manager:
+            if self._was_part_of_multi_accession(accession, data_manager):
+                logger.debug(f"Ignoring accession {accession} - it was already recorded as part of a multi-accession study")
+                return True
+        
+        return False
+    
+    def _was_part_of_multi_accession(self, accession: str, data_manager) -> bool:
+        """Check if an accession was already recorded as part of a multi-accession study."""
+        try:
+            # Check current shift records
+            current_shift_records = data_manager.data.get("current_shift", {}).get("records", [])
+            for record in current_shift_records:
+                if record.get("is_multi_accession", False):
+                    individual_accessions = record.get("individual_accessions", [])
+                    if accession in individual_accessions:
+                        return True
+                    # Also check the accession string format "ACC1, ACC2, ..."
+                    # Split by comma and strip whitespace, then check for exact match
+                    accession_str = record.get("accession", "")
+                    if accession_str:
+                        accession_list = [acc.strip() for acc in accession_str.split(",")]
+                        if accession in accession_list:
+                            return True
+            
+            # Check historical shifts
+            shifts = data_manager.data.get("shifts", [])
+            for shift in shifts:
+                shift_records = shift.get("records", [])
+                for record in shift_records:
+                    if record.get("is_multi_accession", False):
+                        individual_accessions = record.get("individual_accessions", [])
+                        if accession in individual_accessions:
+                            return True
+                        # Also check the accession string format "ACC1, ACC2, ..."
+                        accession_str = record.get("accession", "")
+                        if accession_str and accession in accession_str.split(", "):
+                            return True
+        except Exception as e:
+            logger.debug(f"Error checking if accession was part of multi-accession: {e}")
         
         return False
     
@@ -1459,6 +1661,12 @@ class RVUCounterApp:
         self.is_running = False
         self.current_window = None
         self.refresh_interval = 1000  # 1 second
+        
+        # Adaptive polling variables for PowerScribe worker thread
+        import time
+        self._last_accession_seen = ""
+        self._last_data_change_time = time.time()  # Initialize to current time
+        self._current_poll_interval = 1.0  # Start with moderate polling
         
         # Current detected data (must be initialized before create_ui)
         self.current_accession = ""
@@ -1541,6 +1749,27 @@ class RVUCounterApp:
             # If shift_end exists, the shift was properly stopped - don't auto-resume
             elif shift_start and shift_end:
                 logger.info("Auto-resume skipped: shift was properly stopped")
+        else:
+            # Auto-resume is disabled, but check if we're in a running state anyway
+            # This handles cases where the state might be inconsistent
+            current_shift = self.data_manager.data["current_shift"]
+            shift_start = current_shift.get("shift_start")
+            shift_end = current_shift.get("shift_end")
+            if shift_start and not shift_end:
+                # There's an active shift but auto-resume is disabled
+                # Still update the label to show the correct state
+                try:
+                    self.shift_start = datetime.fromisoformat(shift_start)
+                    self.is_running = True
+                    self.start_btn.config(text="Stop Shift")
+                    self.root.title("RVU Counter - Running")
+                    self.update_shift_start_label()
+                    self.update_recent_studies_label()
+                except Exception as e:
+                    logger.error(f"Error updating UI for active shift: {e}")
+        
+        # Always ensure label is updated based on current state (fallback)
+        self.update_recent_studies_label()
         
         self.setup_refresh()
         
@@ -1859,8 +2088,20 @@ class RVUCounterApp:
         all_accessions = list(self.multi_accession_data.keys())
         accession_str = ", ".join(all_accessions)
         
-        # Get all procedures
-        all_procedures = [d["procedure"] for d in self.multi_accession_data.values()]
+        # Get all procedures, study types, and RVUs in order
+        all_procedures = []
+        all_study_types = []
+        all_rvus = []
+        all_accession_numbers = []
+        
+        # Preserve order by iterating through accessions in the order they appear
+        for acc in all_accessions:
+            if acc in self.multi_accession_data:
+                data = self.multi_accession_data[acc]
+                all_procedures.append(data.get("procedure", ""))
+                all_study_types.append(data.get("study_type", ""))
+                all_rvus.append(data.get("rvu", 0))
+                all_accession_numbers.append(acc)
         
         # Get patient class from first entry
         patient_class_val = ""
@@ -1881,6 +2122,9 @@ class RVUCounterApp:
             "is_multi_accession": True,
             "accession_count": len(all_accessions),
             "individual_procedures": all_procedures,
+            "individual_study_types": all_study_types,
+            "individual_rvus": all_rvus,
+            "individual_accessions": all_accession_numbers,
         }
         
         # For multi-accession, use the accession string as the key for duplicate checking
@@ -1924,7 +2168,7 @@ class RVUCounterApp:
                     if window:
                         # Validate window still exists
                         try:
-                            window.window_text()
+                            _window_text_with_timeout(window, timeout=1.0, element_name="PowerScribe window validation")
                             self.cached_window = window
                         except:
                             self.cached_window = None
@@ -1952,9 +2196,23 @@ class RVUCounterApp:
                         if elements.get("listBoxAccessions"):
                             try:
                                 listbox = elements["listBoxAccessions"]["element"]
-                                for child in listbox.children():
+                                # Limit iteration to prevent blocking
+                                listbox_children = []
+                                try:
+                                    children_gen = listbox.children()
+                                    count = 0
+                                    for child_elem in children_gen:
+                                        listbox_children.append(child_elem)
+                                        count += 1
+                                        if count >= 50:  # Limit to prevent blocking
+                                            break
+                                except Exception as e:
+                                    logger.debug(f"listbox.children() iteration failed: {e}")
+                                    listbox_children = []
+                                
+                                for child in listbox_children:
                                     try:
-                                        item_text = child.window_text().strip()
+                                        item_text = _window_text_with_timeout(child, timeout=0.5, element_name="listbox child").strip()
                                         if item_text:
                                             data['multiple_accessions'].append(item_text)
                                     except:
@@ -1969,7 +2227,7 @@ class RVUCounterApp:
                     if main_window:
                         try:
                             # Validate window still exists
-                            main_window.window_text()
+                            _window_text_with_timeout(main_window, timeout=1.0, element_name="Mosaic window validation")
                             data['found'] = True
                             
                             # Find WebView2 control
@@ -1980,7 +2238,8 @@ class RVUCounterApp:
                                 mosaic_data = extract_mosaic_data(webview)
                                 
                                 data['procedure'] = mosaic_data.get('procedure', '')
-                                data['patient_class'] = mosaic_data.get('patient_class', 'Unknown')
+                                # Mosaic doesn't provide patient_class, default to 'Unknown' until Clario updates it
+                                data['patient_class'] = 'Unknown'
                                 
                                 # Handle multiple accessions - convert to format expected by refresh_data
                                 multiple_accessions_data = mosaic_data.get('multiple_accessions', [])
@@ -2008,8 +2267,13 @@ class RVUCounterApp:
                             logger.debug(f"Mosaic extraction error: {e}")
                             data['found'] = False
                 
+                # Update shared data IMMEDIATELY with PowerScribe/Mosaic data (before Clario query)
+                # This ensures the display shows data immediately even if Clario is slow
+                with self._ps_lock:
+                    self._ps_data = data.copy()  # Store copy immediately
+                
                 # Query Clario for patient class only when a new study is detected (accession changed)
-                # Assume Clario shows the active study and verify accession matches
+                # Do this AFTER storing initial data so display isn't blocked
                 current_accession = data.get('accession', '').strip()
                 multiple_accessions_list = data.get('multiple_accessions', [])
                 
@@ -2038,6 +2302,7 @@ class RVUCounterApp:
                     
                     if is_new_study:
                         # New study detected - query Clario (don't pass target_accession for multi-accession, let it match any)
+                        # Query Clario in a separate try block so it doesn't block data display
                         logger.info(f"New study detected, querying Clario. Multi-accession: {len(all_accessions) > 1}, accessions: {list(all_accessions)}")
                         try:
                             # Query Clario without target_accession for multi-accession studies
@@ -2058,35 +2323,24 @@ class RVUCounterApp:
                                 accession_matches = clario_accession in all_accessions if clario_accession else False
                                 
                                 if accession_matches:
-                                    # Accession matches one of the multi-accession accessions - use Clario's patient class
-                                    data['patient_class'] = clario_data['patient_class']
-                                    logger.info(f"Clario patient class OVERRIDES: {clario_data['patient_class']} for multi-accession study (matched accession: {clario_accession}, was: {data.get('patient_class', 'N/A')})")
-                                    # Update last queried accession and cache the patient class for all accessions
+                                    # Accession matches - update data with Clario's patient class
                                     with self._ps_lock:
+                                        # Update the stored data with Clario patient class
+                                        self._ps_data['patient_class'] = clario_data['patient_class']
                                         self._last_clario_accession = clario_accession
                                         # Cache patient class for all accessions in this multi-accession study
                                         for acc in all_accessions:
                                             self._clario_patient_class_cache[acc] = clario_data['patient_class']
-                                else:
-                                    # Accession doesn't match any - fallback to PowerScribe/Mosaic
-                                    logger.info(f"Clario accession mismatch: got '{clario_accession}', expected one of {list(all_accessions)}, using fallback")
-                                    if data_source == "Mosaic":
-                                        data['patient_class'] = 'Unknown'
-                                    # For PowerScribe, keep existing patient_class
+                                    logger.info(f"Clario patient class OVERRIDES: {clario_data['patient_class']} for study (matched accession: {clario_accession})")
                             else:
-                                # Clario didn't return data - fallback
+                                # Clario didn't return data - keep existing patient_class from PowerScribe/Mosaic
                                 if clario_data:
-                                    logger.info(f"Clario returned data but no patient_class. Accession='{clario_data.get('accession', '')}', using fallback")
+                                    logger.info(f"Clario returned data but no patient_class. Accession='{clario_data.get('accession', '')}'")
                                 else:
-                                    logger.info(f"Clario did not return any data, using fallback")
-                                if data_source == "Mosaic":
-                                    data['patient_class'] = 'Unknown'
-                                # For PowerScribe, keep existing patient_class
+                                    logger.info(f"Clario did not return any data")
                         except Exception as e:
                             logger.info(f"Clario query error: {e}", exc_info=True)
-                            # On error, keep existing patient_class (PowerScribe value or Unknown for Mosaic)
-                            if data_source == "Mosaic":
-                                data['patient_class'] = 'Unknown'
+                            # On error, keep existing patient_class (already stored in _ps_data)
                     else:
                         # Same study - check if we have cached Clario patient class for any accession
                         with self._ps_lock:
@@ -2098,26 +2352,49 @@ class RVUCounterApp:
                                     break
                         
                         if cached_clario_class:
-                            # Use cached Clario patient class (preserve it, don't let PowerScribe overwrite)
-                            data['patient_class'] = cached_clario_class
+                            # Update stored data with cached Clario patient class
+                            with self._ps_lock:
+                                self._ps_data['patient_class'] = cached_clario_class
                             logger.debug(f"Same study (accessions={list(all_accessions)}), using cached Clario patient class: {cached_clario_class}")
-                        else:
-                            # No cached Clario class - keep existing patient_class (from PowerScribe/Mosaic)
-                            logger.debug(f"Same study (accessions={list(all_accessions)}), no cached Clario class, keeping existing: {data.get('patient_class', 'N/A')}")
                 elif data.get('found') and not all_accessions:
-                    # No accession - can't query Clario
-                    logger.debug(f"No accession found, cannot query Clario")
+                    # No accession - can't query Clario, but data is already stored
+                    # For Mosaic, ensure patient_class is set to 'Unknown' if missing
                     if data_source == "Mosaic":
-                        data['patient_class'] = 'Unknown'
+                        with self._ps_lock:
+                            if not self._ps_data.get('patient_class'):
+                                self._ps_data['patient_class'] = 'Unknown'
+                    logger.debug(f"No accession found, cannot query Clario")
                 
-                # Update shared data (thread-safe)
+                # Adaptive polling: adjust interval based on activity state
+                # Use the stored data from _ps_data for consistency
                 with self._ps_lock:
-                    self._ps_data = data
+                    current_accession_check = self._ps_data.get('accession', '').strip()
+                data_changed = (current_accession_check != self._last_accession_seen) or \
+                              (not self._last_accession_seen and current_accession_check)
+                
+                if data_changed:
+                    # Data changed - use fast polling (500ms)
+                    self._last_accession_seen = current_accession_check
+                    self._last_data_change_time = time.time()
+                    self._current_poll_interval = 0.5
+                else:
+                    # Check how long since last change
+                    time_since_change = time.time() - self._last_data_change_time
+                    if current_accession_check:
+                        # Active study but no change - moderate polling (1000ms)
+                        if time_since_change > 1.0:
+                            self._current_poll_interval = 1.0
+                        else:
+                            self._current_poll_interval = 0.5
+                    else:
+                        # No active study - slow polling (2000ms)
+                        self._current_poll_interval = 2.0
                 
             except Exception as e:
                 logger.debug(f"Worker error: {e}")
             
-            time.sleep(0.5)  # Poll every 500ms
+            # Use adaptive polling interval
+            time.sleep(self._current_poll_interval)
     
     def refresh_data(self):
         """Refresh data from PowerScribe - reads from background thread data."""
@@ -2224,8 +2501,9 @@ class RVUCounterApp:
                     proc = acc_data['procedure']
                     
                     # Only track if not already seen (if ignoring duplicates)
+                    # Also check if it was part of a multi-accession study
                     ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                    if ignore_duplicates and acc in self.tracker.seen_accessions:
+                    if self.tracker.should_ignore(acc, ignore_duplicates, self.data_manager):
                         continue
                     
                     # Track as individual study
@@ -2641,6 +2919,11 @@ class RVUCounterApp:
             # Check if should ignore (only ignore if already completed in this shift)
             ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
             
+            # Check if this accession should be ignored (already completed or part of multi-accession)
+            if self.tracker.should_ignore(accession, ignore_duplicates, self.data_manager):
+                logger.debug(f"Skipping tracking of accession {accession} - already recorded")
+                return
+            
             # Get classification rules, direct lookups, and RVU table for matching
             classification_rules = self.data_manager.data.get("classification_rules", {})
             direct_lookups = self.data_manager.data.get("direct_lookups", {})
@@ -2659,7 +2942,7 @@ class RVUCounterApp:
                 # The completion check happens above, so we can return now
                 return
             
-            # Allow study to be tracked again even if previously seen
+            # Allow study to be tracked again even if previously seen (as long as it wasn't part of multi-accession)
             # When it completes, _record_or_update_study will update existing record with maximum duration
             # Mark as seen to track that we've encountered this accession
             if accession not in self.tracker.seen_accessions:
@@ -2980,8 +3263,25 @@ class RVUCounterApp:
     
     def update_recent_studies_label(self):
         """Update the Recent Studies label based on shift status."""
-        if self.is_running and self.shift_start:
-            self.recent_frame.config(text="Recent Studies")
+        # Safety check: ensure recent_frame exists (might not be created yet during UI initialization)
+        if not hasattr(self, 'recent_frame'):
+            return
+        
+        # Check both in-memory state and data file to ensure consistency
+        current_shift = self.data_manager.data.get("current_shift", {})
+        shift_start_str = current_shift.get("shift_start")
+        shift_end_str = current_shift.get("shift_end")
+        
+        # Determine if we're in an active shift:
+        # 1. In-memory state says we're running AND have a shift_start, OR
+        # 2. Data file has shift_start but no shift_end (active shift)
+        is_active_shift = (self.is_running and self.shift_start) or (shift_start_str and not shift_end_str)
+        
+        if is_active_shift:
+            # Count recent studies
+            recent_count = len(current_shift.get("records", []))
+            # Set text without style parameter to use default style (black text)
+            self.recent_frame.config(text=f"Recent Studies ({recent_count})")
         else:
             self.recent_frame.config(text="Temporary Recent - No shift started", style="Red.TLabelframe")
     
@@ -5345,26 +5645,55 @@ class StatisticsWindow:
                 rvu_per_study = total_rvu / accession_count if accession_count > 0 else 0
                 duration_per_study = total_duration / accession_count if accession_count > 0 else 0
                 
-                # Get individual procedures if available
+                # Get individual data if available (for newer records)
                 individual_procedures = record.get("individual_procedures", [])
+                individual_study_types = record.get("individual_study_types", [])
+                individual_rvus = record.get("individual_rvus", [])
+                individual_accessions = record.get("individual_accessions", [])
+                
+                # Check if we have individual data stored
+                has_individual_data = (individual_study_types and individual_rvus and 
+                                     len(individual_study_types) == accession_count and 
+                                     len(individual_rvus) == accession_count)
                 
                 for i in range(accession_count):
                     expanded_record = record.copy()
-                    expanded_record["study_type"] = modality
-                    expanded_record["rvu"] = rvu_per_study
+                    
+                    if has_individual_data:
+                        # Use stored individual data
+                        expanded_record["study_type"] = individual_study_types[i]
+                        expanded_record["rvu"] = individual_rvus[i]
+                        if individual_procedures and i < len(individual_procedures):
+                            expanded_record["procedure"] = individual_procedures[i]
+                        if individual_accessions and i < len(individual_accessions):
+                            expanded_record["accession"] = individual_accessions[i]
+                    else:
+                        # Fallback: try to classify individual procedures to get study types and RVUs
+                        if individual_procedures and i < len(individual_procedures):
+                            # Classify the individual procedure to get its study type and RVU
+                            # match_study_type is defined at module level in this same file
+                            rvu_table = self.data_manager.data.get("rvu_table", RVU_TABLE)
+                            classification_rules = self.data_manager.data.get("classification_rules", {})
+                            direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                            
+                            procedure = individual_procedures[i]
+                            # Call match_study_type which is defined at module level
+                            study_type, rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+                            
+                            expanded_record["study_type"] = study_type
+                            expanded_record["rvu"] = rvu
+                            expanded_record["procedure"] = procedure
+                        else:
+                            # Fallback to generic modality and split RVU
+                            expanded_record["study_type"] = modality
+                            expanded_record["rvu"] = rvu_per_study
+                            # Fall back to showing "1/3", "2/3", etc.
+                            original_procedure = record.get("procedure", f"Multiple {modality}")
+                            base_procedure = original_procedure.split(" (")[0] if " (" in original_procedure else original_procedure
+                            expanded_record["procedure"] = f"{base_procedure} ({i+1}/{accession_count})"
+                    
                     expanded_record["duration_seconds"] = duration_per_study
                     expanded_record["is_multi_accession"] = False  # Mark as individual now
-                    
-                    # Update procedure text to show which one of the multiple studies this is
-                    if individual_procedures and i < len(individual_procedures):
-                        # Use the actual individual procedure name
-                        expanded_record["procedure"] = individual_procedures[i]
-                    else:
-                        # Fall back to showing "1/3", "2/3", etc.
-                        original_procedure = record.get("procedure", f"Multiple {modality}")
-                        # Extract the base procedure name (remove the "(3 studies)" part)
-                        base_procedure = original_procedure.split(" (")[0] if " (" in original_procedure else original_procedure
-                        expanded_record["procedure"] = f"{base_procedure} ({i+1}/{accession_count})"
                     
                     expanded_records.append(expanded_record)
             else:
@@ -5582,8 +5911,34 @@ class StatisticsWindow:
         total_studies = sum(d["studies"] for d in hour_data.values())
         total_rvu = sum(d["rvu"] for d in hour_data.values())
         
-        # Sort by hour and display
-        for hour in sorted(hour_data.keys()):
+        # Find the earliest time_performed to determine shift start hour
+        start_hour = None
+        if records:
+            earliest_time = None
+            for record in records:
+                try:
+                    rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                    if earliest_time is None or rec_time < earliest_time:
+                        earliest_time = rec_time
+                except:
+                    continue
+            if earliest_time:
+                start_hour = earliest_time.hour
+        
+        # Sort hours starting from shift start hour, wrapping around at 24
+        if start_hour is not None and hour_data:
+            # Create a sorted list starting from start_hour
+            sorted_hours = []
+            for offset in range(24):
+                hour = (start_hour + offset) % 24
+                if hour in hour_data:
+                    sorted_hours.append(hour)
+        else:
+            # Fallback to regular chronological sort if no start hour found
+            sorted_hours = sorted(hour_data.keys())
+        
+        # Display hours in order
+        for hour in sorted_hours:
             data = hour_data[hour]
             # Format hour
             hour_12 = hour % 12 or 12
@@ -7228,41 +7583,202 @@ class StatisticsWindow:
         y = self.window.winfo_y() + (self.window.winfo_height() // 2) - (dialog.winfo_height() // 2)
         dialog.geometry(f"+{x}+{y}")
         
-        # Frame for listbox and scrollbar
-        list_frame = ttk.Frame(dialog, padding="10")
-        list_frame.pack(fill=tk.BOTH, expand=True)
+        # Main container frame
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Label
-        label = ttk.Label(list_frame, text="Select a backup to restore:", font=("Arial", 10))
+        label = ttk.Label(main_frame, text="Select a backup to restore:", font=("Arial", 10))
         label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Listbox with scrollbar
-        scrollbar = ttk.Scrollbar(list_frame)
+        # Frame for scrollable backup list
+        list_container = ttk.Frame(main_frame)
+        list_container.pack(fill=tk.BOTH, expand=True)
+        
+        # Create canvas with scrollbar for scrollable list
+        canvas_frame = ttk.Frame(list_container)
+        canvas_frame.pack(fill=tk.BOTH, expand=True)
+        
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Update canvas window width when canvas is resized
+        def update_canvas_window_width(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+        
+        canvas.bind('<Configure>', update_canvas_window_width)
+        
+        # Update scroll region when scrollable frame changes
+        def update_scroll_region(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        scrollable_frame.bind('<Configure>', update_scroll_region)
+        
+        # Mouse wheel scrolling (bind to canvas and scrollable_frame)
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", on_mousewheel)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        listbox = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, font=("Consolas", 9))
-        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.config(command=listbox.yview)
+        # Store references for refresh
+        dialog.backup_files = backup_files
+        dialog.scrollable_frame = scrollable_frame
+        dialog.canvas = canvas
+        dialog.selected_backup = None
         
-        # Populate listbox
-        for backup in backup_files:
-            listbox.insert(tk.END, backup["display"])
+        def refresh_backup_list():
+            """Refresh the backup list display."""
+            # Clear existing widgets
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
+            
+            # Re-fetch backup files
+            records_file = self.data_manager.records_file
+            backup_dir = os.path.dirname(records_file)
+            backup_files = []
+            if os.path.exists(backup_dir):
+                for filename in os.listdir(backup_dir):
+                    if filename.startswith("rvu_records_backup_") and filename.endswith(".json"):
+                        backup_path = os.path.join(backup_dir, filename)
+                        try:
+                            timestamp_str = filename.replace("rvu_records_backup_", "").replace(".json", "")
+                            timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d_%H-%M-%S")
+                            mtime = os.path.getmtime(backup_path)
+                            backup_files.append({
+                                "filename": filename,
+                                "path": backup_path,
+                                "timestamp": timestamp,
+                                "mtime": mtime,
+                                "display": timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                            })
+                        except:
+                            mtime = os.path.getmtime(backup_path)
+                            backup_files.append({
+                                "filename": filename,
+                                "path": backup_path,
+                                "timestamp": datetime.fromtimestamp(mtime),
+                                "mtime": mtime,
+                                "display": filename
+                            })
+            
+            # Sort by timestamp (newest first)
+            backup_files.sort(key=lambda x: x["mtime"], reverse=True)
+            dialog.backup_files = backup_files
+            
+            # Get theme colors
+            colors = self.app.get_theme_colors()
+            
+            # Populate scrollable frame with backup entries
+            for i, backup in enumerate(backup_files):
+                backup_frame = ttk.Frame(scrollable_frame)
+                backup_frame.pack(fill=tk.X, pady=1, padx=2)
+                
+                # X button to delete
+                delete_btn = tk.Label(
+                    backup_frame,
+                    text="×",
+                    font=("Arial", 8),
+                    bg=colors["delete_btn_bg"],
+                    fg=colors["delete_btn_fg"],
+                    cursor="hand2",
+                    padx=2,
+                    pady=2,
+                    width=2,
+                    anchor=tk.CENTER
+                )
+                delete_btn.backup_path = backup["path"]
+                delete_btn.backup_display = backup["display"]
+                delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: delete_backup(btn))
+                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg="red"))
+                delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
+                delete_btn.pack(side=tk.LEFT, padx=(0, 5))
+                
+                # Backup label (clickable)
+                backup_label = ttk.Label(
+                    backup_frame,
+                    text=backup["display"],
+                    font=("Consolas", 9),
+                    cursor="hand2"
+                )
+                backup_label.backup = backup
+                backup_label.bind("<Button-1>", lambda e, lbl=backup_label: select_backup(lbl))
+                backup_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                
+                # Highlight selected backup
+                if dialog.selected_backup and dialog.selected_backup["path"] == backup["path"]:
+                    backup_label.config(background=colors.get("button_bg", "#e1e1e1"))
+            
+            # Update canvas scroll region
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # If no backups left, close dialog
+            if not backup_files:
+                messagebox.showinfo("No Backups", "No backup files found.")
+                dialog.destroy()
         
-        # Store backup files for retrieval
-        listbox.backup_files = backup_files
+        def select_backup(label):
+            """Select a backup file."""
+            # Clear previous selection
+            for widget in scrollable_frame.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, ttk.Label) and hasattr(child, 'backup'):
+                            child.config(background="")
+            
+            # Highlight selected
+            label.config(background=self.app.get_theme_colors().get("button_bg", "#e1e1e1"))
+            dialog.selected_backup = label.backup
         
-        # Buttons frame
-        buttons_frame = ttk.Frame(dialog, padding="10")
-        buttons_frame.pack(fill=tk.X)
+        def delete_backup(btn):
+            """Delete a backup file."""
+            backup_path = btn.backup_path
+            backup_display = btn.backup_display
+            
+            # Confirm deletion
+            response = messagebox.askyesno(
+                "Delete Backup?",
+                f"Are you sure you want to delete this backup?\n\n"
+                f"Backup: {backup_display}\n\n"
+                f"This action cannot be undone.",
+                parent=dialog
+            )
+            
+            if response:
+                try:
+                    if os.path.exists(backup_path):
+                        os.remove(backup_path)
+                        logger.info(f"Backup deleted: {backup_path}")
+                        
+                        # Clear selection if deleted backup was selected
+                        if dialog.selected_backup and dialog.selected_backup["path"] == backup_path:
+                            dialog.selected_backup = None
+                        
+                        # Refresh the list
+                        refresh_backup_list()
+                    else:
+                        messagebox.showwarning("File Not Found", f"Backup file not found:\n{backup_path}")
+                        refresh_backup_list()
+                except Exception as e:
+                    error_msg = f"Error deleting backup: {str(e)}"
+                    messagebox.showerror("Delete Failed", error_msg)
+                    logger.error(error_msg)
         
         def on_load():
-            selection = listbox.curselection()
-            if not selection:
+            if not dialog.selected_backup:
                 messagebox.showwarning("No Selection", "Please select a backup file.")
                 return
             
-            selected_index = selection[0]
-            selected_backup = backup_files[selected_index]
+            selected_backup = dialog.selected_backup
             
             # Confirm overwrite
             response = messagebox.askyesno(
@@ -7271,7 +7787,8 @@ class StatisticsWindow:
                 f"Backup: {selected_backup['display']}\n\n"
                 f"This will REPLACE your current study data. This action cannot be undone.\n\n"
                 f"Consider creating a backup of your current data first.",
-                icon="warning"
+                icon="warning",
+                parent=dialog
             )
             
             if response:
@@ -7314,19 +7831,15 @@ class StatisticsWindow:
         def on_cancel():
             dialog.destroy()
         
+        # Initial population
+        refresh_backup_list()
+        
+        # Buttons frame
+        buttons_frame = ttk.Frame(dialog, padding="10")
+        buttons_frame.pack(fill=tk.X)
+        
         ttk.Button(buttons_frame, text="Load Selected Backup", command=on_load, width=20).pack(side=tk.LEFT, padx=5)
         ttk.Button(buttons_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.RIGHT, padx=5)
-        
-        # Double-click to load
-        def on_double_click(event):
-            on_load()
-        
-        listbox.bind("<Double-Button-1>", on_double_click)
-        
-        # Focus on listbox
-        listbox.focus_set()
-        if backup_files:
-            listbox.selection_set(0)
     
     def on_configure(self, event):
         """Handle window configuration changes (move/resize)."""

@@ -28,6 +28,14 @@ Thumbs.db
 *.tmp
 *.bak
 
+# App-created backup files
+rvu_records_backup_*.json
+temp_rvu_records.json
+temp_rvu_settings.json
+
+# Git hook backups
+.git/hooks/backups/
+
 
 
 
