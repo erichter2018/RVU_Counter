@@ -839,6 +839,7 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
     
     Uses cached elements when available (instant).
     Falls back to descendants search if direct lookup fails.
+    Uses SHORT timeouts (0.3s) to detect study closure quickly.
     """
     found_elements = {}
     ids_needing_search = []
@@ -848,7 +849,8 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
         if cached_elements and auto_id in cached_elements:
             try:
                 cached_elem = cached_elements[auto_id]['element']
-                text_content = _window_text_with_timeout(cached_elem, timeout=1.0, element_name=auto_id)
+                # SHORT timeout (0.3s) - if element is stale, fail fast
+                text_content = _window_text_with_timeout(cached_elem, timeout=0.3, element_name=auto_id)
                 found_elements[auto_id] = {
                     'element': cached_elem,
                     'text': text_content.strip() if text_content else '',
@@ -883,7 +885,8 @@ def find_elements_by_automation_id(window, automation_ids: List[str], cached_ele
                 try:
                     elem_auto_id = element.element_info.automation_id
                     if elem_auto_id and elem_auto_id in remaining:
-                        text_content = _window_text_with_timeout(element, timeout=1.0, element_name=elem_auto_id)
+                        # SHORT timeout (0.3s) - fail fast on stale elements
+                        text_content = _window_text_with_timeout(element, timeout=0.3, element_name=elem_auto_id)
                         found_elements[elem_auto_id] = {
                             'element': element,
                             'text': text_content.strip() if text_content else '',
@@ -1545,13 +1548,13 @@ class StudyTracker:
                 continue
             
             # If current_accession is empty or different, this study has disappeared
-            # Mark it as completed immediately (don't wait for 1 second)
             time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
             
             # Study is considered completed if:
             # 1. A different study is now visible (current_accession is set and different), OR
-            # 2. No study is visible (current_accession is empty) and it hasn't been seen for > 1 second
-            if current_accession or time_since_last_seen > 1.0:
+            # 2. No study is visible (current_accession is empty) and it hasn't been seen for > 0.5 seconds
+            #    (reduced from 1.0s to enable faster closure detection with 0.3s polling)
+            if current_accession or time_since_last_seen > 0.5:
                 duration = (study["last_seen"] - study["start_time"]).total_seconds()
                 logger.debug(f"check_completed: {accession} disappeared, time_since_last_seen={time_since_last_seen:.1f}s, duration={duration:.1f}s")
                 
@@ -2185,7 +2188,7 @@ class RVUCounterApp:
                     if window:
                         # Validate window still exists
                         try:
-                            _window_text_with_timeout(window, timeout=1.0, element_name="PowerScribe window validation")
+                            _window_text_with_timeout(window, timeout=0.5, element_name="PowerScribe window validation")
                             self.cached_window = window
                         except:
                             self.cached_window = None
@@ -2195,13 +2198,12 @@ class RVUCounterApp:
                     if window:
                         data['found'] = True
                         
-                        # Find elements with caching
+                        # Smart caching: use cache if available, but invalidate on empty accession
                         elements = find_elements_by_automation_id(
                             window,
                             ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
                             self.cached_elements
                         )
-                        self.cached_elements.update(elements)
                         
                         data['elements'] = elements
                         data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
@@ -2209,11 +2211,32 @@ class RVUCounterApp:
                         data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
                         data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
                         
-                        # Handle multiple accessions
-                        if elements.get("listBoxAccessions"):
+                        if data['accession']:
+                            # Study is open - update cache for next poll
+                            self.cached_elements.update(elements)
+                        else:
+                            # No accession - could be stale cache or study closed
+                            # Clear cache and do ONE fresh search to confirm
+                            if self.cached_elements:
+                                self.cached_elements = {}
+                                # Redo search with empty cache
+                                elements = find_elements_by_automation_id(
+                                    window,
+                                    ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
+                                    {}
+                                )
+                                data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
+                                if data['accession']:
+                                    # Found it on fresh search - cache was stale
+                                    data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
+                                    data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
+                                    data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+                                    self.cached_elements.update(elements)
+                        
+                        # Handle multiple accessions only if study is open
+                        if data['accession'] and elements.get("listBoxAccessions"):
                             try:
                                 listbox = elements["listBoxAccessions"]["element"]
-                                # Limit iteration to prevent blocking
                                 listbox_children = []
                                 try:
                                     children_gen = listbox.children()
@@ -2221,7 +2244,7 @@ class RVUCounterApp:
                                     for child_elem in children_gen:
                                         listbox_children.append(child_elem)
                                         count += 1
-                                        if count >= 50:  # Limit to prevent blocking
+                                        if count >= 50:
                                             break
                                 except Exception as e:
                                     logger.debug(f"listbox.children() iteration failed: {e}")
@@ -2229,7 +2252,7 @@ class RVUCounterApp:
                                 
                                 for child in listbox_children:
                                     try:
-                                        item_text = _window_text_with_timeout(child, timeout=0.5, element_name="listbox child").strip()
+                                        item_text = _window_text_with_timeout(child, timeout=0.3, element_name="listbox child").strip()
                                         if item_text:
                                             data['multiple_accessions'].append(item_text)
                                     except:
@@ -2386,14 +2409,22 @@ class RVUCounterApp:
                 # Use the stored data from _ps_data for consistency
                 with self._ps_lock:
                     current_accession_check = self._ps_data.get('accession', '').strip()
-                data_changed = (current_accession_check != self._last_accession_seen) or \
-                              (not self._last_accession_seen and current_accession_check)
                 
-                if data_changed:
-                    # Data changed - use fast polling (500ms)
+                # Detect if accession changed (including going from something to empty)
+                accession_changed = current_accession_check != self._last_accession_seen
+                study_just_closed = accession_changed and self._last_accession_seen and not current_accession_check
+                
+                if accession_changed:
+                    # Accession changed - use fast polling
                     self._last_accession_seen = current_accession_check
                     self._last_data_change_time = time.time()
-                    self._current_poll_interval = 0.5
+                    if study_just_closed:
+                        # Study just closed - use very fast polling (300ms) to confirm closure quickly
+                        self._current_poll_interval = 0.3
+                        logger.debug(f"Study closed - fast polling at 0.3s")
+                    else:
+                        # New study appeared - use fast polling (500ms)
+                        self._current_poll_interval = 0.5
                 else:
                     # Check how long since last change
                     time_since_change = time.time() - self._last_data_change_time
@@ -2404,8 +2435,13 @@ class RVUCounterApp:
                         else:
                             self._current_poll_interval = 0.5
                     else:
-                        # No active study - slow polling (2000ms)
-                        self._current_poll_interval = 2.0
+                        # No active study - keep fast polling for 2 seconds after closure
+                        # This ensures quick detection and prevents false re-detection
+                        if time_since_change < 2.0:
+                            self._current_poll_interval = 0.3
+                        else:
+                            # After 2 seconds of no study, slow down to 1.5s (not 2.0s)
+                            self._current_poll_interval = 1.5
                 
             except Exception as e:
                 logger.debug(f"Worker error: {e}")
@@ -2846,7 +2882,7 @@ class RVUCounterApp:
                         if study.get('patient_class') == 'Unknown' and acc not in all_current_accessions:
                             # This accession is no longer visible - mark as completed
                             time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
-                            if time_since_last_seen > 1.0:
+                            if time_since_last_seen > 0.5:  # Reduced from 1.0s for faster detection
                                 duration = (study["last_seen"] - study["start_time"]).total_seconds()
                                 if duration >= self.tracker.min_seconds:
                                     completed_study = study.copy()
@@ -2863,7 +2899,7 @@ class RVUCounterApp:
                         # Only check Mosaic studies (patient_class == "Unknown")
                         if study.get('patient_class') == 'Unknown':
                             time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
-                            if time_since_last_seen > 1.0:
+                            if time_since_last_seen > 0.5:  # Reduced from 1.0s for faster detection
                                 duration = (study["last_seen"] - study["start_time"]).total_seconds()
                                 if duration >= self.tracker.min_seconds:
                                     completed_study = study.copy()
