@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import shutil
+import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
@@ -38,6 +39,540 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# SQLite Database for Records Storage
+# =============================================================================
+
+class RecordsDatabase:
+    """SQLite database for storing study records and shifts.
+    
+    Provides fast querying and scales to hundreds of thousands of records.
+    Replaces JSON file storage for records (settings remain in JSON).
+    """
+    
+    def __init__(self, db_path: str):
+        """Initialize database connection.
+        
+        Args:
+            db_path: Full path to the SQLite database file
+        """
+        self.db_path = db_path
+        self.conn = None
+        self._connect()
+        self._create_tables()
+    
+    def _connect(self):
+        """Create database connection."""
+        try:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row  # Enable dict-like access
+            # Enable foreign keys
+            self.conn.execute("PRAGMA foreign_keys = ON")
+            logger.info(f"Connected to SQLite database: {self.db_path}")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            raise
+    
+    def _create_tables(self):
+        """Create database tables if they don't exist."""
+        cursor = self.conn.cursor()
+        
+        # Shifts table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS shifts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shift_start TEXT,
+                shift_end TEXT,
+                is_current INTEGER DEFAULT 0,
+                effective_shift_start TEXT,
+                projected_shift_end TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Records table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shift_id INTEGER,
+                accession TEXT NOT NULL,
+                procedure TEXT,
+                patient_class TEXT,
+                study_type TEXT,
+                rvu REAL DEFAULT 0,
+                time_performed TEXT,
+                time_finished TEXT,
+                duration_seconds REAL,
+                individual_procedures TEXT,
+                individual_study_types TEXT,
+                individual_rvus TEXT,
+                individual_accessions TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Legacy records table (records without a shift - for backwards compatibility)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS legacy_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                accession TEXT NOT NULL,
+                procedure TEXT,
+                patient_class TEXT,
+                study_type TEXT,
+                rvu REAL DEFAULT 0,
+                time_performed TEXT,
+                time_finished TEXT,
+                duration_seconds REAL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Create indexes for common queries
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_records_shift_id ON records(shift_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_records_accession ON records(accession)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_records_time_performed ON records(time_performed)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_shifts_is_current ON shifts(is_current)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_shifts_shift_start ON shifts(shift_start)')
+        
+        self.conn.commit()
+        logger.info("Database tables created/verified")
+    
+    def close(self):
+        """Close database connection."""
+        if self.conn:
+            self.conn.close()
+            logger.info("Database connection closed")
+    
+    # =========================================================================
+    # Shift Operations
+    # =========================================================================
+    
+    def get_current_shift(self) -> Optional[dict]:
+        """Get the current active shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM shifts WHERE is_current = 1 LIMIT 1')
+        row = cursor.fetchone()
+        if row:
+            return self._shift_row_to_dict(row)
+        return None
+    
+    def start_shift(self, shift_start: str, effective_shift_start: str = None, 
+                   projected_shift_end: str = None) -> int:
+        """Start a new shift. Returns the shift ID."""
+        # End any existing current shift first
+        self.end_current_shift()
+        
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO shifts (shift_start, is_current, effective_shift_start, projected_shift_end)
+            VALUES (?, 1, ?, ?)
+        ''', (shift_start, effective_shift_start, projected_shift_end))
+        self.conn.commit()
+        
+        shift_id = cursor.lastrowid
+        logger.info(f"Started new shift: ID={shift_id}, start={shift_start}")
+        return shift_id
+    
+    def end_current_shift(self, shift_end: str = None) -> Optional[int]:
+        """End the current shift. Returns the shift ID or None."""
+        if shift_end is None:
+            shift_end = datetime.now().isoformat()
+        
+        current = self.get_current_shift()
+        if current:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                UPDATE shifts SET shift_end = ?, is_current = 0 WHERE is_current = 1
+            ''', (shift_end,))
+            self.conn.commit()
+            logger.info(f"Ended shift: ID={current['id']}, end={shift_end}")
+            return current['id']
+        return None
+    
+    def get_all_shifts(self) -> List[dict]:
+        """Get all historical shifts (not including current)."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT * FROM shifts WHERE is_current = 0 ORDER BY shift_start DESC
+        ''')
+        return [self._shift_row_to_dict(row) for row in cursor.fetchall()]
+    
+    def get_shift_by_id(self, shift_id: int) -> Optional[dict]:
+        """Get a specific shift by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM shifts WHERE id = ?', (shift_id,))
+        row = cursor.fetchone()
+        if row:
+            return self._shift_row_to_dict(row)
+        return None
+    
+    def delete_shift(self, shift_id: int):
+        """Delete a shift and all its records."""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM shifts WHERE id = ?', (shift_id,))
+        self.conn.commit()
+        logger.info(f"Deleted shift: ID={shift_id}")
+    
+    def update_current_shift_times(self, effective_shift_start: str = None, 
+                                   projected_shift_end: str = None):
+        """Update the effective start and projected end times for current shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE shifts SET effective_shift_start = ?, projected_shift_end = ?
+            WHERE is_current = 1
+        ''', (effective_shift_start, projected_shift_end))
+        self.conn.commit()
+    
+    def _shift_row_to_dict(self, row) -> dict:
+        """Convert a shift database row to a dictionary."""
+        return {
+            'id': row['id'],
+            'shift_start': row['shift_start'],
+            'shift_end': row['shift_end'],
+            'is_current': bool(row['is_current']),
+            'effective_shift_start': row['effective_shift_start'],
+            'projected_shift_end': row['projected_shift_end']
+        }
+    
+    # =========================================================================
+    # Record Operations
+    # =========================================================================
+    
+    def add_record(self, shift_id: int, record: dict) -> int:
+        """Add a record to a shift. Returns the record ID."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO records (shift_id, accession, procedure, patient_class, study_type,
+                               rvu, time_performed, time_finished, duration_seconds,
+                               individual_procedures, individual_study_types, 
+                               individual_rvus, individual_accessions)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            shift_id,
+            record.get('accession', ''),
+            record.get('procedure', ''),
+            record.get('patient_class', ''),
+            record.get('study_type', ''),
+            record.get('rvu', 0),
+            record.get('time_performed', ''),
+            record.get('time_finished', ''),
+            record.get('duration_seconds', 0),
+            json.dumps(record.get('individual_procedures')) if record.get('individual_procedures') else None,
+            json.dumps(record.get('individual_study_types')) if record.get('individual_study_types') else None,
+            json.dumps(record.get('individual_rvus')) if record.get('individual_rvus') else None,
+            json.dumps(record.get('individual_accessions')) if record.get('individual_accessions') else None,
+        ))
+        self.conn.commit()
+        return cursor.lastrowid
+    
+    def update_record(self, record_id: int, record: dict):
+        """Update an existing record."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            UPDATE records SET
+                procedure = ?, patient_class = ?, study_type = ?, rvu = ?,
+                time_performed = ?, time_finished = ?, duration_seconds = ?,
+                individual_procedures = ?, individual_study_types = ?,
+                individual_rvus = ?, individual_accessions = ?
+            WHERE id = ?
+        ''', (
+            record.get('procedure', ''),
+            record.get('patient_class', ''),
+            record.get('study_type', ''),
+            record.get('rvu', 0),
+            record.get('time_performed', ''),
+            record.get('time_finished', ''),
+            record.get('duration_seconds', 0),
+            json.dumps(record.get('individual_procedures')) if record.get('individual_procedures') else None,
+            json.dumps(record.get('individual_study_types')) if record.get('individual_study_types') else None,
+            json.dumps(record.get('individual_rvus')) if record.get('individual_rvus') else None,
+            json.dumps(record.get('individual_accessions')) if record.get('individual_accessions') else None,
+            record_id
+        ))
+        self.conn.commit()
+    
+    def delete_record(self, record_id: int):
+        """Delete a record by ID."""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM records WHERE id = ?', (record_id,))
+        self.conn.commit()
+        logger.debug(f"Deleted record: ID={record_id}")
+    
+    def delete_record_by_accession(self, shift_id: int, accession: str):
+        """Delete a record by accession within a shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('DELETE FROM records WHERE shift_id = ? AND accession = ?', 
+                      (shift_id, accession))
+        self.conn.commit()
+    
+    def get_records_for_shift(self, shift_id: int) -> List[dict]:
+        """Get all records for a specific shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT * FROM records WHERE shift_id = ? ORDER BY time_performed ASC
+        ''', (shift_id,))
+        return [self._record_row_to_dict(row) for row in cursor.fetchall()]
+    
+    def get_current_shift_records(self) -> List[dict]:
+        """Get records for the current active shift."""
+        current = self.get_current_shift()
+        if current:
+            return self.get_records_for_shift(current['id'])
+        return []
+    
+    def find_record_by_accession(self, shift_id: int, accession: str) -> Optional[dict]:
+        """Find a record by accession within a shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT * FROM records WHERE shift_id = ? AND accession = ? LIMIT 1
+        ''', (shift_id, accession))
+        row = cursor.fetchone()
+        if row:
+            return self._record_row_to_dict(row)
+        return None
+    
+    def get_records_in_date_range(self, start_date: str, end_date: str) -> List[dict]:
+        """Get all records within a date range."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT r.*, s.shift_start, s.shift_end 
+            FROM records r
+            JOIN shifts s ON r.shift_id = s.id
+            WHERE r.time_performed >= ? AND r.time_performed <= ?
+            ORDER BY r.time_performed ASC
+        ''', (start_date, end_date))
+        return [self._record_row_to_dict(row) for row in cursor.fetchall()]
+    
+    def get_all_records(self) -> List[dict]:
+        """Get all records from all shifts."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT r.*, s.shift_start, s.shift_end
+            FROM records r
+            JOIN shifts s ON r.shift_id = s.id
+            ORDER BY r.time_performed DESC
+        ''')
+        return [self._record_row_to_dict(row) for row in cursor.fetchall()]
+    
+    def _record_row_to_dict(self, row) -> dict:
+        """Convert a record database row to a dictionary."""
+        record = {
+            'id': row['id'],
+            'shift_id': row['shift_id'],
+            'accession': row['accession'],
+            'procedure': row['procedure'],
+            'patient_class': row['patient_class'],
+            'study_type': row['study_type'],
+            'rvu': row['rvu'],
+            'time_performed': row['time_performed'],
+            'time_finished': row['time_finished'],
+            'duration_seconds': row['duration_seconds'],
+        }
+        
+        # Parse JSON fields for multi-accession studies
+        if row['individual_procedures']:
+            try:
+                record['individual_procedures'] = json.loads(row['individual_procedures'])
+            except:
+                pass
+        if row['individual_study_types']:
+            try:
+                record['individual_study_types'] = json.loads(row['individual_study_types'])
+            except:
+                pass
+        if row['individual_rvus']:
+            try:
+                record['individual_rvus'] = json.loads(row['individual_rvus'])
+            except:
+                pass
+        if row['individual_accessions']:
+            try:
+                record['individual_accessions'] = json.loads(row['individual_accessions'])
+            except:
+                pass
+        
+        return record
+    
+    # =========================================================================
+    # Legacy Records (records without shifts - for backwards compatibility)
+    # =========================================================================
+    
+    def add_legacy_record(self, record: dict) -> int:
+        """Add a legacy record (not associated with a shift)."""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            INSERT INTO legacy_records (accession, procedure, patient_class, study_type,
+                                       rvu, time_performed, time_finished, duration_seconds)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            record.get('accession', ''),
+            record.get('procedure', ''),
+            record.get('patient_class', ''),
+            record.get('study_type', ''),
+            record.get('rvu', 0),
+            record.get('time_performed', ''),
+            record.get('time_finished', ''),
+            record.get('duration_seconds', 0),
+        ))
+        self.conn.commit()
+        return cursor.lastrowid
+    
+    def get_legacy_records(self) -> List[dict]:
+        """Get all legacy records."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT * FROM legacy_records ORDER BY time_performed DESC')
+        return [dict(row) for row in cursor.fetchall()]
+    
+    # =========================================================================
+    # Statistics and Aggregation
+    # =========================================================================
+    
+    def get_total_rvu_for_shift(self, shift_id: int) -> float:
+        """Get total RVU for a shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT SUM(rvu) FROM records WHERE shift_id = ?', (shift_id,))
+        result = cursor.fetchone()[0]
+        return result if result else 0.0
+    
+    def get_record_count_for_shift(self, shift_id: int) -> int:
+        """Get total number of records for a shift."""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM records WHERE shift_id = ?', (shift_id,))
+        return cursor.fetchone()[0]
+    
+    def get_stats_by_study_type(self, shift_id: int = None) -> dict:
+        """Get RVU and count statistics grouped by study type."""
+        cursor = self.conn.cursor()
+        if shift_id:
+            cursor.execute('''
+                SELECT study_type, SUM(rvu) as total_rvu, COUNT(*) as count
+                FROM records WHERE shift_id = ?
+                GROUP BY study_type
+            ''', (shift_id,))
+        else:
+            cursor.execute('''
+                SELECT study_type, SUM(rvu) as total_rvu, COUNT(*) as count
+                FROM records
+                GROUP BY study_type
+            ''')
+        return {row['study_type']: {'rvu': row['total_rvu'], 'count': row['count']} 
+                for row in cursor.fetchall()}
+    
+    # =========================================================================
+    # Migration from JSON
+    # =========================================================================
+    
+    def migrate_from_json(self, json_data: dict):
+        """Migrate data from JSON format to SQLite.
+        
+        Args:
+            json_data: Dictionary containing 'records', 'current_shift', and 'shifts'
+        """
+        logger.info("Starting migration from JSON to SQLite...")
+        
+        # Migrate legacy records
+        legacy_records = json_data.get('records', [])
+        for record in legacy_records:
+            self.add_legacy_record(record)
+        logger.info(f"Migrated {len(legacy_records)} legacy records")
+        
+        # Migrate historical shifts
+        shifts = json_data.get('shifts', [])
+        for shift_data in shifts:
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO shifts (shift_start, shift_end, is_current, 
+                                   effective_shift_start, projected_shift_end)
+                VALUES (?, ?, 0, ?, ?)
+            ''', (
+                shift_data.get('shift_start'),
+                shift_data.get('shift_end'),
+                shift_data.get('effective_shift_start'),
+                shift_data.get('projected_shift_end')
+            ))
+            shift_id = cursor.lastrowid
+            
+            # Add records for this shift
+            for record in shift_data.get('records', []):
+                record_copy = record.copy()
+                self.add_record(shift_id, record_copy)
+            
+            self.conn.commit()
+        logger.info(f"Migrated {len(shifts)} historical shifts")
+        
+        # Migrate current shift
+        current_shift = json_data.get('current_shift', {})
+        if current_shift.get('shift_start') or current_shift.get('records'):
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO shifts (shift_start, shift_end, is_current,
+                                   effective_shift_start, projected_shift_end)
+                VALUES (?, ?, 1, ?, ?)
+            ''', (
+                current_shift.get('shift_start'),
+                current_shift.get('shift_end'),
+                current_shift.get('effective_shift_start'),
+                current_shift.get('projected_shift_end')
+            ))
+            shift_id = cursor.lastrowid
+            
+            for record in current_shift.get('records', []):
+                self.add_record(shift_id, record)
+            
+            self.conn.commit()
+            logger.info(f"Migrated current shift with {len(current_shift.get('records', []))} records")
+        
+        logger.info("JSON to SQLite migration complete!")
+    
+    # =========================================================================
+    # Export to JSON (for backups and compatibility)
+    # =========================================================================
+    
+    def export_to_json(self) -> dict:
+        """Export all data to JSON format (for backups)."""
+        data = {
+            'records': self.get_legacy_records(),
+            'current_shift': {
+                'shift_start': None,
+                'shift_end': None,
+                'records': []
+            },
+            'shifts': []
+        }
+        
+        # Get current shift
+        current = self.get_current_shift()
+        if current:
+            data['current_shift'] = {
+                'shift_start': current['shift_start'],
+                'shift_end': current['shift_end'],
+                'records': self.get_records_for_shift(current['id']),
+                'effective_shift_start': current.get('effective_shift_start'),
+                'projected_shift_end': current.get('projected_shift_end')
+            }
+        
+        # Get historical shifts
+        for shift in self.get_all_shifts():
+            shift_data = {
+                'shift_start': shift['shift_start'],
+                'shift_end': shift['shift_end'],
+                'records': self.get_records_for_shift(shift['id']),
+                'effective_shift_start': shift.get('effective_shift_start'),
+                'projected_shift_end': shift.get('projected_shift_end')
+            }
+            data['shifts'].append(shift_data)
+        
+        return data
+    
+    def export_to_json_file(self, filepath: str):
+        """Export all data to a JSON file."""
+        data = self.export_to_json()
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+        logger.info(f"Exported database to JSON: {filepath}")
 
 
 # RVU Lookup Table
@@ -1105,14 +1640,16 @@ def get_app_paths():
 
 
 class RVUData:
-    """Manages data persistence with separate files for settings and records."""
+    """Manages data persistence with SQLite for records and JSON for settings."""
     
     def __init__(self, base_dir: str = None):
         settings_dir, data_dir = get_app_paths()
         
         # Settings file (RVU tables, rules, rates, user preferences, window positions)
         self.settings_file = os.path.join(data_dir, "rvu_settings.json")
-        # Records file - persistent data (store next to exe or script)
+        # SQLite database for records (replaces rvu_records.json)
+        self.db_file = os.path.join(data_dir, "rvu_records.db")
+        # Legacy JSON file paths (for migration)
         self.records_file = os.path.join(data_dir, "rvu_records.json")
         self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
         
@@ -1120,16 +1657,24 @@ class RVUData:
         self.is_frozen = getattr(sys, 'frozen', False)
         
         logger.info(f"Settings file: {self.settings_file}")
-        logger.info(f"Records file: {self.records_file}")
+        logger.info(f"Database file: {self.db_file}")
         
-        # Load data from files
+        # Load settings from JSON
         self.settings_data = self.load_settings()
         # Validate and fix window positions after loading
         self.settings_data = self._validate_window_positions(self.settings_data)
-        self.records_data = self.load_records()
         
-        # Migrate old file if it exists
+        # Initialize SQLite database
+        self.db = RecordsDatabase(self.db_file)
+        
+        # Check if we need to migrate from JSON to SQLite
+        self._migrate_json_to_sqlite()
+        
+        # Migrate old rvu_data.json file if it exists
         self.migrate_old_file()
+        
+        # Load records from database into memory for compatibility
+        self.records_data = self._load_records_from_db()
         
         # Use settings directly (no need to merge separate user settings)
         merged_settings = self.settings_data.get("settings", {})
@@ -1151,6 +1696,59 @@ class RVUData:
             }),
             "shifts": self.records_data.get("shifts", [])
         }
+    
+    def _migrate_json_to_sqlite(self):
+        """Migrate data from JSON to SQLite if JSON exists and DB is empty."""
+        # Check if JSON file exists and has data
+        if os.path.exists(self.records_file):
+            try:
+                with open(self.records_file, 'r') as f:
+                    json_data = json.load(f)
+                
+                # Check if database is empty (no shifts)
+                cursor = self.db.conn.cursor()
+                cursor.execute('SELECT COUNT(*) FROM shifts')
+                shift_count = cursor.fetchone()[0]
+                
+                if shift_count == 0:
+                    # Database is empty, migrate from JSON
+                    has_data = (
+                        json_data.get('records', []) or 
+                        json_data.get('shifts', []) or 
+                        json_data.get('current_shift', {}).get('records', [])
+                    )
+                    
+                    if has_data:
+                        logger.info("Migrating records from JSON to SQLite database...")
+                        self.db.migrate_from_json(json_data)
+                        
+                        # Rename JSON file to backup
+                        backup_path = self.records_file + ".migrated_backup"
+                        os.rename(self.records_file, backup_path)
+                        logger.info(f"JSON file backed up to: {backup_path}")
+                    else:
+                        logger.info("JSON file exists but is empty, no migration needed")
+                else:
+                    logger.info(f"Database already has {shift_count} shifts, skipping migration")
+                    
+            except Exception as e:
+                logger.error(f"Error during JSON to SQLite migration: {e}")
+    
+    def _load_records_from_db(self) -> dict:
+        """Load records from SQLite database into the legacy dict format."""
+        try:
+            return self.db.export_to_json()
+        except Exception as e:
+            logger.error(f"Error loading records from database: {e}")
+            return {
+                "records": [],
+                "current_shift": {
+                    "shift_start": None,
+                    "shift_end": None,
+                    "records": []
+                },
+                "shifts": []
+            }
     
     def load_settings(self) -> dict:
         """Load settings, RVU table, classification rules, and window positions."""
@@ -1332,26 +1930,12 @@ class RVUData:
     
     
     def load_records(self) -> dict:
-        """Load records, current shift, and historical shifts."""
-        try:
-            if os.path.exists(self.records_file):
-                with open(self.records_file, 'r') as f:
-                    data = json.load(f)
-                    logger.info(f"Loaded records from {self.records_file}")
-                    return data
-        except Exception as e:
-            logger.error(f"Error loading records: {e}")
+        """Load records from SQLite database.
         
-        # Default records structure
-        return {
-            "records": [],
-            "current_shift": {
-                "shift_start": None,
-                "shift_end": None,
-                "records": []
-            },
-            "shifts": []
-        }
+        Note: This method now loads from SQLite, not JSON.
+        Kept for compatibility with existing code structure.
+        """
+        return self._load_records_from_db()
     
     def migrate_old_file(self):
         """Migrate data from old rvu_data.json file if it exists."""
@@ -1405,7 +1989,7 @@ class RVUData:
                 logger.error(f"Error migrating old file: {e}")
     
     def save(self, save_records=True):
-        """Save data to appropriate files.
+        """Save data to appropriate files/database.
         
         Args:
             save_records: If True, save both settings and records. If False, only save settings.
@@ -1446,23 +2030,73 @@ class RVUData:
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
         
-        # Save records file only if requested
+        # Save records to SQLite database (not JSON anymore)
         if save_records:
             try:
-                records_to_save = {
-                    "records": self.records_data.get("records", []),
-                    "current_shift": self.records_data.get("current_shift", {
-                        "shift_start": None,
-                        "shift_end": None,
-                        "records": []
-                    }),
-                    "shifts": self.records_data.get("shifts", [])
-                }
-                with open(self.records_file, 'w') as f:
-                    json.dump(records_to_save, f, indent=2, default=str)
-                logger.info(f"Saved records to {self.records_file}")
+                self._sync_to_database()
+                logger.info(f"Saved records to database: {self.db_file}")
             except Exception as e:
                 logger.error(f"Error saving records: {e}")
+    
+    def _sync_to_database(self):
+        """Sync in-memory data to SQLite database.
+        
+        This handles the complexity of syncing the legacy dict-based structure
+        to the normalized SQLite database.
+        """
+        current_shift_data = self.data.get("current_shift", {})
+        
+        # Get or create current shift in database
+        db_current = self.db.get_current_shift()
+        
+        if current_shift_data.get("shift_start"):
+            # We have an active shift in memory
+            if db_current:
+                # Update existing shift times if needed
+                self.db.update_current_shift_times(
+                    effective_shift_start=current_shift_data.get("effective_shift_start"),
+                    projected_shift_end=current_shift_data.get("projected_shift_end")
+                )
+                current_shift_id = db_current['id']
+            else:
+                # Create new shift in database
+                current_shift_id = self.db.start_shift(
+                    shift_start=current_shift_data.get("shift_start"),
+                    effective_shift_start=current_shift_data.get("effective_shift_start"),
+                    projected_shift_end=current_shift_data.get("projected_shift_end")
+                )
+            
+            # Sync records for current shift
+            # Get existing records from DB
+            db_records = self.db.get_records_for_shift(current_shift_id)
+            db_accessions = {r['accession']: r for r in db_records}
+            
+            # Add/update records from memory
+            memory_records = current_shift_data.get("records", [])
+            memory_accessions = set()
+            
+            for record in memory_records:
+                accession = record.get('accession', '')
+                memory_accessions.add(accession)
+                
+                if accession in db_accessions:
+                    # Update existing record if needed
+                    db_rec = db_accessions[accession]
+                    # Check if duration changed (main update scenario)
+                    if record.get('duration_seconds', 0) != db_rec.get('duration_seconds', 0):
+                        self.db.update_record(db_rec['id'], record)
+                else:
+                    # Add new record
+                    self.db.add_record(current_shift_id, record)
+            
+            # Delete records that were removed from memory
+            for accession, db_rec in db_accessions.items():
+                if accession not in memory_accessions:
+                    self.db.delete_record(db_rec['id'])
+        
+        elif db_current:
+            # No shift in memory but DB has current shift - end it
+            self.db.end_current_shift()
     
     def end_current_shift(self):
         """End the current shift and move it to historical shifts."""
@@ -1470,6 +2104,10 @@ class RVUData:
             current_shift = self.data["current_shift"].copy()
             current_shift["shift_end"] = datetime.now().isoformat()
             self.data["shifts"].append(current_shift)
+            
+            # End in database as well
+            self.db.end_current_shift(current_shift["shift_end"])
+            
             logger.info(f"Ended shift: {current_shift['shift_start']} to {current_shift['shift_end']}")
     
     def clear_current_shift(self):
@@ -1497,8 +2135,75 @@ class RVUData:
             "records": []
         }
         self.records_data["shifts"] = []
+        
+        # Clear the database completely
+        try:
+            cursor = self.db.conn.cursor()
+            cursor.execute('DELETE FROM records')
+            cursor.execute('DELETE FROM shifts')
+            cursor.execute('DELETE FROM legacy_records')
+            self.db.conn.commit()
+            logger.info("Cleared all data from database")
+        except Exception as e:
+            logger.error(f"Error clearing database: {e}")
+        
         self.save()
         logger.info("Cleared all data")
+    
+    def export_records_to_json(self, filepath: str = None):
+        """Export all records to a JSON file (for backups).
+        
+        Args:
+            filepath: Path to save the JSON file. If None, uses default backup path.
+        """
+        if filepath is None:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            settings_dir, data_dir = get_app_paths()
+            filepath = os.path.join(data_dir, f"rvu_records_backup_{timestamp}.json")
+        
+        self.db.export_to_json_file(filepath)
+        return filepath
+    
+    def import_records_from_json(self, filepath: str):
+        """Import records from a JSON backup file.
+        
+        Args:
+            filepath: Path to the JSON file to import.
+        """
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                json_data = json.load(f)
+            
+            # Clear current database
+            cursor = self.db.conn.cursor()
+            cursor.execute('DELETE FROM records')
+            cursor.execute('DELETE FROM shifts')
+            cursor.execute('DELETE FROM legacy_records')
+            self.db.conn.commit()
+            
+            # Import from JSON
+            self.db.migrate_from_json(json_data)
+            
+            # Reload into memory
+            self.records_data = self._load_records_from_db()
+            self.data["records"] = self.records_data.get("records", [])
+            self.data["current_shift"] = self.records_data.get("current_shift", {
+                "shift_start": None,
+                "shift_end": None,
+                "records": []
+            })
+            self.data["shifts"] = self.records_data.get("shifts", [])
+            
+            logger.info(f"Imported records from: {filepath}")
+            return True
+        except Exception as e:
+            logger.error(f"Error importing records: {e}")
+            return False
+    
+    def close(self):
+        """Close database connection. Call this when app exits."""
+        if hasattr(self, 'db') and self.db:
+            self.db.close()
 
 
 class StudyTracker:
@@ -5406,12 +6111,27 @@ class StatisticsWindow:
         
         shift_start = shift.get("shift_start")
         
-        # Find and remove from the shifts array
+        # Delete from database first (find by shift_start)
+        try:
+            cursor = self.data_manager.db.conn.cursor()
+            cursor.execute('SELECT id FROM shifts WHERE shift_start = ? AND is_current = 0', (shift_start,))
+            row = cursor.fetchone()
+            if row:
+                self.data_manager.db.delete_shift(row[0])
+        except Exception as e:
+            logger.error(f"Error deleting shift from database: {e}")
+        
+        # Find and remove from the in-memory shifts array
         historical_shifts = self.data_manager.data.get("shifts", [])
         for i, s in enumerate(historical_shifts):
             if s.get("shift_start") == shift_start:
                 historical_shifts.pop(i)
-                self.data_manager.save()
+                # Also update records_data
+                if "shifts" in self.data_manager.records_data:
+                    for j, rs in enumerate(self.data_manager.records_data["shifts"]):
+                        if rs.get("shift_start") == shift_start:
+                            self.data_manager.records_data["shifts"].pop(j)
+                            break
                 logger.info(f"Deleted shift starting {shift_start}")
                 break
         
