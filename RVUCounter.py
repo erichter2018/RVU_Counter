@@ -2304,17 +2304,25 @@ class StudyTracker:
         return False
     
     def _was_part_of_multi_accession(self, accession: str, data_manager) -> bool:
-        """Check if an accession was already recorded as part of a multi-accession study."""
+        """Check if an accession was already recorded as part of a multi-accession study.
+        
+        Handles both old format (is_multi_accession with individual_accessions) and 
+        new format (from_multi_accession on individual records).
+        """
         try:
             # Check current shift records
             current_shift_records = data_manager.data.get("current_shift", {}).get("records", [])
             for record in current_shift_records:
+                # New format: from_multi_accession flag on individual records
+                if record.get("from_multi_accession", False):
+                    if record.get("accession") == accession:
+                        return True
+                
+                # Old format: is_multi_accession with individual_accessions array
                 if record.get("is_multi_accession", False):
                     individual_accessions = record.get("individual_accessions", [])
                     if accession in individual_accessions:
                         return True
-                    # Also check the accession string format "ACC1, ACC2, ..."
-                    # Split by comma and strip whitespace, then check for exact match
                     accession_str = record.get("accession", "")
                     if accession_str:
                         accession_list = [acc.strip() for acc in accession_str.split(",")]
@@ -2326,11 +2334,16 @@ class StudyTracker:
             for shift in shifts:
                 shift_records = shift.get("records", [])
                 for record in shift_records:
+                    # New format
+                    if record.get("from_multi_accession", False):
+                        if record.get("accession") == accession:
+                            return True
+                    
+                    # Old format
                     if record.get("is_multi_accession", False):
                         individual_accessions = record.get("individual_accessions", [])
                         if accession in individual_accessions:
                             return True
-                        # Also check the accession string format "ACC1, ACC2, ..."
                         accession_str = record.get("accession", "")
                         if accession_str and accession in accession_str.split(", "):
                             return True
@@ -2783,87 +2796,73 @@ class RVUCounterApp:
             logger.info(f"Recorded new study: {accession} - {study_record.get('study_type', 'Unknown')} ({study_record.get('rvu', 0):.1f} RVU) - Duration: {new_duration:.1f}s")
     
     def _record_multi_accession_study(self, current_time):
-        """Record a completed multi-accession study."""
+        """Record a completed multi-accession study as SEPARATE individual studies.
+        
+        Each accession in the multi-accession group gets its own record with:
+        - Its own accession number
+        - Its own procedure and study type  
+        - Its own RVU value
+        - Duration split evenly among studies
+        - Reference to the multi-accession group for duplicate detection
+        """
         if not self.multi_accession_data:
             return
         
-        # Allow multi-accession studies to be recorded again
-        # When recorded, _record_or_update_study will update existing record with maximum duration
         all_accessions = list(self.multi_accession_data.keys())
+        num_studies = len(all_accessions)
         
-        total_rvu = sum(d["rvu"] for d in self.multi_accession_data.values())
-        
-        # Get modality from collected studies
-        modalities = set()
-        for d in self.multi_accession_data.values():
-            st = d["study_type"]
-            if st:
-                parts = st.split()
-                if parts:
-                    modalities.add(parts[0])
-        modality = list(modalities)[0] if modalities else "Studies"
-        
-        # Determine duration
+        # Determine total duration and split evenly
         if self.multi_accession_start_time:
-            duration = (current_time - self.multi_accession_start_time).total_seconds()
+            total_duration = (current_time - self.multi_accession_start_time).total_seconds()
         else:
-            duration = 0
+            total_duration = 0
+        duration_per_study = total_duration / num_studies if num_studies > 0 else 0
         
-        # Get all accession numbers
-        all_accessions = list(self.multi_accession_data.keys())
-        accession_str = ", ".join(all_accessions)
-        
-        # Get all procedures, study types, and RVUs in order
-        all_procedures = []
-        all_study_types = []
-        all_rvus = []
-        all_accession_numbers = []
-        
-        # Preserve order by iterating through accessions in the order they appear
-        for acc in all_accessions:
-            if acc in self.multi_accession_data:
-                data = self.multi_accession_data[acc]
-                all_procedures.append(data.get("procedure", ""))
-                all_study_types.append(data.get("study_type", ""))
-                all_rvus.append(data.get("rvu", 0))
-                all_accession_numbers.append(acc)
-        
-        # Get patient class from first entry
+        # Get patient class from first entry (applies to all)
         patient_class_val = ""
         for d in self.multi_accession_data.values():
             if d.get("patient_class"):
                 patient_class_val = d["patient_class"]
                 break
         
-        study_record = {
-            "accession": accession_str,
-            "procedure": f"Multiple {modality} ({len(all_accessions)} studies)",
-            "patient_class": patient_class_val,
-            "study_type": f"Multiple {modality}",
-            "rvu": total_rvu,
-            "time_performed": self.multi_accession_start_time.isoformat() if self.multi_accession_start_time else current_time.isoformat(),
-            "time_finished": current_time.isoformat(),
-            "duration_seconds": duration,
-            "is_multi_accession": True,
-            "accession_count": len(all_accessions),
-            "individual_procedures": all_procedures,
-            "individual_study_types": all_study_types,
-            "individual_rvus": all_rvus,
-            "individual_accessions": all_accession_numbers,
-        }
+        time_performed = self.multi_accession_start_time.isoformat() if self.multi_accession_start_time else current_time.isoformat()
         
-        # For multi-accession, use the accession string as the key for duplicate checking
-        # This ensures multiple openings of the same multi-accession group update the same record
-        self._record_or_update_study(study_record)
+        # Generate a unique group ID to link these studies for duplicate detection
+        multi_accession_group_id = "_".join(sorted(all_accessions))
+        
+        total_rvu = 0
+        recorded_count = 0
+        
+        # Record each study individually
+        for accession in all_accessions:
+            data = self.multi_accession_data[accession]
+            
+            study_record = {
+                "accession": accession,
+                "procedure": data.get("procedure", "Unknown"),
+                "patient_class": patient_class_val,
+                "study_type": data.get("study_type", "Unknown"),
+                "rvu": data.get("rvu", 0),
+                "time_performed": time_performed,
+                "time_finished": current_time.isoformat(),
+                "duration_seconds": duration_per_study,
+                # Track that this was from a multi-accession session
+                "from_multi_accession": True,
+                "multi_accession_group": multi_accession_group_id,
+                "multi_accession_count": num_studies,
+            }
+            
+            total_rvu += data.get("rvu", 0)
+            
+            self._record_or_update_study(study_record)
+            self.tracker.mark_seen(accession)
+            logger.debug(f"Recorded individual study from multi-accession: {accession}")
+            recorded_count += 1
+        
         self.undo_used = False
         self.undo_btn.config(state=tk.NORMAL)
         
-        # Mark each individual accession as seen to prevent duplicates
-        for acc in all_accessions:
-            self.tracker.mark_seen(acc)
-            logger.debug(f"Marked accession as seen: {acc}")
-        
-        logger.info(f"Recorded multi-accession study: {len(all_accessions)} accessions - Multiple {modality} ({total_rvu:.1f} RVU) - Duration: {duration:.1f}s")
+        logger.info(f"Recorded multi-accession: {recorded_count} individual studies ({total_rvu:.1f} total RVU) - Duration: {total_duration:.1f}s")
         self.update_display()
     
     def _powerscribe_worker(self):
@@ -3760,7 +3759,41 @@ class RVUCounterApp:
             # Update counters to zero but don't rebuild recent studies list
             self._update_counters_only()
         else:
-            # End previous shift if it exists
+            # Check for temporary studies (studies recorded without an active shift)
+            temp_records = self.data_manager.data["current_shift"].get("records", [])
+            has_no_shift = not self.data_manager.data["current_shift"].get("shift_start")
+            
+            keep_temp_records = False
+            if temp_records and has_no_shift:
+                # Ask user what to do with temporary studies
+                study_count = len(temp_records)
+                total_rvu = sum(r.get("rvu", 0) for r in temp_records)
+                
+                # Create custom dialog with Yes/No/Cancel
+                result = messagebox.askyesnocancel(
+                    "Temporary Studies Found",
+                    f"You have {study_count} temporary studies ({total_rvu:.1f} RVU) recorded without a shift.\n\n"
+                    "Would you like to add them to the new shift?\n\n"
+                    "• Yes - Add studies to the new shift\n"
+                    "• No - Discard temporary studies\n"
+                    "• Cancel - Don't start shift",
+                    parent=self.root
+                )
+                
+                if result is None:
+                    # Cancel - abort, don't start shift
+                    logger.info("Shift start cancelled by user")
+                    return
+                elif result:
+                    # Yes - keep the records
+                    keep_temp_records = True
+                    logger.info(f"User chose to add {study_count} temporary studies to new shift")
+                else:
+                    # No - discard records
+                    keep_temp_records = False
+                    logger.info(f"User chose to discard {study_count} temporary studies")
+            
+            # End previous shift if it exists (shouldn't happen if has_no_shift is True)
             if self.data_manager.data["current_shift"].get("shift_start"):
                 self.data_manager.end_current_shift()
             
@@ -3784,11 +3817,26 @@ class RVUCounterApp:
             self.data_manager.data["current_shift"]["effective_shift_start"] = self.effective_shift_start.isoformat()
             self.data_manager.data["current_shift"]["projected_shift_end"] = self.projected_shift_end.isoformat()
             self.data_manager.data["current_shift"]["shift_end"] = None
-            self.data_manager.data["current_shift"]["records"] = []
+            
+            # Handle temporary records based on user choice
+            if keep_temp_records:
+                # Keep existing records, mark their accessions as seen
+                for record in temp_records:
+                    self.tracker.seen_accessions.add(record.get("accession", ""))
+            else:
+                # Clear records
+                self.data_manager.data["current_shift"]["records"] = []
+            
             self.tracker = StudyTracker(
                 min_seconds=self.data_manager.data["settings"]["min_study_seconds"]
             )
-            self.tracker.seen_accessions.clear()
+            if keep_temp_records:
+                # Restore seen accessions after tracker recreation
+                for record in temp_records:
+                    self.tracker.seen_accessions.add(record.get("accession", ""))
+            else:
+                self.tracker.seen_accessions.clear()
+            
             self.is_running = True
             self.start_btn.config(text="Stop Shift")
             self.root.title("RVU Counter - Running")
@@ -4214,7 +4262,7 @@ class RVUCounterApp:
                 # Store the actual_index in the button itself to avoid closure issues
                 delete_btn.actual_index = actual_index
                 delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: self.delete_study_by_index(btn.actual_index))
-                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["button_active_bg"]))
+                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_hover"]))
                 delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
                 delete_btn.pack(side=tk.LEFT, padx=(1, 3), pady=0)
                 
@@ -4522,6 +4570,7 @@ class RVUCounterApp:
             comp_color = "#4ec94e"  # Lighter green for dark mode
             delete_btn_bg = "#3d3d3d"
             delete_btn_fg = "#aaaaaa"
+            delete_btn_hover = "#ff6b6b"  # Light red for dark mode
             border_color = "#555555"
             text_secondary = "#aaaaaa"  # Gray text for secondary info
         else:
@@ -4540,6 +4589,7 @@ class RVUCounterApp:
             comp_color = "dark green"
             delete_btn_bg = "#f0f0f0"
             delete_btn_fg = "gray"
+            delete_btn_hover = "#ffcccc"  # Light red for light mode
             border_color = "#acacac"
             text_secondary = "gray"  # Gray text for secondary info
         
@@ -4556,6 +4606,7 @@ class RVUCounterApp:
             "canvas_bg": canvas_bg,
             "delete_btn_bg": delete_btn_bg,
             "delete_btn_fg": delete_btn_fg,
+            "delete_btn_hover": delete_btn_hover,
             "border_color": border_color,
             "text_secondary": text_secondary,
             "dark_mode": dark_mode
@@ -4636,6 +4687,7 @@ class RVUCounterApp:
             "button_active_bg": "#d0d0d0",
             "delete_btn_bg": "#f0f0f0",
             "delete_btn_fg": "gray",
+            "delete_btn_hover": "#ffcccc",
             "canvas_bg": "#f0f0f0",
             "dark_mode": False
         })
@@ -5798,6 +5850,23 @@ class StatisticsWindow:
                     btn_frame.pack(pady=5)
                     ttk.Button(btn_frame, text="OK", command=set_start_date).pack(side=tk.LEFT, padx=5)
                     ttk.Button(btn_frame, text="Cancel", command=cal_dialog.destroy).pack(side=tk.LEFT, padx=5)
+                    
+                    # Position dialog next to the button
+                    cal_dialog.update_idletasks()
+                    button_x = start_date_frame.winfo_rootx() + start_cal_btn.winfo_x() + start_cal_btn.winfo_width()
+                    button_y = start_date_frame.winfo_rooty() + start_cal_btn.winfo_y()
+                    dialog_width = cal_dialog.winfo_width()
+                    dialog_height = cal_dialog.winfo_height()
+                    
+                    # Position to the right of button, or above if not enough space
+                    screen_width = self.window.winfo_screenwidth()
+                    if button_x + dialog_width + 10 > screen_width:
+                        # Position above button
+                        cal_dialog.geometry(f"+{button_x - dialog_width // 2}+{button_y - dialog_height - 5}")
+                    else:
+                        # Position to the right
+                        cal_dialog.geometry(f"+{button_x + 5}+{button_y}")
+                    
                 except Exception as e:
                     logger.error(f"Error opening calendar: {e}")
                     cal_dialog.destroy()
@@ -5845,6 +5914,23 @@ class StatisticsWindow:
                     btn_frame.pack(pady=5)
                     ttk.Button(btn_frame, text="OK", command=set_end_date).pack(side=tk.LEFT, padx=5)
                     ttk.Button(btn_frame, text="Cancel", command=cal_dialog.destroy).pack(side=tk.LEFT, padx=5)
+                    
+                    # Position dialog next to the button
+                    cal_dialog.update_idletasks()
+                    button_x = end_date_frame.winfo_rootx() + end_cal_btn.winfo_x() + end_cal_btn.winfo_width()
+                    button_y = end_date_frame.winfo_rooty() + end_cal_btn.winfo_y()
+                    dialog_width = cal_dialog.winfo_width()
+                    dialog_height = cal_dialog.winfo_height()
+                    
+                    # Position to the right of button, or above if not enough space
+                    screen_width = self.window.winfo_screenwidth()
+                    if button_x + dialog_width + 10 > screen_width:
+                        # Position above button
+                        cal_dialog.geometry(f"+{button_x - dialog_width // 2}+{button_y - dialog_height - 5}")
+                    else:
+                        # Position to the right
+                        cal_dialog.geometry(f"+{button_x + 5}+{button_y}")
+                    
                 except Exception as e:
                     logger.error(f"Error opening calendar: {e}")
                     cal_dialog.destroy()
@@ -5949,6 +6035,16 @@ class StatisticsWindow:
         button_frame.pack(fill=tk.X, pady=(10, 0))
         
         ttk.Button(button_frame, text="Refresh", command=self.refresh_data, width=12).pack(side=tk.LEFT, padx=2)
+        
+        # Partial shifts detected button (hidden by default, shown when partial shifts detected)
+        self.partial_shifts_btn = ttk.Button(button_frame, text="⚠ Partial Shifts", 
+                                             command=self.show_partial_shifts_dialog, width=14)
+        # Don't pack yet - will be shown if partial shifts are detected
+        
+        # Combine shifts button (always visible)
+        ttk.Button(button_frame, text="Combine Shifts", 
+                  command=self.show_combine_shifts_dialog, width=14).pack(side=tk.LEFT, padx=2)
+        
         ttk.Button(button_frame, text="Close", command=self.on_closing, width=12).pack(side=tk.RIGHT, padx=2)
         
         # Center frame for backup buttons
@@ -5960,6 +6056,9 @@ class StatisticsWindow:
         # Initial data load
         self.populate_shifts_list()
         self.refresh_data()
+        
+        # Check for partial shifts and show button if detected
+        self.update_partial_shifts_button()
     
     def get_all_shifts(self) -> List[dict]:
         """Get all shifts from records, sorted by date (newest first)."""
@@ -6055,11 +6154,13 @@ class StatisticsWindow:
             # Delete button (subtle, small)
             if not shift.get("is_current"):
                 colors = self.app.get_theme_colors()
-                del_btn = tk.Button(shift_frame, text="×", font=("Arial", 8), 
+                del_btn = tk.Label(shift_frame, text="×", font=("Arial", 8), 
                                    fg=colors["delete_btn_fg"], bg=colors["delete_btn_bg"],
-                                   activeforeground=colors["fg"], activebackground=colors["button_bg"],
-                                   relief=tk.FLAT, width=2, height=1,
-                                   command=lambda idx=i: self.confirm_delete_shift(idx))
+                                   cursor="hand2", width=2)
+                del_btn.shift_idx = i
+                del_btn.bind("<Button-1>", lambda e, btn=del_btn: self.confirm_delete_shift(btn.shift_idx))
+                del_btn.bind("<Enter>", lambda e, btn=del_btn: btn.config(bg=colors["delete_btn_hover"]))
+                del_btn.bind("<Leave>", lambda e, btn=del_btn: btn.config(bg=colors["delete_btn_bg"]))
                 del_btn.pack(side=tk.LEFT)
     
     def select_shift(self, shift_index: int):
@@ -6794,6 +6895,11 @@ class StatisticsWindow:
             modality = study_type.split()[0] if study_type else "Unknown"
             rvu = record.get("rvu", 0)
             
+            # Handle any remaining "Multiple" modality from old records
+            # Extract the actual modality (e.g., "XR" from "Multiple XR")
+            if modality == "Multiple" and len(study_type.split()) > 1:
+                modality = study_type.split()[1]
+            
             if modality not in modality_data:
                 modality_data[modality] = {"studies": 0, "rvu": 0}
             
@@ -6950,6 +7056,13 @@ class StatisticsWindow:
             study_type = record.get("study_type", "").strip()
             if not study_type:
                 study_type = "(Unknown)"
+            
+            # Handle any remaining "Multiple ..." study types from old records
+            # Convert "Multiple XR" -> "XR Other", etc.
+            if study_type.startswith("Multiple "):
+                modality = study_type.replace("Multiple ", "").strip()
+                study_type = f"{modality} Other" if modality else "(Unknown)"
+            
             rvu = record.get("rvu", 0)
             
             if study_type not in type_data:
@@ -7012,48 +7125,315 @@ class StatisticsWindow:
         return " ".join(parts) if parts else "0s"
     
     def _display_all_studies(self, records: List[dict]):
-        """Display all individual studies using Canvas table."""
-        # Clear/create Canvas table
+        """Display all individual studies with virtual scrolling for performance."""
+        # Clear/create frame for virtual table
+        if hasattr(self, '_all_studies_frame'):
+            try:
+                self._all_studies_frame.destroy()
+            except:
+                pass
+        
         if hasattr(self, '_all_studies_table'):
             try:
-                self._all_studies_table.clear()
+                self._all_studies_table.frame.pack_forget()
+                self._all_studies_table.frame.destroy()
             except:
-                if hasattr(self, '_all_studies_table'):
-                    self._all_studies_table.frame.pack_forget()
-                    self._all_studies_table.frame.destroy()
-                    delattr(self, '_all_studies_table')
+                pass
+            if hasattr(self, '_all_studies_table'):
+                delattr(self, '_all_studies_table')
         
-        if not hasattr(self, '_all_studies_table'):
-            columns = [
-                {'name': 'procedure', 'width': 350, 'text': 'Procedure', 'sortable': True},
-                {'name': 'study_type', 'width': 150, 'text': 'Study Type', 'sortable': True},
-                {'name': 'rvu', 'width': 100, 'text': 'RVU', 'sortable': True},
-                {'name': 'time_to_read', 'width': 120, 'text': 'Time to Read', 'sortable': True}
-            ]
-            self._all_studies_table = CanvasTable(self.table_frame, columns, app=self.app)
+        # Store records for virtual rendering
+        self._all_studies_records = records
+        self._all_studies_row_height = 22
         
-        # Always pack the table to ensure it's visible
-        self._all_studies_table.frame.pack_forget()  # Remove any existing packing
-        self._all_studies_table.pack(fill=tk.BOTH, expand=True)
-        self._all_studies_table.clear()
+        # Column definitions with widths
+        self._all_studies_columns = [
+            ('num', 35, '#'),
+            ('date', 80, 'Date'),
+            ('time', 70, 'Time'),
+            ('procedure', 260, 'Procedure'),
+            ('study_type', 110, 'Study Type'),
+            ('rvu', 45, 'RVU'),
+            ('duration', 70, 'Duration'),
+            ('delete', 25, '×')
+        ]
         
-        # Add all studies
-        for record in records:
+        # Create frame
+        self._all_studies_frame = ttk.Frame(self.table_frame)
+        self._all_studies_frame.pack(fill=tk.BOTH, expand=True)
+        
+        colors = self.app.get_theme_colors()
+        canvas_bg = colors.get("entry_bg", "white")
+        header_bg = colors.get("button_bg", "#e1e1e1")
+        border_color = colors.get("border_color", "#acacac")
+        text_fg = colors.get("fg", "black")
+        
+        # Calculate total width
+        total_width = sum(col[1] for col in self._all_studies_columns)
+        
+        # Header canvas (fixed)
+        header_canvas = tk.Canvas(self._all_studies_frame, height=25, bg=header_bg, 
+                                  highlightthickness=1, highlightbackground=border_color)
+        header_canvas.pack(fill=tk.X)
+        
+        # Draw headers
+        x = 0
+        for col_name, width, header_text in self._all_studies_columns:
+            header_canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color)
+            header_canvas.create_text(x + width//2, 12, text=header_text, font=('Arial', 9, 'bold'), fill=text_fg)
+            x += width
+        
+        # Data canvas with scrollbar
+        data_frame = ttk.Frame(self._all_studies_frame)
+        data_frame.pack(fill=tk.BOTH, expand=True)
+        
+        self._all_studies_canvas = tk.Canvas(data_frame, bg=canvas_bg, highlightthickness=0)
+        
+        # Custom scroll command that also triggers re-render
+        def on_scroll(*args):
+            self._all_studies_canvas.yview(*args)
+            self._render_visible_rows()
+        
+        scrollbar = ttk.Scrollbar(data_frame, orient="vertical", command=on_scroll)
+        
+        # Custom yscrollcommand that triggers re-render
+        def on_scroll_set(first, last):
+            scrollbar.set(first, last)
+            self._render_visible_rows()
+        
+        self._all_studies_canvas.configure(yscrollcommand=on_scroll_set)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self._all_studies_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        # Set scroll region based on total rows
+        total_height = len(records) * self._all_studies_row_height
+        self._all_studies_canvas.configure(scrollregion=(0, 0, total_width, total_height))
+        
+        # Mouse wheel scrolling
+        def on_mousewheel(event):
+            self._all_studies_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        self._all_studies_canvas.bind("<MouseWheel>", on_mousewheel)
+        self._all_studies_canvas.bind("<Configure>", lambda e: self._render_visible_rows())
+        
+        # Initial render
+        self._all_studies_canvas.after(10, self._render_visible_rows)
+        
+        # Set up delete handler
+        self._setup_all_studies_delete_handler()
+    
+    def _truncate_text(self, text: str, max_chars: int) -> str:
+        """Truncate text to fit within max characters, adding ... if needed."""
+        if len(text) <= max_chars:
+            return text
+        return text[:max_chars - 3] + "..."
+    
+    def _render_visible_rows(self):
+        """Render only the visible rows for virtual scrolling performance."""
+        if not hasattr(self, '_all_studies_canvas') or not hasattr(self, '_all_studies_records'):
+            return
+        
+        canvas = self._all_studies_canvas
+        records = self._all_studies_records
+        row_height = self._all_studies_row_height
+        columns = self._all_studies_columns
+        
+        colors = self.app.get_theme_colors()
+        data_bg = colors.get("entry_bg", "white")
+        text_fg = colors.get("fg", "black")
+        border_color = colors.get("border_color", "#acacac")
+        
+        # Get visible range
+        canvas.update_idletasks()
+        try:
+            y_top = canvas.canvasy(0)
+            y_bottom = canvas.canvasy(canvas.winfo_height())
+        except:
+            return
+        
+        first_visible = max(0, int(y_top // row_height) - 2)
+        last_visible = min(len(records), int(y_bottom // row_height) + 3)
+        
+        # Track what we've rendered to avoid re-rendering
+        if not hasattr(self, '_rendered_rows'):
+            self._rendered_rows = set()
+        
+        # Check if we need to re-render (scroll position changed significantly)
+        current_range = (first_visible, last_visible)
+        if hasattr(self, '_last_render_range') and self._last_render_range == current_range:
+            return  # No change, skip
+        self._last_render_range = current_range
+        
+        # Clear canvas and render visible rows
+        canvas.delete("all")
+        
+        for idx in range(first_visible, last_visible):
+            if idx >= len(records):
+                break
+            
+            record = records[idx]
+            y = idx * row_height
+            
+            # Parse record data
             procedure = record.get("procedure", "Unknown")
             study_type = record.get("study_type", "Unknown")
             rvu = record.get("rvu", 0.0)
             duration = record.get("duration_seconds", 0)
-            time_to_read = self._format_duration(duration)
+            duration_str = self._format_duration(duration)
             
-            self._all_studies_table.add_row({
-                'procedure': procedure,
-                'study_type': study_type,
-                'rvu': f"{rvu:.1f}",
-                'time_to_read': time_to_read
-            })
+            time_performed = record.get("time_performed", "")
+            date_str = ""
+            time_str = ""
+            if time_performed:
+                try:
+                    dt = datetime.fromisoformat(time_performed)
+                    date_str = dt.strftime("%m/%d/%y")
+                    time_str = dt.strftime("%I:%M%p").lstrip("0").lower()
+                except:
+                    pass
+            
+            # Truncate procedure and study_type to fit
+            procedure_truncated = self._truncate_text(procedure, 38)
+            study_type_truncated = self._truncate_text(study_type, 15)
+            
+            row_data = [
+                str(idx + 1),
+                date_str,
+                time_str,
+                procedure_truncated,
+                study_type_truncated,
+                f"{rvu:.1f}",
+                duration_str,
+                "×"
+            ]
+            
+            # Draw row
+            x = 0
+            for i, (col_name, width, _) in enumerate(columns):
+                # Draw cell background
+                canvas.create_rectangle(x, y, x + width, y + row_height, 
+                                        fill=data_bg, outline=border_color, width=1)
+                # Draw text
+                cell_text = row_data[i] if i < len(row_data) else ""
+                anchor = 'w' if col_name == 'procedure' else 'center'
+                text_x = x + 4 if anchor == 'w' else x + width // 2
+                canvas.create_text(text_x, y + row_height // 2, text=cell_text, 
+                                   font=('Arial', 8), fill=text_fg, anchor=anchor)
+                x += width
+    
+    def _setup_all_studies_delete_handler(self):
+        """Set up click handling for the delete column in all studies view."""
+        if not hasattr(self, '_all_studies_canvas'):
+            return
         
-        # Update display once after all rows are added
-        self._all_studies_table.update_data()
+        canvas = self._all_studies_canvas
+        row_height = self._all_studies_row_height
+        columns = self._all_studies_columns
+        
+        # Calculate x position of delete column
+        delete_col_x = sum(col[1] for col in columns[:-1])  # All columns except last
+        delete_col_width = columns[-1][1]  # Last column width
+        
+        colors = self.app.get_theme_colors()
+        hover_color = colors.get("delete_btn_hover", "#ffcccc")
+        
+        # Track currently hovered row
+        self._hover_row_idx = None
+        
+        def on_motion(event):
+            canvas_y = canvas.canvasy(event.y)
+            canvas_x = event.x
+            
+            # Check if in delete column
+            if delete_col_x <= canvas_x <= delete_col_x + delete_col_width:
+                row_idx = int(canvas_y // row_height)
+                if 0 <= row_idx < len(self._all_studies_records):
+                    if self._hover_row_idx != row_idx:
+                        # Clear previous hover first
+                        canvas.delete("hover")
+                        self._hover_row_idx = row_idx
+                        # Draw new hover overlay
+                        y1 = row_idx * row_height
+                        canvas.create_rectangle(
+                            delete_col_x, y1, delete_col_x + delete_col_width, y1 + row_height,
+                            fill=hover_color, outline="", tags="hover"
+                        )
+                        canvas.create_text(
+                            delete_col_x + delete_col_width // 2, y1 + row_height // 2,
+                            text="×", font=('Arial', 8), fill=colors.get("fg", "black"), tags="hover"
+                        )
+                        canvas.config(cursor="hand2")
+                    return
+            
+            # Not hovering over delete column
+            if self._hover_row_idx is not None:
+                canvas.delete("hover")
+                self._hover_row_idx = None
+                canvas.config(cursor="")
+        
+        def on_leave(event):
+            if self._hover_row_idx is not None:
+                canvas.delete("hover")
+                self._hover_row_idx = None
+                canvas.config(cursor="")
+        
+        def on_click(event):
+            canvas_y = canvas.canvasy(event.y)
+            canvas_x = event.x
+            
+            # Check if in delete column
+            if delete_col_x <= canvas_x <= delete_col_x + delete_col_width:
+                row_idx = int(canvas_y // row_height)
+                if 0 <= row_idx < len(self._all_studies_records):
+                    self._delete_all_studies_record(row_idx)
+        
+        canvas.bind("<Motion>", on_motion)
+        canvas.bind("<Leave>", on_leave)
+        canvas.bind("<Button-1>", on_click)
+    
+    def _delete_all_studies_record(self, row_idx: int):
+        """Delete a record from the all studies view."""
+        if not hasattr(self, '_all_studies_records') or row_idx >= len(self._all_studies_records):
+            return
+        
+        record = self._all_studies_records[row_idx]
+        accession = record.get("accession", "")
+        
+        # Confirm deletion
+        result = messagebox.askyesno(
+            "Delete Study?",
+            f"Delete this study?\n\n"
+            f"Accession: {accession}\n"
+            f"Procedure: {record.get('procedure', 'Unknown')}\n"
+            f"RVU: {record.get('rvu', 0):.1f}",
+            parent=self.window
+        )
+        
+        if result:
+            time_performed = record.get("time_performed", "")
+            
+            # Check current shift records
+            current_records = self.data_manager.data.get("current_shift", {}).get("records", [])
+            for i, r in enumerate(current_records):
+                if r.get("accession") == accession and r.get("time_performed") == time_performed:
+                    current_records.pop(i)
+                    self.data_manager.save()
+                    logger.info(f"Deleted study from current shift: {accession}")
+                    self.refresh_data()
+                    return
+            
+            # Check historical shifts
+            for shift in self.data_manager.data.get("shifts", []):
+                shift_records = shift.get("records", [])
+                for i, r in enumerate(shift_records):
+                    if r.get("accession") == accession and r.get("time_performed") == time_performed:
+                        shift_records.pop(i)
+                        self.data_manager.save()
+                        logger.info(f"Deleted study from historical shift: {accession}")
+                        self.refresh_data()
+                        return
+            
+            logger.warning(f"Could not find record to delete: {accession}")
     
     def _sort_column(self, col: str, reverse: bool = None):
         """Sort treeview by column. Toggles direction on each click."""
@@ -8266,21 +8646,11 @@ class StatisticsWindow:
         return total_hours
     
     def backup_study_data(self):
-        """Create a backup copy of rvu_records.json with timestamp."""
+        """Create a backup JSON export of the SQLite database with timestamp."""
         try:
-            records_file = self.data_manager.records_file
-            if not os.path.exists(records_file):
-                messagebox.showwarning("Backup Failed", "No records file found to backup.")
-                return
-            
-            # Generate backup filename with timestamp
-            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            backup_dir = os.path.dirname(records_file)
-            backup_filename = f"rvu_records_backup_{timestamp}.json"
-            backup_path = os.path.join(backup_dir, backup_filename)
-            
-            # Copy the file
-            shutil.copy2(records_file, backup_path)
+            # Use the SQLite export method to create a JSON backup
+            backup_path = self.data_manager.export_records_to_json()
+            backup_filename = os.path.basename(backup_path)
             
             messagebox.showinfo("Backup Created", f"Study data backed up successfully!\n\nBackup file: {backup_filename}")
             logger.info(f"Backup created: {backup_path}")
@@ -8313,7 +8683,7 @@ class StatisticsWindow:
                                 "path": backup_path,
                                 "timestamp": timestamp,
                                 "mtime": mtime,
-                                "display": timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                                "display": timestamp.strftime("%B %d, %Y at %I:%M %p")
                             })
                         except:
                             # If we can't parse timestamp, use file mtime
@@ -8323,7 +8693,7 @@ class StatisticsWindow:
                                 "path": backup_path,
                                 "timestamp": datetime.fromtimestamp(mtime),
                                 "mtime": mtime,
-                                "display": datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M:%S")
+                                "display": datetime.fromtimestamp(mtime).strftime("%B %d, %Y at %I:%M %p")
                             })
             
             if not backup_files:
@@ -8431,7 +8801,7 @@ class StatisticsWindow:
                                 "path": backup_path,
                                 "timestamp": timestamp,
                                 "mtime": mtime,
-                                "display": timestamp.strftime("%Y-%m-%d %H:%M:%S")
+                                "display": timestamp.strftime("%B %d, %Y at %I:%M %p")
                             })
                         except:
                             mtime = os.path.getmtime(backup_path)
@@ -8440,7 +8810,7 @@ class StatisticsWindow:
                                 "path": backup_path,
                                 "timestamp": datetime.fromtimestamp(mtime),
                                 "mtime": mtime,
-                                "display": filename
+                                "display": datetime.fromtimestamp(mtime).strftime("%B %d, %Y at %I:%M %p")
                             })
             
             # Sort by timestamp (newest first)
@@ -8471,7 +8841,7 @@ class StatisticsWindow:
                 delete_btn.backup_path = backup["path"]
                 delete_btn.backup_display = backup["display"]
                 delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: delete_backup(btn))
-                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg="red"))
+                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_hover"]))
                 delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
                 delete_btn.pack(side=tk.LEFT, padx=(0, 5))
                 
@@ -8566,36 +8936,23 @@ class StatisticsWindow:
             
             if response:
                 try:
-                    # Load the backup file
-                    with open(selected_backup["path"], 'r', encoding='utf-8') as f:
-                        backup_data = json.load(f)
+                    # Use the SQLite import method which properly syncs data
+                    success = self.data_manager.import_records_from_json(selected_backup["path"])
                     
-                    # Replace current records data
-                    self.data_manager.records_data = backup_data
-                    
-                    # Update the merged data structure
-                    self.data_manager.data["records"] = backup_data.get("records", [])
-                    self.data_manager.data["current_shift"] = backup_data.get("current_shift", {
-                        "shift_start": None,
-                        "shift_end": None,
-                        "records": []
-                    })
-                    self.data_manager.data["shifts"] = backup_data.get("shifts", [])
-                    
-                    # Save to current records file
-                    self.data_manager.save(save_records=True)
-                    
-                    # Refresh the app
-                    self.app.update_display()
-                    
-                    # Refresh statistics window
-                    self.populate_shifts_list()
-                    self.refresh_data()
-                    
-                    messagebox.showinfo("Backup Restored", f"Backup restored successfully!\n\nRestored from: {selected_backup['display']}")
-                    logger.info(f"Backup restored: {selected_backup['path']}")
-                    
-                    dialog.destroy()
+                    if success:
+                        # Refresh the app
+                        self.app.update_display()
+                        
+                        # Refresh statistics window
+                        self.populate_shifts_list()
+                        self.refresh_data()
+                        
+                        messagebox.showinfo("Backup Restored", f"Backup restored successfully!\n\nRestored from: {selected_backup['display']}")
+                        logger.info(f"Backup restored: {selected_backup['path']}")
+                        
+                        dialog.destroy()
+                    else:
+                        messagebox.showerror("Restore Failed", "Failed to import backup data")
                 except Exception as e:
                     error_msg = f"Error restoring backup: {str(e)}"
                     messagebox.showerror("Restore Failed", error_msg)
@@ -8676,6 +9033,363 @@ class StatisticsWindow:
         self.window.configure(bg=bg_color)
         self.theme_bg = bg_color
         self.theme_canvas_bg = canvas_bg
+    
+    def detect_partial_shifts(self) -> List[List[dict]]:
+        """
+        Detect 'interrupted' shifts - shifts that started around 11pm, lasted <9 hours,
+        and have consecutive shorter shifts that make up the remaining time.
+        Returns a list of shift groups that could be combined.
+        """
+        shifts = self.get_all_shifts()
+        # Filter out current shift and sort by start time (oldest first)
+        historical = [s for s in shifts if not s.get("is_current") and s.get("shift_start")]
+        
+        def parse_shift(s):
+            try:
+                start = datetime.fromisoformat(s.get("shift_start", ""))
+                end = datetime.fromisoformat(s.get("shift_end", "")) if s.get("shift_end") else start
+                return start, end
+            except:
+                return None, None
+        
+        # Sort by start time
+        historical.sort(key=lambda s: s.get("shift_start", ""))
+        
+        partial_groups = []
+        used_indices = set()
+        
+        for i, shift in enumerate(historical):
+            if i in used_indices:
+                continue
+                
+            start, end = parse_shift(shift)
+            if not start:
+                continue
+            
+            # Check if shift started around 11pm (10:30pm - 11:30pm)
+            start_hour = start.hour + start.minute / 60
+            is_evening_start = 22.5 <= start_hour <= 23.5 or (0 <= start_hour <= 0.5)  # 10:30pm-11:30pm or 00:00-00:30
+            
+            # Calculate duration
+            duration_hours = (end - start).total_seconds() / 3600
+            
+            # If started around 11pm and lasted <9 hours, look for continuation shifts
+            if is_evening_start and duration_hours < 9:
+                group = [shift]
+                used_indices.add(i)
+                total_duration = duration_hours
+                last_end = end
+                
+                # Look for consecutive shifts within 4 hours of previous ending
+                for j in range(i + 1, len(historical)):
+                    if j in used_indices:
+                        continue
+                    
+                    next_start, next_end = parse_shift(historical[j])
+                    if not next_start:
+                        continue
+                    
+                    # Check if this shift starts within 4 hours of the last one ending
+                    gap_hours = (next_start - last_end).total_seconds() / 3600
+                    if 0 <= gap_hours <= 4:
+                        next_duration = (next_end - next_start).total_seconds() / 3600
+                        group.append(historical[j])
+                        used_indices.add(j)
+                        total_duration += next_duration
+                        last_end = next_end
+                        
+                        # Stop if we've accumulated enough for a full shift
+                        if total_duration >= 9:
+                            break
+                    elif gap_hours > 4:
+                        break  # Too big a gap
+                
+                # If we found multiple shifts that together form a reasonable duration
+                if len(group) > 1 and total_duration >= 4:  # At least 4 hours combined
+                    partial_groups.append(group)
+        
+        return partial_groups
+    
+    def show_partial_shifts_dialog(self):
+        """Show dialog to combine detected partial shifts."""
+        partial_groups = self.detect_partial_shifts()
+        
+        if not partial_groups:
+            messagebox.showinfo("No Partial Shifts", 
+                              "No interrupted/partial shift patterns detected.",
+                              parent=self.window)
+            return
+        
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Combine Partial Shifts")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        
+        # Position near button
+        dialog.geometry(f"+{self.window.winfo_x() + 50}+{self.window.winfo_y() + 100}")
+        
+        ttk.Label(dialog, text="Detected shift groups that may have been interrupted:",
+                 font=("Arial", 10, "bold")).pack(padx=15, pady=(15, 10))
+        
+        # Scrollable frame for groups
+        canvas = tk.Canvas(dialog, height=300, width=450)
+        scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=canvas.yview)
+        scroll_frame = ttk.Frame(canvas)
+        
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(15, 0), pady=5)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 15), pady=5)
+        
+        selected_groups = []
+        
+        for group_idx, group in enumerate(partial_groups):
+            group_frame = ttk.LabelFrame(scroll_frame, text=f"Group {group_idx + 1}", padding=5)
+            group_frame.pack(fill=tk.X, pady=5, padx=5)
+            
+            # Calculate combined stats
+            total_records = sum(len(s.get("records", [])) for s in group)
+            total_rvu = sum(sum(r.get("rvu", 0) for r in s.get("records", [])) for s in group)
+            
+            first_start = datetime.fromisoformat(group[0].get("shift_start", ""))
+            last_end = datetime.fromisoformat(group[-1].get("shift_end", ""))
+            total_hours = (last_end - first_start).total_seconds() / 3600
+            
+            info_text = f"{len(group)} shifts • {total_records} studies • {total_rvu:.1f} RVU • {total_hours:.1f}h total span"
+            ttk.Label(group_frame, text=info_text).pack(anchor=tk.W)
+            
+            # List each shift in the group
+            for shift in group:
+                try:
+                    start = datetime.fromisoformat(shift.get("shift_start", ""))
+                    end = datetime.fromisoformat(shift.get("shift_end", ""))
+                    dur = (end - start).total_seconds() / 3600
+                    shift_info = f"  • {start.strftime('%m/%d %I:%M%p')} - {end.strftime('%I:%M%p')} ({dur:.1f}h, {len(shift.get('records', []))} studies)"
+                except:
+                    shift_info = "  • Unknown"
+                ttk.Label(group_frame, text=shift_info, font=("Arial", 9)).pack(anchor=tk.W)
+            
+            # Checkbox to select this group
+            var = tk.BooleanVar(value=True)
+            selected_groups.append((group, var))
+            ttk.Checkbutton(group_frame, text="Combine this group", variable=var).pack(anchor=tk.W, pady=(5, 0))
+        
+        # Buttons
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, pady=15, padx=15)
+        
+        def do_combine():
+            groups_to_combine = [g for g, v in selected_groups if v.get()]
+            if groups_to_combine:
+                for group in groups_to_combine:
+                    self._combine_shift_group(group)
+                dialog.destroy()
+                self.populate_shifts_list()
+                self.refresh_data()
+                self.update_partial_shifts_button()
+                messagebox.showinfo("Shifts Combined", 
+                                  f"Successfully combined {len(groups_to_combine)} shift group(s).",
+                                  parent=self.window)
+        
+        ttk.Button(btn_frame, text="Combine Selected", command=do_combine).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+    
+    def show_combine_shifts_dialog(self):
+        """Show dialog to manually combine shifts."""
+        shifts = self.get_all_shifts()
+        historical = [s for s in shifts if not s.get("is_current") and s.get("shift_start")]
+        
+        if len(historical) < 2:
+            messagebox.showinfo("Not Enough Shifts",
+                              "You need at least 2 shifts to combine.",
+                              parent=self.window)
+            return
+        
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Combine Shifts")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        
+        # Position near button
+        dialog.geometry(f"+{self.window.winfo_x() + 50}+{self.window.winfo_y() + 100}")
+        
+        ttk.Label(dialog, text="Select shifts to combine (select 2 or more):",
+                 font=("Arial", 10, "bold")).pack(padx=15, pady=(15, 10))
+        
+        # Scrollable frame
+        canvas_frame = ttk.Frame(dialog)
+        canvas_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+        
+        canvas = tk.Canvas(canvas_frame, height=350, width=400)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scroll_frame = ttk.Frame(canvas)
+        
+        scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Track how many shifts loaded and selection vars
+        shifts_shown = [0]
+        max_initial = 20
+        selection_vars = []
+        
+        def add_shift_row(shift, idx):
+            frame = ttk.Frame(scroll_frame)
+            frame.pack(fill=tk.X, pady=2)
+            
+            var = tk.BooleanVar()
+            selection_vars.append((shift, var))
+            
+            try:
+                start = datetime.fromisoformat(shift.get("shift_start", ""))
+                end = datetime.fromisoformat(shift.get("shift_end", ""))
+                dur = (end - start).total_seconds() / 3600
+                records = shift.get("records", [])
+                rvu = sum(r.get("rvu", 0) for r in records)
+                text = f"{start.strftime('%m/%d/%Y %I:%M%p')} ({dur:.1f}h, {len(records)} studies, {rvu:.1f} RVU)"
+            except:
+                text = f"Shift {idx + 1}"
+            
+            ttk.Checkbutton(frame, text=text, variable=var).pack(anchor=tk.W)
+        
+        def load_shifts(count):
+            current = shifts_shown[0]
+            for i in range(current, min(current + count, len(historical))):
+                add_shift_row(historical[i], i)
+            shifts_shown[0] = min(current + count, len(historical))
+            
+            # Update load more button visibility
+            if shifts_shown[0] < len(historical):
+                load_more_btn.pack(pady=5)
+            else:
+                load_more_btn.pack_forget()
+        
+        # Load more button
+        load_more_btn = ttk.Button(scroll_frame, text="Load More...", 
+                                   command=lambda: load_shifts(20))
+        
+        # Initial load
+        load_shifts(max_initial)
+        
+        # Buttons
+        btn_frame = ttk.Frame(dialog)
+        btn_frame.pack(fill=tk.X, pady=15, padx=15)
+        
+        def do_combine():
+            selected = [s for s, v in selection_vars if v.get()]
+            if len(selected) < 2:
+                messagebox.showwarning("Selection Required",
+                                      "Please select at least 2 shifts to combine.",
+                                      parent=dialog)
+                return
+            
+            # Sort by start time
+            selected.sort(key=lambda s: s.get("shift_start", ""))
+            
+            # Confirm
+            first_start = datetime.fromisoformat(selected[0].get("shift_start", ""))
+            last_end = datetime.fromisoformat(selected[-1].get("shift_end", ""))
+            total_records = sum(len(s.get("records", [])) for s in selected)
+            total_rvu = sum(sum(r.get("rvu", 0) for r in s.get("records", [])) for s in selected)
+            
+            result = messagebox.askyesno(
+                "Confirm Combine",
+                f"Combine {len(selected)} shifts?\n\n"
+                f"Start: {first_start.strftime('%m/%d/%Y %I:%M %p')}\n"
+                f"End: {last_end.strftime('%m/%d/%Y %I:%M %p')}\n"
+                f"Total: {total_records} studies, {total_rvu:.1f} RVU\n\n"
+                "This will merge all studies into a single shift.",
+                parent=dialog
+            )
+            
+            if result:
+                self._combine_shift_group(selected)
+                dialog.destroy()
+                self.populate_shifts_list()
+                self.refresh_data()
+                self.update_partial_shifts_button()
+                messagebox.showinfo("Shifts Combined",
+                                  f"Successfully combined {len(selected)} shifts.",
+                                  parent=self.window)
+        
+        ttk.Button(btn_frame, text="Combine Selected", command=do_combine).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=dialog.destroy).pack(side=tk.RIGHT, padx=5)
+    
+    def _combine_shift_group(self, shifts: List[dict]):
+        """Combine multiple shifts into one. Takes earliest start, latest end, merges all records."""
+        if len(shifts) < 2:
+            return
+        
+        # Sort by start time
+        shifts.sort(key=lambda s: s.get("shift_start", ""))
+        
+        # Combine data
+        combined_start = shifts[0].get("shift_start")
+        combined_end = shifts[-1].get("shift_end")
+        combined_records = []
+        
+        for shift in shifts:
+            combined_records.extend(shift.get("records", []))
+        
+        # Sort records by time_performed
+        combined_records.sort(key=lambda r: r.get("time_performed", ""))
+        
+        # Delete old shifts from database
+        for shift in shifts:
+            shift_start = shift.get("shift_start")
+            try:
+                cursor = self.data_manager.db.conn.cursor()
+                cursor.execute('SELECT id FROM shifts WHERE shift_start = ? AND is_current = 0', (shift_start,))
+                row = cursor.fetchone()
+                if row:
+                    self.data_manager.db.delete_shift(row[0])
+            except Exception as e:
+                logger.error(f"Error deleting shift from database during combine: {e}")
+            
+            # Remove from in-memory data
+            historical_shifts = self.data_manager.data.get("shifts", [])
+            for i, s in enumerate(historical_shifts):
+                if s.get("shift_start") == shift_start:
+                    historical_shifts.pop(i)
+                    break
+            
+            if "shifts" in self.data_manager.records_data:
+                for i, s in enumerate(self.data_manager.records_data["shifts"]):
+                    if s.get("shift_start") == shift_start:
+                        self.data_manager.records_data["shifts"].pop(i)
+                        break
+        
+        # Create the combined shift
+        combined_shift = {
+            "shift_start": combined_start,
+            "shift_end": combined_end,
+            "records": combined_records
+        }
+        
+        # Add to database
+        try:
+            self.data_manager.db.save_shift(combined_shift)
+        except Exception as e:
+            logger.error(f"Error saving combined shift to database: {e}")
+        
+        # Add to in-memory data
+        self.data_manager.data.setdefault("shifts", []).append(combined_shift)
+        self.data_manager.records_data.setdefault("shifts", []).append(combined_shift)
+        
+        logger.info(f"Combined {len(shifts)} shifts into one ({len(combined_records)} records)")
+    
+    def update_partial_shifts_button(self):
+        """Update visibility of the partial shifts button based on detection."""
+        partial_groups = self.detect_partial_shifts()
+        if partial_groups:
+            self.partial_shifts_btn.pack(side=tk.LEFT, padx=2)
+        else:
+            self.partial_shifts_btn.pack_forget()
     
     def on_closing(self):
         """Handle window closing."""
