@@ -24,7 +24,7 @@ def get_monitor_geometry(monitor_index):
         monitors = win32api.EnumDisplayMonitors()
         if 0 <= monitor_index < len(monitors):
             monitor_info = win32api.GetMonitorInfo(monitors[monitor_index][0])
-        monitor_rect = monitor_info['Monitor']
+            monitor_rect = monitor_info['Monitor']
             return (monitor_rect[0], monitor_rect[1])  # (left, top)
     except Exception as e:
         print(f"Error getting monitor geometry: {e}")
@@ -72,16 +72,16 @@ class FloatingButtons:
             saved_pos = self.positions['main']
             geometry_string = f"{window_width}x{window_height}+{saved_pos['x']}+{saved_pos['y']}"
         else:
-        monitor_pos = get_monitor_geometry(target_monitor_index)
-        
-        if monitor_pos:
-            monitor_left, monitor_top = monitor_pos
-            target_x = monitor_left + relative_x
-            target_y = monitor_top + relative_y
-            geometry_string = f"{window_width}x{window_height}+{target_x}+{target_y}"
-        else:
-            print(f"Could not get geometry for monitor {target_monitor_index}. Using default position.")
-            geometry_string = f"{window_width}x{window_height}+100+100"
+            monitor_pos = get_monitor_geometry(target_monitor_index)
+            
+            if monitor_pos:
+                monitor_left, monitor_top = monitor_pos
+                target_x = monitor_left + relative_x
+                target_y = monitor_top + relative_y
+                geometry_string = f"{window_width}x{window_height}+{target_x}+{target_y}"
+            else:
+                print(f"Could not get geometry for monitor {target_monitor_index}. Using default position.")
+                geometry_string = f"{window_width}x{window_height}+100+100"
         
         self.root.geometry(geometry_string)
         
