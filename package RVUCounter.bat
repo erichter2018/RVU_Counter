@@ -40,7 +40,7 @@ if exist "RVU Counter.spec" (
     echo Removed spec file.
 )
 
-echo.
+echo. 
 echo ========================================
 echo Packaging complete!
 echo RVU Counter.exe is ready to use.

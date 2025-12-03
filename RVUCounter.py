@@ -651,6 +651,55 @@ def _window_text_with_timeout(element, timeout=1.0, element_name=""):
     return result[0] if result[0] else ""
 
 
+def quick_check_powerscribe() -> bool:
+    """Quick check if PowerScribe window exists (fast, no deep inspection)."""
+    global _cached_desktop
+    
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
+    
+    # Just check if window with PowerScribe title exists
+    for title in ["PowerScribe 360 | Reporting", "PowerScribe 360", "PowerScribe 360 - Reporting", 
+                  "Nuance PowerScribe 360", "Powerscribe 360"]:
+        try:
+            windows = desktop.windows(title=title, visible_only=True)
+            if windows:
+                return True
+        except:
+            continue
+    return False
+
+
+def quick_check_mosaic() -> bool:
+    """Quick check if Mosaic window exists (fast, no deep inspection)."""
+    global _cached_desktop
+    
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
+    
+    try:
+        all_windows = desktop.windows(visible_only=True)
+        for window in all_windows:
+            try:
+                # Quick title check without deep inspection - USE TIMEOUT to prevent hanging
+                title = _window_text_with_timeout(window, timeout=0.5, element_name="Mosaic quick check")
+                title_lower = title.lower()
+                # Check for MosaicInfoHub variations
+                if ("mosaicinfohub" in title_lower or 
+                    "mosaic info hub" in title_lower or 
+                    "mosaic infohub" in title_lower):
+                    # Exclude test windows
+                    if not any(x in title_lower for x in ["rvu counter", "test", "viewer", "diagnostic"]):
+                        return True
+            except:
+                continue
+    except:
+        pass
+    return False
+
+
 def find_powerscribe_window():
     """Find PowerScribe 360 window by title."""
     global _cached_desktop
@@ -668,8 +717,8 @@ def find_powerscribe_window():
     except:
         pass
     
-    # Try other common titles
-    for title in ["PowerScribe 360", "PowerScribe 360 - Reporting"]:
+    # Try other common titles including Nuance variations
+    for title in ["PowerScribe 360", "PowerScribe 360 - Reporting", "Nuance PowerScribe 360", "Powerscribe 360"]:
         try:
             windows = desktop.windows(title=title, visible_only=True)
             for window in windows:
@@ -707,8 +756,11 @@ def find_mosaic_window():
                     "diagnostic" in window_text):
                     continue
                 
-                # Look for Mosaic Info Hub window
-                if "mosaic" in window_text and "info hub" in window_text:
+                # Look for Mosaic Info Hub window - handle variations:
+                # "MosaicInfoHub", "Mosaic Info Hub", "Mosaic InfoHub"
+                is_mosaic = ("mosaicinfohub" in window_text or 
+                            ("mosaic" in window_text and "info" in window_text and "hub" in window_text))
+                if is_mosaic:
                     # Verify it has the MainForm automation ID
                     try:
                         automation_id = window.element_info.automation_id
@@ -2244,12 +2296,12 @@ class StudyTracker:
         completed = []
         to_remove = []
         
-        logger.debug(f"check_completed: current_accession='{current_accession}', active_studies={list(self.active_studies.keys())}")
+        logger.info(f"check_completed called: current_accession='{current_accession}', active_studies={list(self.active_studies.keys())}")
         
         for accession, study in list(self.active_studies.items()):
             # If this accession is currently visible, it's not completed
             if accession == current_accession:
-                logger.debug(f"check_completed: {accession} is currently visible, skipping")
+                logger.info(f"check_completed: {accession} is currently visible, skipping")
                 continue
             
             # If current_accession is empty or different, this study has disappeared
@@ -2257,46 +2309,87 @@ class StudyTracker:
             
             # Study is considered completed if:
             # 1. A different study is now visible (current_accession is set and different), OR
-            # 2. No study is visible (current_accession is empty) and it hasn't been seen for > 0.5 seconds
-            #    (reduced from 1.0s to enable faster closure detection with 0.3s polling)
-            if current_accession or time_since_last_seen > 0.5:
-                duration = (study["last_seen"] - study["start_time"]).total_seconds()
-                logger.debug(f"check_completed: {accession} disappeared, time_since_last_seen={time_since_last_seen:.1f}s, duration={duration:.1f}s")
+            # 2. No study is visible (current_accession is empty) - complete immediately
+            #    When no study is visible, any active studies must have closed, so complete them immediately
+            should_complete = False
+            if current_accession:
+                # Different study is visible - this one is completed
+                should_complete = True
+                logger.info(f"check_completed: {accession} should complete - different study '{current_accession}' is visible")
+            elif not current_accession:
+                # No study is visible - complete immediately (no threshold needed)
+                # If nothing is visible, this study has definitely closed
+                should_complete = True
+                logger.info(f"check_completed: {accession} should complete - no study visible (empty accession)")
+            
+            if should_complete:
+                # Use current_time as end_time when accession is empty (study just closed)
+                # Use last_seen when a different study is visible (was replaced)
+                end_time = current_time if not current_accession else study["last_seen"]
+                duration = (end_time - study["start_time"]).total_seconds()
+                logger.info(f"check_completed: {accession} disappeared, time_since_last_seen={time_since_last_seen:.1f}s, duration={duration:.1f}s, min_seconds={self.min_seconds}")
                 
                 # Only count if duration >= min_seconds
                 if duration >= self.min_seconds:
                     completed_study = study.copy()
-                    completed_study["end_time"] = study["last_seen"]
+                    completed_study["end_time"] = end_time
                     completed_study["duration"] = duration
                     completed.append(completed_study)
                     logger.info(f"Completed study: {accession} - {study['study_type']} ({duration:.1f}s)")
                 else:
-                    logger.debug(f"Ignored short study: {accession} ({duration:.1f}s < {self.min_seconds}s)")
+                    logger.info(f"Ignored short study: {accession} ({duration:.1f}s < {self.min_seconds}s)")
                 
                 to_remove.append(accession)
         
+        # Remove completed studies from active tracking
         for accession in to_remove:
             if accession in self.active_studies:
                 del self.active_studies[accession]
         
+        logger.info(f"check_completed returning {len(completed)} completed studies: {[s['accession'] for s in completed]}")
         return completed
     
     def should_ignore(self, accession: str, ignore_duplicates: bool, data_manager=None) -> bool:
         """Check if study should be ignored (only if already completed, not if currently active).
         
+        Checks both memory (seen_accessions) and database (current shift records) for duplicates.
         Also checks if accession was part of a previously recorded multi-accession study.
         """
         if not accession:
             return True
         
-        # Only ignore if it was already completed (in seen_accessions) AND ignore_duplicates is True
         # Don't ignore if it's currently active
-        if ignore_duplicates and accession in self.seen_accessions and accession not in self.active_studies:
-            logger.debug(f"Ignoring duplicate completed accession: {accession}")
+        if accession in self.active_studies:
+            return False
+        
+        # Only check for duplicates if ignore_duplicates is True
+        if not ignore_duplicates:
+            return False
+        
+        # Check in-memory cache first (faster)
+        if accession in self.seen_accessions:
+            logger.debug(f"Ignoring duplicate completed accession (in memory): {accession}")
             return True
         
-        # Also check if this accession was part of a multi-accession study that was already recorded
-        if ignore_duplicates and data_manager:
+        # Check database for duplicates in current shift
+        if data_manager:
+            try:
+                # Check if this exact accession exists in the current shift's database records
+                if hasattr(data_manager, 'db') and data_manager.db:
+                    current_shift = data_manager.db.get_current_shift()
+                    if current_shift:
+                        db_record = data_manager.db.find_record_by_accession(
+                            current_shift['id'], accession
+                        )
+                        if db_record:
+                            logger.info(f"Ignoring duplicate accession (found in database): {accession}")
+                            # Add to memory cache so we don't need to query DB again
+                            self.seen_accessions.add(accession)
+                            return True
+            except Exception as e:
+                logger.debug(f"Error checking database for duplicate: {e}")
+            
+            # Also check if this accession was part of a multi-accession study that was already recorded
             if self._was_part_of_multi_accession(accession, data_manager):
                 logger.debug(f"Ignoring accession {accession} - it was already recorded as part of a multi-accession study")
                 return True
@@ -2398,7 +2491,7 @@ class RVUCounterApp:
         self.projected_shift_end: Optional[datetime] = None
         self.is_running = False
         self.current_window = None
-        self.refresh_interval = 1000  # 1 second
+        self.refresh_interval = 300  # 300ms for faster completion detection
         
         # Adaptive polling variables for PowerScribe worker thread
         import time
@@ -2431,6 +2524,14 @@ class RVUCounterApp:
         self._ps_data = {}  # Data from PowerScribe (updated by background thread)
         self._last_clario_accession = ""  # Track last accession we queried Clario for
         self._clario_patient_class_cache = {}  # Cache Clario patient class by accession
+        self._pending_studies = {}  # Track accession -> procedure for studies detected but not yet added
+        
+        # Auto-switch data source detection
+        self._active_source = None  # "PowerScribe" or "Mosaic" - currently active source
+        self._primary_source = "PowerScribe"  # Which source to check first
+        self._last_secondary_check = 0  # Timestamp of last secondary source check
+        self._secondary_check_interval = 5.0  # How often to check secondary when primary is idle (seconds)
+        
         self._ps_thread_running = True
         self._ps_thread = threading.Thread(target=self._powerscribe_worker, daemon=True)
         self._ps_thread.start()
@@ -2531,18 +2632,36 @@ class RVUCounterApp:
         main_frame.bind("<B1-Motion>", self.on_drag)
         main_frame.bind("<ButtonRelease-1>", self.on_drag_end)
         
-        # Top bar with Start/Stop Shift button and shift start time
-        top_bar_frame = ttk.Frame(main_frame)
-        top_bar_frame.pack(fill=tk.X, pady=(5, 0))
+        # Spacer at top for visual padding
+        spacer_top = ttk.Label(main_frame, text="")
+        spacer_top.pack(pady=(5, 0))
         
-        self.start_btn = ttk.Button(top_bar_frame, text="Start Shift", command=self.start_shift, width=12)
+        # Top bar with Start/Stop Shift button, timer, and data source indicator
+        top_bar_frame = ttk.Frame(main_frame)
+        top_bar_frame.pack(fill=tk.X, pady=(0, 1))
+        
+        # Left column: button + label below
+        left_col = ttk.Frame(top_bar_frame)
+        left_col.pack(side=tk.LEFT, anchor=tk.NW)
+        
+        # Button and timer on same row
+        btn_row = ttk.Frame(left_col)
+        btn_row.pack(anchor=tk.W)
+        
+        self.start_btn = ttk.Button(btn_row, text="Start Shift", command=self.start_shift, width=12)
         self.start_btn.pack(side=tk.LEFT)
         
-        self.shift_start_label = ttk.Label(top_bar_frame, text="", font=("Arial", 8), foreground="gray")
-        self.shift_start_label.pack(side=tk.LEFT, padx=(10, 0))
+        self.shift_start_label = ttk.Label(btn_row, text="", font=("Arial", 8), foreground="gray")
+        self.shift_start_label.pack(side=tk.LEFT, padx=(8, 0))
         
-        counters_frame = ttk.LabelFrame(main_frame, padding="5")
-        counters_frame.pack(fill=tk.X, pady=(0, 5))  # Fill X for full-width border
+        # Data source indicator below button (clickable to toggle)
+        self.data_source_indicator = ttk.Label(left_col, text="detecting...", 
+                                               font=("Arial", 7), foreground="gray", cursor="hand2")
+        self.data_source_indicator.pack(anchor=tk.W, padx=(2, 0), pady=(0, 0))
+        self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
+        
+        counters_frame = ttk.LabelFrame(main_frame, padding="3")
+        counters_frame.pack(fill=tk.X, pady=(0, 3))  # Fill X for full-width border
         
         # Inner frame to center the content
         counters_inner = ttk.Frame(counters_frame)
@@ -2671,10 +2790,14 @@ class RVUCounterApp:
         self.debug_study_type_prefix_label.pack(side=tk.LEFT, anchor=tk.W)
         
         self.debug_study_type_label = ttk.Label(study_type_frame, text="-", font=("Consolas", 8), foreground="gray")
-        self.debug_study_type_label.pack(side=tk.LEFT, anchor=tk.W)
+        self.debug_study_type_label.pack(side=tk.LEFT, anchor=tk.W, padx=(0, 0))
+        
+        # Spacer to push RVU to the right
+        spacer = ttk.Frame(study_type_frame)
+        spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
         self.debug_study_rvu_label = ttk.Label(study_type_frame, text="", font=("Consolas", 8), foreground="gray")
-        self.debug_study_rvu_label.pack(side=tk.RIGHT, anchor=tk.E)
+        self.debug_study_rvu_label.pack(side=tk.LEFT, anchor=tk.W, padx=(0, 0))  # Pack on LEFT right after spacer, no padding
         
         # Store debug_frame reference for resizing
         self.debug_frame = debug_frame
@@ -2865,14 +2988,195 @@ class RVUCounterApp:
         logger.info(f"Recorded multi-accession: {recorded_count} individual studies ({total_rvu:.1f} total RVU) - Duration: {total_duration:.1f}s")
         self.update_display()
     
+    def _extract_powerscribe_data(self) -> dict:
+        """Extract data from PowerScribe. Returns data dict with 'found', 'accession', etc."""
+        data = {
+            'found': False,
+            'procedure': '',
+            'accession': '',
+            'patient_class': '',
+            'accession_title': '',
+            'multiple_accessions': [],
+            'elements': {},
+            'source': 'PowerScribe'
+        }
+        
+        window = self.cached_window
+        if not window:
+            window = find_powerscribe_window()
+        
+        if window:
+            # Validate window still exists
+            try:
+                _window_text_with_timeout(window, timeout=0.5, element_name="PowerScribe window validation")
+                self.cached_window = window
+            except:
+                self.cached_window = None
+                self.cached_elements = {}
+                window = find_powerscribe_window()
+        
+        if window:
+            data['found'] = True
+            
+            # Smart caching: use cache if available, but invalidate on empty accession
+            elements = find_elements_by_automation_id(
+                window,
+                ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
+                self.cached_elements
+            )
+            
+            data['elements'] = elements
+            data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
+            data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
+            data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+            data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
+            
+            if data['accession']:
+                # Study is open - update cache for next poll
+                self.cached_elements.update(elements)
+            else:
+                # No accession - could be stale cache or study closed
+                # Clear cache and do ONE fresh search to confirm
+                if self.cached_elements:
+                    self.cached_elements = {}
+                    # Redo search with empty cache
+                    elements = find_elements_by_automation_id(
+                        window,
+                        ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
+                        {}
+                    )
+                    data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
+                    if data['accession']:
+                        # Found it on fresh search - cache was stale
+                        data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
+                        data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
+                        data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
+                        self.cached_elements.update(elements)
+            
+            # Handle multiple accessions only if study is open
+            if data['accession'] and elements.get("listBoxAccessions"):
+                try:
+                    listbox = elements["listBoxAccessions"]["element"]
+                    listbox_children = []
+                    try:
+                        children_gen = listbox.children()
+                        count = 0
+                        for child_elem in children_gen:
+                            listbox_children.append(child_elem)
+                            count += 1
+                            if count >= 50:
+                                break
+                    except Exception as e:
+                        logger.debug(f"listbox.children() iteration failed: {e}")
+                        listbox_children = []
+                    
+                    for child in listbox_children:
+                        try:
+                            item_text = _window_text_with_timeout(child, timeout=0.3, element_name="listbox child").strip()
+                            if item_text:
+                                data['multiple_accessions'].append(item_text)
+                        except:
+                            pass
+                except:
+                    pass
+        
+        return data
+    
+    def _extract_mosaic_data(self) -> dict:
+        """Extract data from Mosaic. Returns data dict with 'found', 'accession', etc."""
+        data = {
+            'found': False,
+            'procedure': '',
+            'accession': '',
+            'patient_class': 'Unknown',
+            'accession_title': '',
+            'multiple_accessions': [],
+            'elements': {},
+            'source': 'Mosaic'
+        }
+        
+        main_window = find_mosaic_window()
+        
+        if main_window:
+            try:
+                # Validate window still exists
+                _window_text_with_timeout(main_window, timeout=1.0, element_name="Mosaic window validation")
+                data['found'] = True
+                
+                # Find WebView2 control
+                webview = find_mosaic_webview_element(main_window)
+                
+                if webview:
+                    # Extract data from Mosaic
+                    mosaic_data = extract_mosaic_data(webview)
+                    
+                    data['procedure'] = mosaic_data.get('procedure', '')
+                    
+                    # Handle multiple accessions - convert to format expected by refresh_data
+                    multiple_accessions_data = mosaic_data.get('multiple_accessions', [])
+                    if multiple_accessions_data:
+                        # Store accession/procedure pairs
+                        for acc_data in multiple_accessions_data:
+                            acc = acc_data.get('accession', '')
+                            proc = acc_data.get('procedure', '')
+                            if proc:
+                                data['multiple_accessions'].append(f"{acc} ({proc})")
+                            else:
+                                data['multiple_accessions'].append(acc)
+                        
+                        # Set first as primary
+                        if multiple_accessions_data:
+                            data['accession'] = multiple_accessions_data[0].get('accession', '')
+                            if not data['procedure'] and multiple_accessions_data[0].get('procedure'):
+                                data['procedure'] = multiple_accessions_data[0].get('procedure', '')
+                    else:
+                        # Single accession
+                        data['accession'] = mosaic_data.get('accession', '')
+                        if not data['procedure']:
+                            data['procedure'] = mosaic_data.get('procedure', '')
+            except Exception as e:
+                logger.debug(f"Mosaic extraction error: {e}")
+                data['found'] = False
+        
+        return data
+    
+    def _toggle_data_source(self):
+        """Manually toggle between PowerScribe and Mosaic data sources."""
+        try:
+            # Toggle between the two sources
+            if self._primary_source == "PowerScribe":
+                new_source = "Mosaic"
+            else:
+                new_source = "PowerScribe"
+            
+            self._primary_source = new_source
+            self._active_source = new_source
+            
+            # Update the indicator immediately
+            self._update_source_indicator(new_source)
+            
+            logger.info(f"Manually switched data source to: {new_source}")
+        except Exception as e:
+            logger.error(f"Error toggling data source: {e}")
+    
+    def _update_source_indicator(self, source: str):
+        """Update the data source indicator in the UI (thread-safe)."""
+        try:
+            if source:
+                text = f"📍 {source}"
+            else:
+                text = "detecting..."
+            self.root.after(0, lambda: self.data_source_indicator.config(text=text))
+        except:
+            pass
+    
     def _powerscribe_worker(self):
-        """Background thread: Continuously poll PowerScribe or Mosaic for data."""
+        """Background thread: Continuously poll PowerScribe or Mosaic for data with auto-switching."""
         import time
         
         while self._ps_thread_running:
+            poll_start_time = time.time()
             try:
-                data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
-                
                 data = {
                     'found': False,
                     'procedure': '',
@@ -2880,145 +3184,96 @@ class RVUCounterApp:
                     'patient_class': '',
                     'accession_title': '',
                     'multiple_accessions': [],
-                    'elements': {}
+                    'elements': {},
+                    'source': None
                 }
                 
-                if data_source == "PowerScribe":
-                # Find PowerScribe window
-                    window = self.cached_window
-                    if not window:
-                        window = find_powerscribe_window()
-                    
-                    if window:
-                        # Validate window still exists
-                        try:
-                            _window_text_with_timeout(window, timeout=0.5, element_name="PowerScribe window validation")
-                            self.cached_window = window
-                        except:
-                            self.cached_window = None
-                            self.cached_elements = {}
-                            window = find_powerscribe_window()
-                    
-                    if window:
-                        data['found'] = True
-                        
-                        # Smart caching: use cache if available, but invalidate on empty accession
-                        elements = find_elements_by_automation_id(
-                            window,
-                            ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
-                            self.cached_elements
-                        )
-                        
-                        data['elements'] = elements
-                        data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
-                        data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
-                        data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
-                        data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
-                        
-                        if data['accession']:
-                            # Study is open - update cache for next poll
-                            self.cached_elements.update(elements)
-                        else:
-                            # No accession - could be stale cache or study closed
-                            # Clear cache and do ONE fresh search to confirm
-                            if self.cached_elements:
-                                self.cached_elements = {}
-                                # Redo search with empty cache
-                                elements = find_elements_by_automation_id(
-                                    window,
-                                    ["labelProcDescription", "labelAccessionTitle", "labelAccession", "labelPatientClass", "listBoxAccessions"],
-                                    {}
-                                )
-                                data['accession'] = elements.get("labelAccession", {}).get("text", "").strip()
-                                if data['accession']:
-                                    # Found it on fresh search - cache was stale
-                                    data['procedure'] = elements.get("labelProcDescription", {}).get("text", "").strip()
-                                    data['patient_class'] = elements.get("labelPatientClass", {}).get("text", "").strip()
-                                    data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
-                                    self.cached_elements.update(elements)
-                        
-                        # Handle multiple accessions only if study is open
-                        if data['accession'] and elements.get("listBoxAccessions"):
-                            try:
-                                listbox = elements["listBoxAccessions"]["element"]
-                                listbox_children = []
-                                try:
-                                    children_gen = listbox.children()
-                                    count = 0
-                                    for child_elem in children_gen:
-                                        listbox_children.append(child_elem)
-                                        count += 1
-                                        if count >= 50:
-                                            break
-                                except Exception as e:
-                                    logger.debug(f"listbox.children() iteration failed: {e}")
-                                    listbox_children = []
-                                
-                                for child in listbox_children:
-                                    try:
-                                        item_text = _window_text_with_timeout(child, timeout=0.3, element_name="listbox child").strip()
-                                        if item_text:
-                                            data['multiple_accessions'].append(item_text)
-                                    except:
-                                        pass
-                            except:
-                                pass
+                # Auto-switch logic: Check primary source first, then secondary if primary is idle
+                primary_data = None
+                secondary_data = None
+                current_time = time.time()
                 
-                elif data_source == "Mosaic":
-                    # Find Mosaic window
-                    main_window = find_mosaic_window()
+                # Determine which sources are available (quick check)
+                ps_available = quick_check_powerscribe()
+                mosaic_available = quick_check_mosaic()
+                
+                # If only one source is available, use it
+                if ps_available and not mosaic_available:
+                    data = self._extract_powerscribe_data()
+                    if data.get('accession'):
+                        self._active_source = "PowerScribe"
+                        self._primary_source = "PowerScribe"
+                elif mosaic_available and not ps_available:
+                    data = self._extract_mosaic_data()
+                    if data.get('accession'):
+                        self._active_source = "Mosaic"
+                        self._primary_source = "Mosaic"
+                elif ps_available and mosaic_available:
+                    # Both available - use tiered polling
+                    # Check primary source first
+                    if self._primary_source == "PowerScribe":
+                        primary_data = self._extract_powerscribe_data()
+                    else:
+                        primary_data = self._extract_mosaic_data()
                     
-                    if main_window:
-                        try:
-                            # Validate window still exists
-                            _window_text_with_timeout(main_window, timeout=1.0, element_name="Mosaic window validation")
-                            data['found'] = True
+                    if primary_data.get('accession'):
+                        # Primary has active study - use it, skip secondary
+                        data = primary_data
+                        self._active_source = self._primary_source
+                    else:
+                        # Primary is idle - check secondary
+                        # But not too frequently (every 5 seconds when primary is idle)
+                        if current_time - self._last_secondary_check >= self._secondary_check_interval:
+                            self._last_secondary_check = current_time
                             
-                            # Find WebView2 control
-                            webview = find_mosaic_webview_element(main_window)
+                            if self._primary_source == "PowerScribe":
+                                secondary_data = self._extract_mosaic_data()
+                            else:
+                                secondary_data = self._extract_powerscribe_data()
                             
-                            if webview:
-                                # Extract data from Mosaic
-                                mosaic_data = extract_mosaic_data(webview)
-                                
-                                data['procedure'] = mosaic_data.get('procedure', '')
-                                # Mosaic doesn't provide patient_class, default to 'Unknown' until Clario updates it
-                                data['patient_class'] = 'Unknown'
-                                
-                                # Handle multiple accessions - convert to format expected by refresh_data
-                                multiple_accessions_data = mosaic_data.get('multiple_accessions', [])
-                                if multiple_accessions_data:
-                                    # Store accession/procedure pairs
-                                    for acc_data in multiple_accessions_data:
-                                        acc = acc_data.get('accession', '')
-                                        proc = acc_data.get('procedure', '')
-                                        if proc:
-                                            data['multiple_accessions'].append(f"{acc} ({proc})")
-                                        else:
-                                            data['multiple_accessions'].append(acc)
-                                    
-                                    # Set first as primary
-                                    if multiple_accessions_data:
-                                        data['accession'] = multiple_accessions_data[0].get('accession', '')
-                                        if not data['procedure'] and multiple_accessions_data[0].get('procedure'):
-                                            data['procedure'] = multiple_accessions_data[0].get('procedure', '')
-                                else:
-                                    # Single accession
-                                    data['accession'] = mosaic_data.get('accession', '')
-                                    if not data['procedure']:
-                                        data['procedure'] = mosaic_data.get('procedure', '')
-                        except Exception as e:
-                            logger.debug(f"Mosaic extraction error: {e}")
-                            data['found'] = False
+                            if secondary_data.get('accession'):
+                                # Secondary has active study - SWITCH!
+                                data = secondary_data
+                                old_primary = self._primary_source
+                                self._primary_source = secondary_data.get('source', self._primary_source)
+                                self._active_source = self._primary_source
+                                logger.info(f"Auto-switched data source: {old_primary} → {self._active_source}")
+                            else:
+                                # Neither has active study - use primary's data (still shows window found)
+                                data = primary_data
+                                self._active_source = self._primary_source
+                        else:
+                            # Not time to check secondary yet - use primary data
+                            data = primary_data
+                            self._active_source = self._primary_source
+                else:
+                    # Neither available
+                    self._active_source = None
+                
+                # Update source indicator
+                self._update_source_indicator(self._active_source)
                 
                 # Update shared data IMMEDIATELY with PowerScribe/Mosaic data (before Clario query)
                 # This ensures the display shows data immediately even if Clario is slow
+                current_accession = data.get('accession', '').strip()
+                current_procedure = data.get('procedure', '').strip()
+                is_na_procedure = current_procedure.lower() in ["n/a", "na", "none", ""]
+                
                 with self._ps_lock:
                     self._ps_data = data.copy()  # Store copy immediately
+                    
+                    # If we have a valid accession and procedure, store it as pending
+                    # This ensures we don't lose studies if procedure changes to N/A before refresh_data
+                    if current_accession and current_procedure and not is_na_procedure:
+                        self._pending_studies[current_accession] = {
+                            'procedure': current_procedure,
+                            'patient_class': data.get('patient_class', ''),
+                            'detected_at': time.time()
+                        }
+                        logger.debug(f"Stored pending study: {current_accession} - {current_procedure}")
                 
                 # Query Clario for patient class only when a new study is detected (accession changed)
                 # Do this AFTER storing initial data so display isn't blocked
-                current_accession = data.get('accession', '').strip()
                 multiple_accessions_list = data.get('multiple_accessions', [])
                 
                 # For multi-accession studies, extract all accession numbers
@@ -3078,6 +3333,10 @@ class RVUCounterApp:
                                     logger.info(f"Clario patient class OVERRIDES: {clario_data['patient_class']} for study (matched accession: {clario_accession})")
                             else:
                                 # Clario didn't return data - keep existing patient_class from PowerScribe/Mosaic
+                                # But still mark this study as seen to prevent repeated queries
+                                with self._ps_lock:
+                                    if current_accession:
+                                        self._last_clario_accession = current_accession
                                 if clario_data:
                                     logger.info(f"Clario returned data but no patient_class. Accession='{clario_data.get('accession', '')}'")
                                 else:
@@ -3085,6 +3344,10 @@ class RVUCounterApp:
                         except Exception as e:
                             logger.info(f"Clario query error: {e}", exc_info=True)
                             # On error, keep existing patient_class (already stored in _ps_data)
+                            # Mark study as seen to prevent repeated queries
+                            with self._ps_lock:
+                                if current_accession:
+                                    self._last_clario_accession = current_accession
                     else:
                         # Same study - check if we have cached Clario patient class for any accession
                         with self._ps_lock:
@@ -3101,10 +3364,15 @@ class RVUCounterApp:
                                 self._ps_data['patient_class'] = cached_clario_class
                             logger.debug(f"Same study (accessions={list(all_accessions)}), using cached Clario patient class: {cached_clario_class}")
                 elif data.get('found') and not all_accessions:
-                    # No accession - can't query Clario, but data is already stored
-                    # For Mosaic, ensure patient_class is set to 'Unknown' if missing
-                    if data_source == "Mosaic":
-                        with self._ps_lock:
+                    # No accession - study is closed
+                    # Clear last Clario accession so if the same study reopens, it queries Clario again
+                    with self._ps_lock:
+                        if self._last_clario_accession:
+                            logger.debug(f"Study closed - clearing _last_clario_accession (was: {self._last_clario_accession})")
+                            self._last_clario_accession = ""
+                        # For Mosaic, ensure patient_class is set to 'Unknown' if missing
+                        current_source = data.get('source') or self._active_source
+                        if current_source == "Mosaic":
                             if not self._ps_data.get('patient_class'):
                                 self._ps_data['patient_class'] = 'Unknown'
                     logger.debug(f"No accession found, cannot query Clario")
@@ -3147,8 +3415,28 @@ class RVUCounterApp:
                             # After 2 seconds of no study, slow down to 1.5s (not 2.0s)
                             self._current_poll_interval = 1.5
                 
+                # Clean up stale pending studies (older than 30 seconds)
+                current_time_cleanup = time.time()
+                with self._ps_lock:
+                    stale_accessions = [
+                        acc for acc, data in self._pending_studies.items()
+                        if current_time_cleanup - data.get('detected_at', 0) > 30
+                    ]
+                    for acc in stale_accessions:
+                        logger.debug(f"Removing stale pending study: {acc}")
+                        del self._pending_studies[acc]
+                
             except Exception as e:
-                logger.debug(f"Worker error: {e}")
+                logger.error(f"Worker error: {e}", exc_info=True)
+            
+            # Watchdog: detect if polling loop took too long
+            poll_duration = time.time() - poll_start_time
+            if poll_duration > 5.0:
+                logger.warning(f"⚠️  Polling loop took {poll_duration:.1f}s (expected <1s) - UI automation may be hanging")
+                # Clear cached windows/elements to force fresh detection next time
+                self.cached_window = None
+                self.cached_elements = {}
+                logger.info("Cleared cached windows due to slow polling - will re-detect next cycle")
             
             # Use adaptive polling interval
             time.sleep(self._current_poll_interval)
@@ -3160,8 +3448,9 @@ class RVUCounterApp:
             with self._ps_lock:
                 ps_data = self._ps_data.copy()
             
-            data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
-            source_name = "PowerScribe" if data_source == "PowerScribe" else "Mosaic"
+            # Use auto-detected source instead of settings
+            data_source = ps_data.get('source') or self._active_source or "PowerScribe"
+            source_name = data_source if data_source else "Unknown"
             
             if not ps_data.get('found', False):
                 self.root.title(f"RVU Counter - {source_name} not found")
@@ -3185,9 +3474,9 @@ class RVUCounterApp:
             # For PowerScribe: use the existing multi-accession mode logic
             mosaic_multiple_mode = False  # Track if we're in Mosaic multi-accession mode
             
-            # Debug: log what we're getting from worker thread
-            if data_source == "Mosaic":
-                logger.info(f"Mosaic data - procedure: '{procedure}', accession: '{accession}', multiple_accessions: {multiple_accessions}")
+            # Debug: log what we're getting from worker thread (only when there's data)
+            if data_source == "Mosaic" and (accession or procedure):
+                logger.debug(f"Mosaic data - procedure: '{procedure}', accession: '{accession}', multiple_accessions: {multiple_accessions}")
             
             # For Mosaic, also check if we have multiple active studies that might indicate multi-accession
             # This handles the case where extraction found them separately but they should be displayed together
@@ -3511,6 +3800,46 @@ class RVUCounterApp:
         
             current_time = datetime.now()
             
+            # IMPORTANT: If there's a current accession that's NOT yet in active_studies,
+            # we need to add it BEFORE handling N/A. This prevents losing studies that were
+            # briefly visible before the procedure changed to N/A.
+            rvu_table = self.data_manager.data["rvu_table"]
+            classification_rules = self.data_manager.data.get("classification_rules", {})
+            direct_lookups = self.data_manager.data.get("direct_lookups", {})
+            
+            if accession and accession not in self.tracker.active_studies:
+                # New study detected - add it before any completion logic
+                # This ensures we don't lose studies that flash briefly before N/A
+                ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicates", True)
+                if not self.tracker.should_ignore(accession, ignore_duplicates, self.data_manager):
+                    # Get procedure for this study
+                    # Priority: current procedure > pending studies cache > current_procedure
+                    study_procedure = None
+                    pending_patient_class = self.current_patient_class
+                    
+                    if not is_na and procedure:
+                        study_procedure = procedure
+                    else:
+                        # Check pending studies cache from worker thread
+                        with self._ps_lock:
+                            if accession in self._pending_studies:
+                                pending = self._pending_studies[accession]
+                                study_procedure = pending.get('procedure', '')
+                                if pending.get('patient_class'):
+                                    pending_patient_class = pending.get('patient_class')
+                                logger.info(f"Using cached pending study data for {accession}: {study_procedure}")
+                    
+                    if study_procedure and study_procedure.lower() not in ["n/a", "na", "no report", ""]:
+                        logger.info(f"Adding study before N/A check: {accession} - {study_procedure}")
+                        self.tracker.add_study(accession, study_procedure, current_time, 
+                                             rvu_table, classification_rules, direct_lookups, 
+                                             pending_patient_class)
+                        self.tracker.mark_seen(accession)
+                        # Remove from pending after adding
+                        with self._ps_lock:
+                            if accession in self._pending_studies:
+                                del self._pending_studies[accession]
+            
             # If procedure changed to "n/a", complete multi-accession study or all active studies
             if is_na:
                 # First, handle multi-accession study completion
@@ -3546,6 +3875,8 @@ class RVUCounterApp:
                             self._record_or_update_study(study_record)
                             self.undo_used = False
                             self.undo_btn.config(state=tk.NORMAL)
+                        else:
+                            logger.debug(f"Skipping short study: {acc} ({duration:.1f}s < {self.tracker.min_seconds}s)")
                     # Clear all active studies
                     self.tracker.active_studies.clear()
                     self.update_display()
@@ -3560,6 +3891,7 @@ class RVUCounterApp:
             # Check for completed studies FIRST (before checking if we should ignore)
             # This handles studies that have disappeared
             # For Mosaic multi-accession, we need to check all accessions, not just the current one
+            logger.info(f"Completion check: data_source={data_source}, accession='{accession}', multiple_accessions={multiple_accessions}, active_studies={list(self.tracker.active_studies.keys())}")
             if data_source == "Mosaic":
                 if multiple_accessions:
                     # For Mosaic multi-accession, check completion for all accessions
@@ -3584,43 +3916,50 @@ class RVUCounterApp:
                     for acc, study in list(self.tracker.active_studies.items()):
                         # Only check Mosaic studies (patient_class == "Unknown")
                         if study.get('patient_class') == 'Unknown' and acc not in all_current_accessions:
-                            # This accession is no longer visible - mark as completed
-                            time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
-                            if time_since_last_seen > 0.5:  # Reduced from 1.0s for faster detection
-                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
-                                if duration >= self.tracker.min_seconds:
-                                    completed_study = study.copy()
-                                    completed_study["end_time"] = study["last_seen"]
-                                    completed_study["duration"] = duration
-                                    completed.append(completed_study)
-                                    logger.info(f"Completed Mosaic study: {acc} - {study['study_type']} ({duration:.1f}s)")
-                                    # Remove from active studies
-                                    del self.tracker.active_studies[acc]
+                            # This accession is no longer visible - mark as completed immediately
+                            # Use current_time as end_time since study just disappeared
+                            duration = (current_time - study["start_time"]).total_seconds()
+                            if duration >= self.tracker.min_seconds:
+                                completed_study = study.copy()
+                                completed_study["end_time"] = current_time
+                                completed_study["duration"] = duration
+                                completed.append(completed_study)
+                                logger.info(f"Completed Mosaic study: {acc} - {study['study_type']} ({duration:.1f}s)")
+                                # Remove from active studies
+                                del self.tracker.active_studies[acc]
                 elif not accession:
                     # Mosaic but no multiple_accessions and no accession - all active Mosaic studies should be completed
+                    # NOTE: Don't filter by patient_class == 'Unknown' because Clario may have updated it
+                    # Instead, complete ALL active studies when no accession is visible (they must have closed)
+                    logger.info(f"Mosaic: no accession and no multiple_accessions - completing all active studies")
                     completed = []
                     for acc, study in list(self.tracker.active_studies.items()):
-                        # Only check Mosaic studies (patient_class == "Unknown")
-                        if study.get('patient_class') == 'Unknown':
-                            time_since_last_seen = (current_time - study["last_seen"]).total_seconds()
-                            if time_since_last_seen > 0.5:  # Reduced from 1.0s for faster detection
-                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
-                                if duration >= self.tracker.min_seconds:
-                                    completed_study = study.copy()
-                                    completed_study["end_time"] = study["last_seen"]
-                                    completed_study["duration"] = duration
-                                    completed.append(completed_study)
-                                    logger.info(f"Completed Mosaic study (no accessions visible): {acc} - {study['study_type']} ({duration:.1f}s)")
-                                    # Remove from active studies
-                                    del self.tracker.active_studies[acc]
+                        # No accessions visible - complete immediately
+                        # Use current_time as end_time since study just disappeared
+                        duration = (current_time - study["start_time"]).total_seconds()
+                        logger.info(f"Mosaic completion check: {acc}, patient_class={study.get('patient_class')}, duration={duration:.1f}s, min_seconds={self.tracker.min_seconds}")
+                        if duration >= self.tracker.min_seconds:
+                            completed_study = study.copy()
+                            completed_study["end_time"] = current_time
+                            completed_study["duration"] = duration
+                            completed.append(completed_study)
+                            logger.info(f"Completed Mosaic study (no accessions visible): {acc} - {study['study_type']} ({duration:.1f}s)")
+                            # Remove from active studies
+                            del self.tracker.active_studies[acc]
+                        else:
+                            logger.info(f"Skipping short Mosaic study: {acc} ({duration:.1f}s < {self.tracker.min_seconds}s)")
                 else:
                     # Single Mosaic accession - use normal completion check
+                    logger.info(f"Calling check_completed for single Mosaic: accession='{accession}', data_source={data_source}")
                     completed = self.tracker.check_completed(current_time, accession)
             else:
                 # Normal completion check (PowerScribe or single Mosaic accession)
+                logger.info(f"Calling check_completed for PowerScribe/single: accession='{accession}', data_source={data_source}")
                 completed = self.tracker.check_completed(current_time, accession)
             
+            logger.info(f"Processing {len(completed)} completed studies from check_completed")
             for study in completed:
+                logger.info(f"Recording completed study: {study['accession']} - {study.get('study_type', 'Unknown')}")
                 study_record = {
                     "accession": study["accession"],
                     "procedure": study["procedure"],
@@ -3646,27 +3985,27 @@ class RVUCounterApp:
                     for acc, study in list(self.tracker.active_studies.items()):
                         # Only complete Mosaic studies (patient_class == "Unknown")
                         if study.get('patient_class') == 'Unknown':
-                            time_since_last_seen = (current_time_check - study["last_seen"]).total_seconds()
-                            if time_since_last_seen > 1.0:
-                                duration = (study["last_seen"] - study["start_time"]).total_seconds()
-                                if duration >= self.tracker.min_seconds:
-                                    completed_study = study.copy()
-                                    completed_study["end_time"] = study["last_seen"]
-                                    completed_study["duration"] = duration
-                                    study_record = {
-                                        "accession": completed_study["accession"],
-                                        "procedure": completed_study["procedure"],
-                                        "patient_class": completed_study.get("patient_class", ""),
-                                        "study_type": completed_study["study_type"],
-                                        "rvu": completed_study["rvu"],
-                                        "time_performed": completed_study["start_time"].isoformat(),
-                                        "time_finished": completed_study["end_time"].isoformat(),
-                                        "duration_seconds": completed_study["duration"],
-                                    }
-                                    self._record_or_update_study(study_record)
-                                    self.undo_used = False
-                                    self.undo_btn.config(state=tk.NORMAL)
-                                    del self.tracker.active_studies[acc]
+                            # No accession visible - complete immediately
+                            # Use current_time as end_time since study just disappeared
+                            duration = (current_time_check - study["start_time"]).total_seconds()
+                            if duration >= self.tracker.min_seconds:
+                                completed_study = study.copy()
+                                completed_study["end_time"] = current_time_check
+                                completed_study["duration"] = duration
+                                study_record = {
+                                    "accession": completed_study["accession"],
+                                    "procedure": completed_study["procedure"],
+                                    "patient_class": completed_study.get("patient_class", ""),
+                                    "study_type": completed_study["study_type"],
+                                    "rvu": completed_study["rvu"],
+                                    "time_performed": completed_study["start_time"].isoformat(),
+                                    "time_finished": completed_study["end_time"].isoformat(),
+                                    "duration_seconds": completed_study["duration"],
+                                }
+                                self._record_or_update_study(study_record)
+                                self.undo_used = False
+                                self.undo_btn.config(state=tk.NORMAL)
+                                del self.tracker.active_studies[acc]
                     if self.tracker.active_studies:
                         self.update_display()
                 # No current study - all active studies should be checked for completion
@@ -3861,12 +4200,79 @@ class RVUCounterApp:
     
     def delete_study_by_index(self, index: int):
         """Delete study by index from records."""
-        records = self.data_manager.data["current_shift"]["records"]
-        if 0 <= index < len(records):
-            removed = records.pop(index)
-            self.data_manager.save()
-            logger.info(f"Deleted study: {removed['accession']}")
-            self.update_display()
+        try:
+            logger.info(f"delete_study_by_index called with index: {index}")
+            records = self.data_manager.data["current_shift"]["records"]
+            logger.info(f"Current records count: {len(records)}")
+            
+            if 0 <= index < len(records):
+                removed = records[index]
+                accession = removed.get('accession', '')
+                logger.info(f"Attempting to delete study: {accession} at index {index}")
+                
+                # Delete from database first
+                deleted_from_db = False
+                if 'id' in removed and removed['id']:
+                    try:
+                        self.data_manager.db.delete_record(removed['id'])
+                        deleted_from_db = True
+                        logger.info(f"Deleted study from database: {accession} (ID: {removed['id']})")
+                    except Exception as e:
+                        logger.error(f"Error deleting study from database: {e}", exc_info=True)
+                else:
+                    # Record doesn't have ID yet - delete by accession if we have a current shift
+                    logger.info(f"Record has no ID, trying to find by accession: {accession}")
+                    current_shift = self.data_manager.db.get_current_shift()
+                    if current_shift:
+                        try:
+                            db_record = self.data_manager.db.find_record_by_accession(
+                                current_shift['id'], accession
+                            )
+                            if db_record:
+                                self.data_manager.db.delete_record(db_record['id'])
+                                deleted_from_db = True
+                                logger.info(f"Deleted study from database by accession: {accession} (ID: {db_record['id']})")
+                            else:
+                                logger.warning(f"Could not find record in database for accession: {accession}, will delete from memory only")
+                        except Exception as e:
+                            logger.error(f"Error deleting study from database by accession: {e}", exc_info=True)
+                    else:
+                        logger.warning("No current shift found in database, will delete from memory only")
+                
+                # Remove from memory
+                records.pop(index)
+                logger.info(f"Removed study from memory: {accession}, remaining records: {len(records)}")
+                
+                # Save to sync memory changes
+                self.data_manager.save()
+                logger.info(f"Saved changes after deletion")
+                
+                # Reload data from database to ensure consistency
+                if deleted_from_db:
+                    self.data_manager.load_all_data()
+                    logger.info(f"Reloaded data, current records count: {len(self.data_manager.data['current_shift']['records'])}")
+                
+                # Manually destroy all study widgets immediately
+                for widget in list(self.study_widgets):
+                    try:
+                        widget.destroy()
+                    except:
+                        pass
+                self.study_widgets.clear()
+                logger.info("Manually destroyed all study widgets")
+                
+                # Force a rebuild of the recent studies list
+                self.last_record_count = -1
+                self.update_display()
+                
+                # Force multiple UI updates to ensure refresh
+                self.root.update_idletasks()
+                self.root.update()
+                logger.info(f"UI updated after deletion, new record count: {len(self.data_manager.data['current_shift']['records'])}")
+            else:
+                logger.warning(f"Invalid index for deletion: {index} (records count: {len(records)})")
+        except Exception as e:
+            logger.error(f"Error in delete_study_by_index: {e}", exc_info=True)
     
     def _get_hour_key(self, dt: datetime) -> str:
         """Convert datetime hour to rate lookup key like '2am', '12pm'."""
@@ -4261,7 +4667,8 @@ class RVUCounterApp:
                 )
                 # Store the actual_index in the button itself to avoid closure issues
                 delete_btn.actual_index = actual_index
-                delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: self.delete_study_by_index(btn.actual_index))
+                # Use a closure to capture the index value
+                delete_btn.bind("<Button-1>", lambda e, idx=actual_index: self.delete_study_by_index(idx))
                 delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_hover"]))
                 delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
                 delete_btn.pack(side=tk.LEFT, padx=(1, 3), pady=0)
@@ -4435,7 +4842,7 @@ class RVUCounterApp:
                 self.debug_duration_label.config(text=duration_text if show_time else "")
                 
                 # Check if this is Mosaic multi-accession (no multi_accession_mode, but has multiple)
-                data_source = self.data_manager.data["settings"].get("data_source", "PowerScribe")
+                data_source = self._active_source or "PowerScribe"
                 is_mosaic_multi = data_source == "Mosaic" and len(self.current_multiple_accessions) > 1 and not self.multi_accession_mode
                 
                 if is_mosaic_multi:
@@ -4513,10 +4920,9 @@ class RVUCounterApp:
             
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                # Dynamic truncation - same logic as Recent Studies
-                frame_width = self.root.winfo_width()
-                max_chars = self._calculate_max_chars(frame_width)
-                study_type_display = self._truncate_text(self.current_study_type, max_chars)
+                # Aggressive truncation for Current Study to ensure RVU label always stays visible
+                # Truncate very aggressively so "..." is right next to RVU with minimal space
+                study_type_display = self._truncate_text(self.current_study_type, 10)  # Very aggressive to fit RVU
                 # Show prefix
                 self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
                 # Check if incomplete (starts with "incomplete") - show in red
@@ -4571,7 +4977,7 @@ class RVUCounterApp:
             delete_btn_bg = "#3d3d3d"
             delete_btn_fg = "#aaaaaa"
             delete_btn_hover = "#ff6b6b"  # Light red for dark mode
-            border_color = "#555555"
+            border_color = "#888888"  # Light grey for canvas borders (visible on dark background)
             text_secondary = "#aaaaaa"  # Gray text for secondary info
         else:
             # Light mode colors
@@ -4590,7 +4996,7 @@ class RVUCounterApp:
             delete_btn_bg = "#f0f0f0"
             delete_btn_fg = "gray"
             delete_btn_hover = "#ffcccc"  # Light red for light mode
-            border_color = "#acacac"
+            border_color = "#cccccc"  # Light grey for canvas borders
             text_secondary = "gray"  # Gray text for secondary info
         
         # Store current theme colors for new widgets
@@ -4994,9 +5400,13 @@ class SettingsWindow:
         
         ttk.Label(data_source_frame, text="Data Source:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
         
-        self.data_source_var = tk.StringVar(value=settings.get("data_source", "PowerScribe"))
-        ttk.Radiobutton(data_source_frame, text="PowerScribe", variable=self.data_source_var, value="PowerScribe").pack(side=tk.LEFT)
-        ttk.Radiobutton(data_source_frame, text="Mosaic", variable=self.data_source_var, value="Mosaic").pack(side=tk.LEFT, padx=(10, 0))
+        # Auto-detection info (no longer manual selection)
+        current_source = self.app._active_source if hasattr(self.app, '_active_source') and self.app._active_source else "auto-detecting"
+        ttk.Label(data_source_frame, text=f"Auto-detect ({current_source})", 
+                 font=("Arial", 9), foreground="gray").pack(side=tk.LEFT)
+        
+        # Keep this variable for backwards compatibility but it's not used anymore
+        self.data_source_var = tk.StringVar(value="Auto")
         
         # Two-column frame for counters and compensation
         columns_frame = ttk.Frame(main_frame)
@@ -5336,7 +5746,7 @@ class CanvasTable:
         header_bg = theme_colors.get("button_bg", "#e1e1e1")
         data_bg = theme_colors.get("entry_bg", "white")
         text_fg = theme_colors.get("fg", "black")
-        border_color = theme_colors.get("border_color", "#acacac")
+        border_color = theme_colors.get("border_color", "#cccccc")  # Light grey for canvas borders
         
         # Store theme colors for use in drawing
         self.theme_colors = theme_colors
@@ -5999,10 +6409,10 @@ class StatisticsWindow:
         self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
         
         # Efficiency color coding options (created when efficiency view is shown)
-        self.show_duration_heatmap = tk.BooleanVar(value=True)  # Default: show duration colors
-        self.show_study_count_heatmap = tk.BooleanVar(value=False)
-        self.duration_heatmap_checkbox = None
-        self.study_count_heatmap_checkbox = None
+        # Load saved value or default to "duration"
+        saved_heatmap_mode = self.data_manager.data.get("settings", {}).get("efficiency_heatmap_mode", "duration")
+        self.heatmap_mode = tk.StringVar(value=saved_heatmap_mode)  # Options: "none", "duration", "count"
+        self.heatmap_radio_buttons = []  # Store references to radio buttons
         
         # Data table frame
         self.table_frame = ttk.Frame(right_panel)
@@ -6628,6 +7038,13 @@ class StatisticsWindow:
                 except:
                     pass
         
+        # Hide _all_studies_frame (separate frame for all studies view)
+        if hasattr(self, '_all_studies_frame'):
+            try:
+                self._all_studies_frame.pack_forget()
+            except:
+                pass
+        
         # Hide efficiency frame
         if self.efficiency_frame:
             try:
@@ -6679,23 +7096,45 @@ class StatisticsWindow:
         
         # Show/hide efficiency checkboxes based on view mode
         if view_mode == "efficiency":
-            # Make sure checkboxes frame is visible and create checkboxes if needed
-            if self.duration_heatmap_checkbox is None:
-                self.duration_heatmap_checkbox = ttk.Checkbutton(
-                    self.efficiency_checkboxes_frame,
-                    text="Duration Colors",
-                    variable=self.show_duration_heatmap,
-                    command=self.refresh_data
-                )
-                self.duration_heatmap_checkbox.pack(side=tk.RIGHT, padx=(10, 0))
+            # Make sure radio buttons frame is visible and create radio buttons if needed
+            if not self.heatmap_radio_buttons:
+                # Helper function to save heatmap mode and refresh
+                def save_heatmap_mode():
+                    self.data_manager.data.setdefault("settings", {})["efficiency_heatmap_mode"] = self.heatmap_mode.get()
+                    self.data_manager.save(save_records=False)
+                    self.refresh_data()
                 
-                self.study_count_heatmap_checkbox = ttk.Checkbutton(
+                # Create radio buttons for heat map mode
+                # Pack label on LEFT first
+                ttk.Label(self.efficiency_checkboxes_frame, text="Color Coding:", font=('Arial', 9)).pack(side=tk.LEFT, padx=(0, 5))
+                
+                # Pack buttons on LEFT in order: None, Duration, Study Count
+                self.heatmap_radio_buttons.append(ttk.Radiobutton(
                     self.efficiency_checkboxes_frame,
-                    text="Study Count Colors",
-                    variable=self.show_study_count_heatmap,
-                    command=self.refresh_data
-                )
-                self.study_count_heatmap_checkbox.pack(side=tk.RIGHT, padx=(10, 0))
+                    text="None",
+                    variable=self.heatmap_mode,
+                    value="none",
+                    command=save_heatmap_mode
+                ))
+                self.heatmap_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
+                
+                self.heatmap_radio_buttons.append(ttk.Radiobutton(
+                    self.efficiency_checkboxes_frame,
+                    text="Duration",
+                    variable=self.heatmap_mode,
+                    value="duration",
+                    command=save_heatmap_mode
+                ))
+                self.heatmap_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
+                
+                self.heatmap_radio_buttons.append(ttk.Radiobutton(
+                    self.efficiency_checkboxes_frame,
+                    text="Study Count",
+                    variable=self.heatmap_mode,
+                    value="count",
+                    command=save_heatmap_mode
+                ))
+                self.heatmap_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
             self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
         else:
             if self.efficiency_checkboxes_frame:
@@ -7146,13 +7585,19 @@ class StatisticsWindow:
         self._all_studies_records = records
         self._all_studies_row_height = 22
         
+        # Clear render state to force fresh render
+        if hasattr(self, '_last_render_range'):
+            delattr(self, '_last_render_range')
+        if hasattr(self, '_rendered_rows'):
+            delattr(self, '_rendered_rows')
+        
         # Column definitions with widths
         self._all_studies_columns = [
             ('num', 35, '#'),
             ('date', 80, 'Date'),
             ('time', 70, 'Time'),
             ('procedure', 260, 'Procedure'),
-            ('study_type', 110, 'Study Type'),
+            ('study_type', 90, 'Study Type'),  # Reduced from 110 to 90 to ensure RVU stays visible
             ('rvu', 45, 'RVU'),
             ('duration', 70, 'Duration'),
             ('delete', 25, '×')
@@ -7165,7 +7610,7 @@ class StatisticsWindow:
         colors = self.app.get_theme_colors()
         canvas_bg = colors.get("entry_bg", "white")
         header_bg = colors.get("button_bg", "#e1e1e1")
-        border_color = colors.get("border_color", "#acacac")
+        border_color = colors.get("border_color", "#cccccc")  # Light grey for canvas borders
         text_fg = colors.get("fg", "black")
         
         # Calculate total width
@@ -7176,12 +7621,33 @@ class StatisticsWindow:
                                   highlightthickness=1, highlightbackground=border_color)
         header_canvas.pack(fill=tk.X)
         
-        # Draw headers
+        # Draw headers with sorting
         x = 0
+        self._all_studies_sort_column = None
+        self._all_studies_sort_reverse = False
+        
         for col_name, width, header_text in self._all_studies_columns:
-            header_canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color)
-            header_canvas.create_text(x + width//2, 12, text=header_text, font=('Arial', 9, 'bold'), fill=text_fg)
+            # Skip delete column for sorting
+            if col_name != 'delete':
+                # Create clickable header
+                rect_id = header_canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color, tags=f"header_{col_name}")
+                text_id = header_canvas.create_text(x + width//2, 12, text=header_text, font=('Arial', 9, 'bold'), fill=text_fg, tags=f"header_{col_name}")
+                
+                # Bind click event
+                header_canvas.tag_bind(f"header_{col_name}", "<Button-1>", 
+                                      lambda e, col=col_name: self._sort_all_studies(col))
+                header_canvas.tag_bind(f"header_{col_name}", "<Enter>", 
+                                      lambda e: header_canvas.config(cursor="hand2"))
+                header_canvas.tag_bind(f"header_{col_name}", "<Leave>", 
+                                      lambda e: header_canvas.config(cursor=""))
+            else:
+                # Non-clickable delete header
+                header_canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color)
+                header_canvas.create_text(x + width//2, 12, text=header_text, font=('Arial', 9, 'bold'), fill=text_fg)
             x += width
+        
+        # Store header canvas reference for updating sort indicators
+        self._all_studies_header_canvas = header_canvas
         
         # Data canvas with scrollbar
         data_frame = ttk.Frame(self._all_studies_frame)
@@ -7215,12 +7681,119 @@ class StatisticsWindow:
         
         self._all_studies_canvas.bind("<MouseWheel>", on_mousewheel)
         self._all_studies_canvas.bind("<Configure>", lambda e: self._render_visible_rows())
+        self._all_studies_canvas.bind("<Map>", lambda e: self._render_visible_rows())  # Trigger when widget becomes visible
         
-        # Initial render
-        self._all_studies_canvas.after(10, self._render_visible_rows)
+        # Ensure layout is complete before initial render
+        self._all_studies_frame.update_idletasks()
+        self.window.update_idletasks()  # Also update parent window
+        
+        # Initial render - use multiple triggers for reliability
+        def initial_render():
+            try:
+                self._all_studies_canvas.update_idletasks()
+                # Force render by clearing last range check
+                if hasattr(self, '_last_render_range'):
+                    delattr(self, '_last_render_range')
+                self._render_visible_rows()
+            except:
+                pass
+        
+        # Try immediate render first
+        try:
+            initial_render()
+        except:
+            pass
+        
+        # Then schedule delayed renders as backup
+        self._all_studies_canvas.after(10, initial_render)
+        self._all_studies_canvas.after(50, initial_render)  # Backup trigger in case first one fails
+        self._all_studies_canvas.after(100, initial_render)  # Another backup
         
         # Set up delete handler
         self._setup_all_studies_delete_handler()
+    
+    def _sort_all_studies(self, col_name: str):
+        """Sort all studies by column."""
+        if not hasattr(self, '_all_studies_records'):
+            return
+        
+        # Toggle sort direction if clicking same column
+        if hasattr(self, '_all_studies_sort_column') and self._all_studies_sort_column == col_name:
+            self._all_studies_sort_reverse = not self._all_studies_sort_reverse
+        else:
+            self._all_studies_sort_column = col_name
+            self._all_studies_sort_reverse = False
+        
+        # Sort records based on column
+        reverse = self._all_studies_sort_reverse
+        
+        if col_name == 'num':
+            # Sort by original index (no-op, just reverse original order)
+            pass  # Don't sort, just reverse if needed
+        elif col_name == 'date' or col_name == 'time':
+            # Sort by time_performed
+            self._all_studies_records.sort(
+                key=lambda r: r.get('time_performed', ''),
+                reverse=reverse
+            )
+        elif col_name == 'procedure':
+            self._all_studies_records.sort(
+                key=lambda r: r.get('procedure', '').lower(),
+                reverse=reverse
+            )
+        elif col_name == 'study_type':
+            self._all_studies_records.sort(
+                key=lambda r: r.get('study_type', '').lower(),
+                reverse=reverse
+            )
+        elif col_name == 'rvu':
+            self._all_studies_records.sort(
+                key=lambda r: r.get('rvu', 0),
+                reverse=reverse
+            )
+        elif col_name == 'duration':
+            self._all_studies_records.sort(
+                key=lambda r: r.get('duration_seconds', 0),
+                reverse=reverse
+            )
+        
+        # Update header to show sort indicator
+        if hasattr(self, '_all_studies_header_canvas'):
+            canvas = self._all_studies_header_canvas
+            colors = self.app.get_theme_colors()
+            header_bg = colors.get("button_bg", "#e1e1e1")
+            border_color = colors.get("border_color", "#cccccc")
+            text_fg = colors.get("fg", "black")
+            
+            # Redraw headers with sort indicators
+            canvas.delete("all")
+            x = 0
+            for col, width, header_text in self._all_studies_columns:
+                # Add sort indicator if this is the sorted column
+                display_text = header_text
+                if col == col_name and col != 'delete':
+                    indicator = " ▼" if reverse else " ▲"
+                    display_text = header_text + indicator
+                
+                # Skip delete column for sorting
+                if col != 'delete':
+                    rect_id = canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color, tags=f"header_{col}")
+                    text_id = canvas.create_text(x + width//2, 12, text=display_text, font=('Arial', 9, 'bold'), fill=text_fg, tags=f"header_{col}")
+                    
+                    # Bind click event
+                    canvas.tag_bind(f"header_{col}", "<Button-1>", 
+                                   lambda e, c=col: self._sort_all_studies(c))
+                    canvas.tag_bind(f"header_{col}", "<Enter>", 
+                                   lambda e: canvas.config(cursor="hand2"))
+                    canvas.tag_bind(f"header_{col}", "<Leave>", 
+                                   lambda e: canvas.config(cursor=""))
+                else:
+                    canvas.create_rectangle(x, 0, x + width, 25, fill=header_bg, outline=border_color)
+                    canvas.create_text(x + width//2, 12, text=display_text, font=('Arial', 9, 'bold'), fill=text_fg)
+                x += width
+        
+        # Re-render the visible rows
+        self._render_visible_rows()
     
     def _truncate_text(self, text: str, max_chars: int) -> str:
         """Truncate text to fit within max characters, adding ... if needed."""
@@ -7241,18 +7814,41 @@ class StatisticsWindow:
         colors = self.app.get_theme_colors()
         data_bg = colors.get("entry_bg", "white")
         text_fg = colors.get("fg", "black")
-        border_color = colors.get("border_color", "#acacac")
+        border_color = colors.get("border_color", "#cccccc")  # Light grey for canvas borders
         
         # Get visible range
         canvas.update_idletasks()
         try:
+            canvas_height = canvas.winfo_height()
+            # If canvas hasn't been laid out yet (height is 0 or very small), use a default height
+            if canvas_height < 50:
+                # Try to get parent frame height as fallback
+                try:
+                    parent_height = canvas.master.winfo_height()
+                    if parent_height > 50:
+                        canvas_height = parent_height
+                    else:
+                        canvas_height = 400  # Default visible height for initial render
+                except:
+                    canvas_height = 400  # Default visible height for initial render
+            
             y_top = canvas.canvasy(0)
-            y_bottom = canvas.canvasy(canvas.winfo_height())
+            y_bottom = canvas.canvasy(canvas_height)
+            
+            # Calculate visible range
+            first_visible = max(0, int(y_top // row_height) - 2)
+            last_visible = min(len(records), int(y_bottom // row_height) + 3)
         except:
-            return
+            # If we can't get dimensions, render first 20 rows as fallback
+            if len(records) > 0:
+                first_visible = 0
+                last_visible = min(len(records), 20)
+            else:
+                return
         
-        first_visible = max(0, int(y_top // row_height) - 2)
-        last_visible = min(len(records), int(y_bottom // row_height) + 3)
+        # Ensure we render at least the first row if we have records
+        if len(records) > 0 and last_visible <= first_visible:
+            last_visible = min(len(records), first_visible + 20)  # Render at least first 20 rows
         
         # Track what we've rendered to avoid re-rendering
         if not hasattr(self, '_rendered_rows'):
@@ -7260,7 +7856,24 @@ class StatisticsWindow:
         
         # Check if we need to re-render (scroll position changed significantly)
         current_range = (first_visible, last_visible)
-        if hasattr(self, '_last_render_range') and self._last_render_range == current_range:
+        
+        # Force render if:
+        # 1. We have records but range is invalid (last_visible is 0 or <= first_visible when we should have rows)
+        # 2. Canvas might not be visible yet (check if it's actually mapped)
+        force_render = False
+        if len(records) > 0:
+            try:
+                # Check if canvas is actually visible
+                canvas_mapped = canvas.winfo_viewable()
+                if not canvas_mapped:
+                    force_render = True
+                # Also force if range seems invalid
+                if last_visible == 0 or (last_visible <= first_visible and len(records) > 0):
+                    force_render = True
+            except:
+                force_render = True
+        
+        if not force_render and hasattr(self, '_last_render_range') and self._last_render_range == current_range:
             return  # No change, skip
         self._last_render_range = current_range
         
@@ -7292,9 +7905,20 @@ class StatisticsWindow:
                 except:
                     pass
             
-            # Truncate procedure and study_type to fit
-            procedure_truncated = self._truncate_text(procedure, 38)
-            study_type_truncated = self._truncate_text(study_type, 15)
+            # Truncate procedure and study_type to fit column widths - be very aggressive with study_type
+            # Use fixed limits to ensure RVU column always stays visible on screen
+            procedure_col_width = next((w for name, w, _ in columns if name == 'procedure'), 260)
+            study_type_col_width = next((w for name, w, _ in columns if name == 'study_type'), 90)
+            
+            # Calculate procedure max chars (can be more generous)
+            procedure_max_chars = max(15, int((procedure_col_width - 20) / 6))
+            
+            # For study_type, use a fixed aggressive limit to ensure RVU stays visible
+            # 90px column with ~6px per char = ~15 chars, but limit to 8 to be very safe
+            study_type_max_chars = 8  # Fixed aggressive limit to ensure RVU column visible
+            
+            procedure_truncated = self._truncate_text(procedure, procedure_max_chars)
+            study_type_truncated = self._truncate_text(study_type, study_type_max_chars)
             
             row_data = [
                 str(idx + 1),
@@ -7581,21 +8205,93 @@ class StatisticsWindow:
             except:
                 continue
             
-            # Track duration data
-            duration = record.get("duration_seconds", 0)
-            if duration and duration > 0:
-                if modality not in efficiency_data:
-                    efficiency_data[modality] = {}
-                if hour not in efficiency_data[modality]:
-                    efficiency_data[modality][hour] = []
-                efficiency_data[modality][hour].append(duration)
-            
-            # Track study count data (all studies, not just those with duration)
-            if modality not in study_count_data:
-                study_count_data[modality] = {}
-            if hour not in study_count_data[modality]:
-                study_count_data[modality][hour] = 0
-            study_count_data[modality][hour] += 1
+            # Check if this is a "Multiple" modality record that should be expanded
+            if modality == "Multiple" or study_type.startswith("Multiple "):
+                # Expand into individual studies
+                individual_study_types = record.get("individual_study_types", [])
+                accession_count = record.get("accession_count", 1)
+                duration = record.get("duration_seconds", 0)
+                duration_per_study = duration / accession_count if accession_count > 0 else 0
+                
+                # Check if we have individual data stored
+                has_individual_data = individual_study_types and len(individual_study_types) == accession_count
+                
+                if has_individual_data:
+                    # We have individual study types - process each one
+                    for i, individual_st in enumerate(individual_study_types):
+                        expanded_mod = individual_st.split()[0] if individual_st else "Unknown"
+                        
+                        # Track duration data (divide total duration equally)
+                        if duration_per_study and duration_per_study > 0:
+                            if expanded_mod not in efficiency_data:
+                                efficiency_data[expanded_mod] = {}
+                            if hour not in efficiency_data[expanded_mod]:
+                                efficiency_data[expanded_mod][hour] = []
+                            efficiency_data[expanded_mod][hour].append(duration_per_study)
+                        
+                        # Track study count data
+                        if expanded_mod not in study_count_data:
+                            study_count_data[expanded_mod] = {}
+                        if hour not in study_count_data[expanded_mod]:
+                            study_count_data[expanded_mod][hour] = 0
+                        study_count_data[expanded_mod][hour] += 1
+                else:
+                    # No individual data - try to parse from study_type (e.g., "Multiple CT, XR")
+                    # Extract modalities after "Multiple "
+                    if study_type.startswith("Multiple "):
+                        modality_str = study_type.replace("Multiple ", "").strip()
+                        modalities_list = [m.strip() for m in modality_str.split(",")]
+                        count = len(modalities_list)
+                        
+                        for mod in modalities_list:
+                            # Track duration data (divide total duration equally)
+                            if duration and duration > 0:
+                                per_study_duration = duration / count
+                                if mod not in efficiency_data:
+                                    efficiency_data[mod] = {}
+                                if hour not in efficiency_data[mod]:
+                                    efficiency_data[mod][hour] = []
+                                efficiency_data[mod][hour].append(per_study_duration)
+                            
+                            # Track study count data
+                            if mod not in study_count_data:
+                                study_count_data[mod] = {}
+                            if hour not in study_count_data[mod]:
+                                study_count_data[mod][hour] = 0
+                            study_count_data[mod][hour] += 1
+                    else:
+                        # Can't expand - treat as single "Multiple" entry
+                        # Track duration data
+                        if duration and duration > 0:
+                            if modality not in efficiency_data:
+                                efficiency_data[modality] = {}
+                            if hour not in efficiency_data[modality]:
+                                efficiency_data[modality][hour] = []
+                            efficiency_data[modality][hour].append(duration)
+                        
+                        # Track study count data
+                        if modality not in study_count_data:
+                            study_count_data[modality] = {}
+                        if hour not in study_count_data[modality]:
+                            study_count_data[modality][hour] = 0
+                        study_count_data[modality][hour] += 1
+            else:
+                # Regular single study - process normally
+                # Track duration data
+                duration = record.get("duration_seconds", 0)
+                if duration and duration > 0:
+                    if modality not in efficiency_data:
+                        efficiency_data[modality] = {}
+                    if hour not in efficiency_data[modality]:
+                        efficiency_data[modality][hour] = []
+                    efficiency_data[modality][hour].append(duration)
+                
+                # Track study count data (all studies, not just those with duration)
+                if modality not in study_count_data:
+                    study_count_data[modality] = {}
+                if hour not in study_count_data[modality]:
+                    study_count_data[modality][hour] = 0
+                study_count_data[modality][hour] += 1
         
         # Combine modalities from both data sources
         all_modalities = sorted(set(list(efficiency_data.keys()) + list(study_count_data.keys())))
@@ -7605,7 +8301,7 @@ class StatisticsWindow:
         theme_colors = self.app.theme_colors if hasattr(self, 'app') and hasattr(self.app, 'theme_colors') else {}
         data_bg = theme_colors.get("entry_bg", "white")
         text_fg = theme_colors.get("fg", "black")
-        border_color = theme_colors.get("border_color", "#acacac")
+        border_color = theme_colors.get("border_color", "#cccccc")  # Light grey for canvas borders
         total_bg = theme_colors.get("button_bg", "#e1e1e1")
         
         def get_heatmap_color(value, min_val, max_val, range_val, reverse=False):
@@ -7639,7 +8335,7 @@ class StatisticsWindow:
             # Get theme colors from app
             theme_colors = self.app.theme_colors if hasattr(self, 'app') and hasattr(self.app, 'theme_colors') else {}
             canvas_bg = theme_colors.get("canvas_bg", "#f0f0f0")
-            border_color = theme_colors.get("border_color", "#acacac")
+            border_color = theme_colors.get("border_color", "#cccccc")  # Light grey for canvas borders
             canvas = tk.Canvas(table_frame, bg=canvas_bg, highlightthickness=1, highlightbackground=border_color)
             scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=canvas.yview)
             
@@ -7692,11 +8388,11 @@ class StatisticsWindow:
                 header_text = "Modality"
                 if sort_column == "modality":
                     header_text += " ▼" if sort_reverse else " ▲"
-                rect_id = header_canvas.create_rectangle(x, 0, x + modality_col_width, header_height, 
-                                                         fill='#d0d0d0', outline='#a0a0a0', width=1,
-                                                         tags="header_modality")
                 header_fg = theme_colors.get("fg", "black")
-                header_border = theme_colors.get("border_color", "#acacac")
+                header_border = theme_colors.get("border_color", "#cccccc")  # Light grey for canvas borders
+                rect_id = header_canvas.create_rectangle(x, 0, x + modality_col_width, header_height, 
+                                                         fill='#d0d0d0', outline=header_border, width=1,
+                                                         tags="header_modality")
                 
                 header_canvas.create_text(x + modality_col_width//2, header_height//2, 
                                          text=header_text, font=('Arial', 9, 'bold'), anchor='center',
@@ -7733,9 +8429,10 @@ class StatisticsWindow:
                 """Draw all rows, sorted if needed."""
                 rows_canvas.delete("all")
                 
-                # Get checkbox states
-                show_duration = self.show_duration_heatmap.get()
-                show_count = self.show_study_count_heatmap.get()
+                # Get radio button state
+                heatmap_mode = self.heatmap_mode.get()
+                show_duration = (heatmap_mode == "duration")
+                show_count = (heatmap_mode == "count")
                 
                 # Sort row data if needed
                 rows_to_draw = list(row_data_list)
@@ -7777,23 +8474,8 @@ class StatisticsWindow:
                         if show_count and idx < len(row_count_data):
                             count = row_count_data[idx]
                             if count is not None and count > 0:
-                                if show_duration:
-                                    # Both enabled - blend colors (average them)
-                                    count_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
-                                    # Simple blending: average RGB values
-                                    if cell_color != data_bg:
-                                        # Parse both colors and average
-                                        c1 = int(cell_color[1:3], 16), int(cell_color[3:5], 16), int(cell_color[5:7], 16)
-                                        c2 = int(count_color[1:3], 16), int(count_color[3:5], 16), int(count_color[5:7], 16)
-                                        r = (c1[0] + c2[0]) // 2
-                                        g = (c1[1] + c2[1]) // 2
-                                        b = (c1[2] + c2[2]) // 2
-                                        cell_color = f"#{r:02x}{g:02x}{b:02x}"
-                                    else:
-                                        cell_color = count_color
-                                else:
-                                    # Only count colors enabled (reversed: blue=high, red=low)
-                                    cell_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
+                                # Only count colors enabled (reversed: blue=high, red=low)
+                                cell_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
                         
                         rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
                                                    fill=cell_color, outline=border_color, width=1)
@@ -7813,7 +8495,7 @@ class StatisticsWindow:
                         x += hour_col_width
                     y += row_height
                 
-                # Draw TOTAL row
+                # Draw TOTAL row with color coding
                 if total_row_data:
                     y += 5
                     x = 0
@@ -7824,12 +8506,44 @@ class StatisticsWindow:
                                            fill=text_fg)
                     x += modality_col_width
                     
-                    for cell_text in total_row_data['hour_cells']:
+                    total_hour_cells = total_row_data['hour_cells']
+                    total_hour_durations = total_row_data.get('hour_durations', [None] * len(total_hour_cells))
+                    total_hour_counts = total_row_data.get('hour_counts', [None] * len(total_hour_cells))
+                    total_min_duration = total_row_data.get('min_duration', 0)
+                    total_max_duration = total_row_data.get('max_duration', 0)
+                    total_duration_range = total_row_data.get('duration_range', 1)
+                    total_min_count = total_row_data.get('min_count', 0)
+                    total_max_count = total_row_data.get('max_count', 0)
+                    total_count_range = total_row_data.get('count_range', 1)
+                    
+                    for idx, cell_text in enumerate(total_hour_cells):
+                        # Determine cell color based on active heatmaps
+                        cell_color = total_bg  # Default to background
+                        
+                        # Apply duration colors if enabled (blue=fast, red=slow)
+                        if show_duration and idx < len(total_hour_durations):
+                            avg_duration = total_hour_durations[idx]
+                            if avg_duration is not None:
+                                cell_color = get_heatmap_color(avg_duration, total_min_duration, total_max_duration, total_duration_range, reverse=False)
+                        
+                        # Apply study count colors if enabled (blue=high count, red=low count - reversed from duration)
+                        if show_count and idx < len(total_hour_counts):
+                            count = total_hour_counts[idx]
+                            if count is not None and count > 0:
+                                cell_color = get_heatmap_color(count, total_min_count, total_max_count, total_count_range, reverse=True)
+                        
                         rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
-                                                   fill=total_bg, outline=border_color, width=1)
+                                                   fill=cell_color, outline=border_color, width=1)
+                        
+                        # Use dark text for shaded cells, theme text color for unshaded
+                        if cell_color != total_bg:
+                            cell_text_color = "#000000"  # Black text for light colored cells
+                        else:
+                            cell_text_color = text_fg
+                        
                         rows_canvas.create_text(x + hour_col_width//2, y + row_height//2,
                                                text=cell_text, font=('Arial', 8, 'bold'), anchor='center',
-                                               fill=text_fg)
+                                               fill=cell_text_color)
                         x += hour_col_width
                     y += row_height
                 
@@ -7847,7 +8561,6 @@ class StatisticsWindow:
             draw_headers()
             
             # Build row data for all modalities
-            modality_counts = []  # For calculating global count min/max
             for modality in all_modalities:
                 modality_durations = []
                 modality_counts_row = []
@@ -7865,8 +8578,6 @@ class StatisticsWindow:
                     # Get study count data
                     study_count = study_count_data.get(modality, {}).get(hour, 0) if modality in study_count_data else 0
                     modality_counts_row.append(study_count)
-                    if study_count > 0:
-                        modality_counts.append(study_count)
                     
                     # Build cell text
                     if avg_duration is not None:
@@ -7890,7 +8601,7 @@ class StatisticsWindow:
                     min_duration = max_duration = 0
                     duration_range = 1
                 
-                # Calculate min/max for count colors for this row
+                # Calculate min/max for count colors for this row (per-row calculation)
                 valid_counts = [c for c in modality_counts_row if c > 0]
                 if valid_counts:
                     min_count = min(valid_counts)
@@ -7912,41 +8623,65 @@ class StatisticsWindow:
                     'count_range': count_range
                 })
             
-            # Calculate global min/max for count colors (across all modalities)
-            if modality_counts:
-                global_min_count = min(modality_counts)
-                global_max_count = max(modality_counts)
-                global_count_range = global_max_count - global_min_count if global_max_count > global_min_count else 1
-            else:
-                global_min_count = global_max_count = 0
-                global_count_range = 1
-            
-            # Update row data with global count range for consistent coloring
-            for row_data in row_data_list:
-                if row_data['max_count'] > 0:
-                    row_data['min_count'] = global_min_count
-                    row_data['max_count'] = global_max_count
-                    row_data['count_range'] = global_count_range
-            
-            # Build TOTAL row data
+            # Build TOTAL row data with color coding support
             if efficiency_data:
                 total_hour_cells = []
+                total_hour_durations = []
+                total_hour_counts = []
                 for hour in hours_list:
                     hour_durations = []
+                    hour_count = 0
                     for mod in efficiency_data.keys():
                         if hour in efficiency_data[mod]:
                             hour_durations.extend(efficiency_data[mod][hour])
+                        # Count all studies for this hour across all modalities
+                        if mod in study_count_data and hour in study_count_data[mod]:
+                            hour_count += study_count_data[mod][hour]
                     
                     if hour_durations:
                         avg_duration = sum(hour_durations) / len(hour_durations)
                         count = len(hour_durations)
                         duration_str = self._format_duration(avg_duration)
                         cell_text = f"{duration_str} ({count})"
+                        total_hour_durations.append(avg_duration)
                     else:
                         cell_text = "-"
+                        total_hour_durations.append(None)
+                    
+                    total_hour_counts.append(hour_count if hour_count > 0 else None)
                     total_hour_cells.append(cell_text)
                 
-                total_row_data = {'hour_cells': total_hour_cells}
+                # Calculate min/max for total row duration colors
+                valid_total_durations = [d for d in total_hour_durations if d is not None]
+                if valid_total_durations:
+                    total_min_duration = min(valid_total_durations)
+                    total_max_duration = max(valid_total_durations)
+                    total_duration_range = total_max_duration - total_min_duration if total_max_duration > total_min_duration else 1
+                else:
+                    total_min_duration = total_max_duration = 0
+                    total_duration_range = 1
+                
+                # Calculate min/max for total row count colors
+                valid_total_counts = [c for c in total_hour_counts if c is not None and c > 0]
+                if valid_total_counts:
+                    total_min_count = min(valid_total_counts)
+                    total_max_count = max(valid_total_counts)
+                    total_count_range = total_max_count - total_min_count if total_max_count > total_min_count else 1
+                else:
+                    total_min_count = total_max_count = 0
+                    total_count_range = 1
+                
+                total_row_data = {
+                    'hour_cells': total_hour_cells,
+                    'hour_durations': total_hour_durations,
+                    'hour_counts': total_hour_counts,
+                    'min_duration': total_min_duration,
+                    'max_duration': total_max_duration,
+                    'duration_range': total_duration_range,
+                    'min_count': total_min_count,
+                    'max_count': total_max_count,
+                    'count_range': total_count_range
+                }
             
             # Initial draw
             draw_rows()
@@ -8034,6 +8769,65 @@ class StatisticsWindow:
                         except:
                             continue
                 
+                # Also check if the selected period spans multiple shifts by checking shift time ranges
+                # This ensures we include all shifts in the period, even if they don't have records
+                period = self.selected_period.get()
+                if period in ["this_work_week", "last_work_week", "last_7_days", "last_30_days", "last_90_days", "custom_date_range", "all_time"]:
+                    # For date range periods, also include shifts that fall within the period
+                    period_start = None
+                    period_end = None
+                    now = datetime.now()
+                    
+                    if period == "this_work_week":
+                        period_start, period_end = self._get_work_week_range(now, "this")
+                    elif period == "last_work_week":
+                        period_start, period_end = self._get_work_week_range(now, "last")
+                    elif period == "last_7_days":
+                        period_start = now - timedelta(days=7)
+                        period_end = now
+                    elif period == "last_30_days":
+                        period_start = now - timedelta(days=30)
+                        period_end = now
+                    elif period == "last_90_days":
+                        period_start = now - timedelta(days=90)
+                        period_end = now
+                    elif period == "custom_date_range":
+                        try:
+                            start_str = self.custom_start_date.get().strip()
+                            end_str = self.custom_end_date.get().strip()
+                            period_start = datetime.strptime(start_str, "%m/%d/%Y")
+                            period_end = datetime.strptime(end_str, "%m/%d/%Y") + timedelta(days=1) - timedelta(seconds=1)
+                        except:
+                            period_start = None
+                            period_end = None
+                    elif period == "all_time":
+                        period_start = datetime.min.replace(year=2000)
+                        period_end = now
+                    
+                    # Include shifts that overlap with the period
+                    if period_start and period_end:
+                        for shift in all_shifts:
+                            try:
+                                shift_start_str = shift.get("shift_start")
+                                if not shift_start_str:
+                                    continue
+                                
+                                shift_start = datetime.fromisoformat(shift_start_str)
+                                shift_end_str = shift.get("shift_end")
+                                
+                                # Check if shift overlaps with period
+                                if shift_end_str:
+                                    shift_end = datetime.fromisoformat(shift_end_str)
+                                    # Shift overlaps if it starts before period ends and ends after period starts
+                                    if shift_start <= period_end and shift_end >= period_start:
+                                        shifts_with_records[shift_start_str] = shift
+                                else:
+                                    # Current shift - include if it starts before period ends
+                                    if shift_start <= period_end:
+                                        shifts_with_records[shift_start_str] = shift
+                            except:
+                                continue
+                
                 # Sum durations of unique shifts
                 for shift_start_str, shift in shifts_with_records.items():
                     try:
@@ -8063,29 +8857,138 @@ class StatisticsWindow:
             rvu_per_hour = 0
             studies_per_hour = 0
         
-        # Modality breakdown with duration tracking
+        # Modality breakdown with duration tracking - expand "Multiple" records
         modalities = {}
         modality_durations = {}  # Track durations for each modality
         for r in records:
-            st = r.get("study_type", "Unknown")
-            mod = st.split()[0] if st else "Unknown"
-            modalities[mod] = modalities.get(mod, 0) + 1
-            
-            # Track duration for average calculation
-            duration = r.get("duration_seconds", 0)
-            if duration and duration > 0:
-                if mod not in modality_durations:
-                    modality_durations[mod] = []
-                modality_durations[mod].append(duration)
+            try:
+                st = r.get("study_type", "Unknown")
+                mod = st.split()[0] if st else "Unknown"
+                
+                # Check if this is a "Multiple" modality record that should be expanded
+                if mod == "Multiple" or st.startswith("Multiple "):
+                    # Expand into individual studies
+                    individual_study_types = r.get("individual_study_types", [])
+                    individual_procedures = r.get("individual_procedures", [])
+                    accession_count = r.get("accession_count", 1)
+                    duration = r.get("duration_seconds", 0)
+                    duration_per_study = duration / accession_count if accession_count > 0 else 0
+                    
+                    # Check if we have individual data stored
+                    has_individual_data = individual_study_types and len(individual_study_types) == accession_count
+                    
+                    if has_individual_data:
+                        # Use stored individual data
+                        for i in range(accession_count):
+                            individual_st = individual_study_types[i] if i < len(individual_study_types) else "Unknown"
+                            expanded_mod = individual_st.split()[0] if individual_st else "Unknown"
+                            
+                            modalities[expanded_mod] = modalities.get(expanded_mod, 0) + 1
+                            
+                            # Track duration for average calculation
+                            if duration > 0:
+                                if expanded_mod not in modality_durations:
+                                    modality_durations[expanded_mod] = []
+                                modality_durations[expanded_mod].append(duration_per_study)
+                    elif individual_procedures and len(individual_procedures) == accession_count:
+                        # Try to classify individual procedures if we don't have stored study types
+                        rvu_table = self.data_manager.data.get("rvu_table", {})
+                        classification_rules = self.data_manager.data.get("classification_rules", {})
+                        direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                        
+                        # match_study_type is defined at module level in this file
+                        for i in range(accession_count):
+                            procedure = individual_procedures[i] if i < len(individual_procedures) else ""
+                            study_type, _ = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+                            
+                            expanded_mod = study_type.split()[0] if study_type else "Unknown"
+                            
+                            modalities[expanded_mod] = modalities.get(expanded_mod, 0) + 1
+                            
+                            # Track duration for average calculation
+                            if duration > 0:
+                                if expanded_mod not in modality_durations:
+                                    modality_durations[expanded_mod] = []
+                                modality_durations[expanded_mod].append(duration_per_study)
+                    else:
+                        # Fallback: if we can't expand, extract modality from "Multiple XR" format
+                        # Extract actual modality from "Multiple XR" -> "XR"
+                        if st.startswith("Multiple "):
+                            actual_modality = st.replace("Multiple ", "").strip()
+                            if actual_modality:
+                                expanded_mod = actual_modality.split()[0]
+                            else:
+                                expanded_mod = "Unknown"
+                        else:
+                            expanded_mod = "Unknown"
+                        
+                        modalities[expanded_mod] = modalities.get(expanded_mod, 0) + accession_count if accession_count > 0 else 1
+                        
+                        # Track duration for average calculation (split across accessions)
+                        if duration > 0:
+                            if expanded_mod not in modality_durations:
+                                modality_durations[expanded_mod] = []
+                            for _ in range(accession_count if accession_count > 0 else 1):
+                                modality_durations[expanded_mod].append(duration_per_study)
+                else:
+                    # Regular record - not "Multiple"
+                    modalities[mod] = modalities.get(mod, 0) + 1
+                    
+                    # Track duration for average calculation
+                    duration = r.get("duration_seconds", 0)
+                    if duration and duration > 0:
+                        if mod not in modality_durations:
+                            modality_durations[mod] = []
+                        modality_durations[mod].append(duration)
+            except Exception as e:
+                # Log error but continue processing other records
+                logger.error(f"Error processing record in summary modality breakdown: {e}")
+                # Fallback: add as regular record
+                try:
+                    st = r.get("study_type", "Unknown")
+                    mod = st.split()[0] if st else "Unknown"
+                    modalities[mod] = modalities.get(mod, 0) + 1
+                    duration = r.get("duration_seconds", 0)
+                    if duration and duration > 0:
+                        if mod not in modality_durations:
+                            modality_durations[mod] = []
+                        modality_durations[mod].append(duration)
+                except:
+                    pass
         
         top_modality = max(modalities.keys(), key=lambda k: modalities[k]) if modalities else "N/A"
         
         # Calculate shift-level metrics (1, 2, 6)
+        # Use the records parameter and filter by shift, rather than shift.get("records")
         shift_stats = []
         if records and shifts_with_records:
             for shift_start_str, shift in shifts_with_records.items():
-                shift_records = shift.get("records", [])
+                # Filter records that belong to this shift
+                shift_records = []
+                try:
+                    shift_start = datetime.fromisoformat(shift_start_str)
+                    shift_end_str = shift.get("shift_end")
+                    
+                    for r in records:
+                        try:
+                            record_time = datetime.fromisoformat(r.get("time_performed", ""))
+                            if shift_end_str:
+                                shift_end = datetime.fromisoformat(shift_end_str)
+                                if shift_start <= record_time <= shift_end:
+                                    shift_records.append(r)
+                            else:
+                                # Current shift
+                                if record_time >= shift_start:
+                                    shift_records.append(r)
+                        except:
+                            continue
+                except Exception as e:
+                    logger.error(f"Error filtering records for shift {shift_start_str}: {e}")
+                    continue
+                
+                # Include shift even if no records (for completeness), but skip if we can't calculate stats
                 if not shift_records:
+                    logger.debug(f"Shift {shift_start_str} has no records after filtering, skipping")
                     continue
                 
                 shift_rvu = sum(r.get("rvu", 0) for r in shift_records)
@@ -8109,14 +9012,23 @@ class StatisticsWindow:
                         if shift_record_times:
                             latest_time = max(shift_record_times)
                             shift_duration = (latest_time - shift_start).total_seconds() / 3600
+                            # Ensure minimum duration of 0.1 hours (6 minutes) for very short shifts
+                            if shift_duration < 0.1 and shift_studies > 0:
+                                shift_duration = 0.1
                         else:
-                            shift_duration = 0
+                            # If no record times but we have studies, use a minimum duration
+                            if shift_studies > 0:
+                                shift_duration = 0.1  # Minimum 6 minutes
+                            else:
+                                shift_duration = 0
                     
                     shift_rvu_per_hour = shift_rvu / shift_duration if shift_duration > 0 else 0
                     
                     # Format shift date
                     shift_date = shift_start.strftime("%m/%d/%Y")
                     
+                    # Only add shift if it has valid duration (duration > 0 means we can calculate rvu_per_hour)
+                    # But we'll still include shifts with 0 duration if they have studies (for tracking)
                     shift_stats.append({
                         'date': shift_date,
                         'rvu': shift_rvu,
@@ -8124,7 +9036,8 @@ class StatisticsWindow:
                         'duration': shift_duration,
                         'studies': shift_studies
                     })
-                except:
+                except Exception as e:
+                    logger.error(f"Error calculating stats for shift {shift_start_str}: {e}")
                     continue
         
         # Find highest RVU shift (1)
@@ -8144,39 +9057,102 @@ class StatisticsWindow:
         all_durations = [r.get("duration_seconds", 0) for r in records if r.get("duration_seconds", 0) > 0]
         avg_time_to_read = sum(all_durations) / len(all_durations) if all_durations else 0
         
-        # Calculate hourly metrics (11, 12, 13, 14)
-        hourly_stats = {}
+        # Calculate hourly metrics (11, 12, 13, 14) - averaged across shifts (typically best)
+        # First, group records by shift
+        records_by_shift = {}
         for r in records:
+            # Find which shift this record belongs to
+            record_time = None
             try:
-                time_performed = datetime.fromisoformat(r.get("time_performed", ""))
-                hour = time_performed.hour
-                
-                if hour not in hourly_stats:
-                    hourly_stats[hour] = {
-                        'studies': 0,
-                        'rvu': 0,
-                        'durations': []
-                    }
-                
-                hourly_stats[hour]['studies'] += 1
-                hourly_stats[hour]['rvu'] += r.get("rvu", 0)
-                duration = r.get("duration_seconds", 0)
-                if duration > 0:
-                    hourly_stats[hour]['durations'].append(duration)
+                record_time = datetime.fromisoformat(r.get("time_performed", ""))
             except:
                 continue
+            
+            # Find the shift this record belongs to
+            record_shift = None
+            for shift_start_str, shift in shifts_with_records.items():
+                try:
+                    shift_start = datetime.fromisoformat(shift_start_str)
+                    shift_end_str = shift.get("shift_end")
+                    if shift_end_str:
+                        shift_end = datetime.fromisoformat(shift_end_str)
+                        if shift_start <= record_time <= shift_end:
+                            record_shift = shift_start_str
+                            break
+                    else:
+                        # Current shift
+                        if record_time >= shift_start:
+                            record_shift = shift_start_str
+                            break
+                except:
+                    continue
+            
+            if record_shift:
+                if record_shift not in records_by_shift:
+                    records_by_shift[record_shift] = []
+                records_by_shift[record_shift].append(r)
         
-        # Find busiest hour (11) - most studies
+        # Calculate hourly stats per shift, then average across shifts
+        hourly_stats_per_shift = {}  # shift -> hour -> stats
+        for shift_start_str, shift_records in records_by_shift.items():
+            hourly_stats_per_shift[shift_start_str] = {}
+            for r in shift_records:
+                try:
+                    time_performed = datetime.fromisoformat(r.get("time_performed", ""))
+                    hour = time_performed.hour
+                    
+                    if hour not in hourly_stats_per_shift[shift_start_str]:
+                        hourly_stats_per_shift[shift_start_str][hour] = {
+                            'studies': 0,
+                            'rvu': 0,
+                            'durations': []
+                        }
+                    
+                    hourly_stats_per_shift[shift_start_str][hour]['studies'] += 1
+                    hourly_stats_per_shift[shift_start_str][hour]['rvu'] += r.get("rvu", 0)
+                    duration = r.get("duration_seconds", 0)
+                    if duration > 0:
+                        hourly_stats_per_shift[shift_start_str][hour]['durations'].append(duration)
+                except:
+                    continue
+        
+        # Average hourly stats across all shifts
+        hourly_stats = {}  # hour -> averaged stats
+        all_hours = set()
+        for shift_stats in hourly_stats_per_shift.values():
+            all_hours.update(shift_stats.keys())
+        
+        for hour in all_hours:
+            studies_list = []
+            rvu_list = []
+            durations_list = []
+            
+            for shift_stats in hourly_stats_per_shift.values():
+                if hour in shift_stats:
+                    studies_list.append(shift_stats[hour]['studies'])
+                    rvu_list.append(shift_stats[hour]['rvu'])
+                    durations_list.extend(shift_stats[hour]['durations'])
+            
+            if studies_list:  # Only include hours that appear in at least one shift
+                hourly_stats[hour] = {
+                    'studies': sum(studies_list) / len(studies_list) if studies_list else 0,  # Average studies per shift
+                    'rvu': sum(rvu_list) / len(rvu_list) if rvu_list else 0,  # Average RVU per shift
+                    'durations': durations_list,  # All durations for averaging
+                    'total_studies': sum(studies_list),  # Keep total for display
+                    'shift_count': len(studies_list)  # How many shifts had this hour
+                }
+        
+        # Find busiest hour (11) - highest average studies per shift
         busiest_hour = None
         if hourly_stats:
             busiest_hour = max(hourly_stats.keys(), key=lambda h: hourly_stats[h]['studies'])
         
-        # Find most productive hour (12) - highest RVU
+        # Find most productive hour (12) - highest average RVU per shift
         most_productive_hour = None
         if hourly_stats:
             most_productive_hour = max(hourly_stats.keys(), key=lambda h: hourly_stats[h]['rvu'])
         
-        # Find fastest hour (14) - shortest average time to read
+        # Find fastest hour (14) - shortest average time to read (averaged across all studies in that hour)
         fastest_hour = None
         fastest_avg_duration = float('inf')
         if hourly_stats:
@@ -8189,15 +9165,34 @@ class StatisticsWindow:
         
         # Calculate consistency score (20) - Coefficient of Variation
         consistency_score = None
-        if shift_stats and len(shift_stats) > 1:
-            rvu_per_hour_values = [s['rvu_per_hour'] for s in shift_stats if s['rvu_per_hour'] > 0]
-            if rvu_per_hour_values:
+        # Check if we have enough shifts with valid data (need at least 2 shifts with RVU per hour > 0)
+        # Filter to only shifts that have duration > 0 and rvu_per_hour > 0
+        valid_shift_stats = []
+        for s in shift_stats:
+            if isinstance(s, dict):
+                duration = s.get('duration', 0)
+                rvu_ph = s.get('rvu_per_hour', 0)
+                studies = s.get('studies', 0)
+                # Include shift if it has valid duration and positive RVU per hour
+                if duration > 0 and rvu_ph > 0:
+                    valid_shift_stats.append(s)
+        
+        logger.debug(f"Shift stats calculation: total shifts={len(shift_stats)}, valid shifts={len(valid_shift_stats)}, shifts_with_records={len(shifts_with_records)}")
+        if len(valid_shift_stats) > 1:
+            rvu_per_hour_values = [s['rvu_per_hour'] for s in valid_shift_stats]
+            if rvu_per_hour_values and len(rvu_per_hour_values) > 1:
                 mean_rvu_per_hour = sum(rvu_per_hour_values) / len(rvu_per_hour_values)
                 if mean_rvu_per_hour > 0:
                     variance = sum((x - mean_rvu_per_hour) ** 2 for x in rvu_per_hour_values) / len(rvu_per_hour_values)
                     std_dev = variance ** 0.5
                     coefficient_of_variation = (std_dev / mean_rvu_per_hour) * 100
                     consistency_score = coefficient_of_variation
+                else:
+                    logger.debug(f"Mean RVU per hour is 0, cannot calculate variability")
+            else:
+                logger.debug(f"Not enough rvu_per_hour_values: {len(rvu_per_hour_values) if rvu_per_hour_values else 0}")
+        else:
+            logger.debug(f"Not enough valid shifts: {len(valid_shift_stats)} (need 2+)")
         
         # Helper function to format hour
         def format_hour(h):
@@ -8233,14 +9228,25 @@ class StatisticsWindow:
         
         self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
         
-        # Average time to read (10)
-        avg_time_formatted = self._format_duration(avg_time_to_read) if avg_time_to_read > 0 else "N/A"
-        self._summary_table.add_row({'metric': 'Average Time to Read', 'value': avg_time_formatted})
-        
         # Hourly metrics section
-        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
-        self._summary_table.add_row({'metric': 'Busiest Hour', 'value': f"{format_hour(busiest_hour)} ({hourly_stats.get(busiest_hour, {}).get('studies', 0)} studies)" if busiest_hour else "N/A"})
-        self._summary_table.add_row({'metric': 'Most Productive Hour', 'value': f"{format_hour(most_productive_hour)} ({hourly_stats.get(most_productive_hour, {}).get('rvu', 0):.1f} RVU)" if most_productive_hour else "N/A"})
+        # Display hourly metrics (averaged across shifts)
+        if busiest_hour is not None:
+            busiest_stats = hourly_stats[busiest_hour]
+            avg_studies = busiest_stats['studies']
+            total_studies = busiest_stats.get('total_studies', 0)
+            shift_count = busiest_stats.get('shift_count', 0)
+            self._summary_table.add_row({'metric': 'Busiest Hour', 'value': f"{format_hour(busiest_hour)} ({avg_studies:.1f} avg studies/shift, {total_studies} total)" if shift_count > 1 else f"{format_hour(busiest_hour)} ({total_studies} studies)"})
+        else:
+            self._summary_table.add_row({'metric': 'Busiest Hour', 'value': 'N/A'})
+        
+        if most_productive_hour is not None:
+            productive_stats = hourly_stats[most_productive_hour]
+            avg_rvu = productive_stats['rvu']
+            total_rvu = sum(hourly_stats_per_shift[s].get(most_productive_hour, {}).get('rvu', 0) for s in records_by_shift.keys() if most_productive_hour in hourly_stats_per_shift.get(s, {}))
+            shift_count = productive_stats.get('shift_count', 0)
+            self._summary_table.add_row({'metric': 'Most Productive Hour', 'value': f"{format_hour(most_productive_hour)} ({avg_rvu:.1f} avg RVU/shift, {total_rvu:.1f} total)" if shift_count > 1 else f"{format_hour(most_productive_hour)} ({total_rvu:.1f} RVU)"})
+        else:
+            self._summary_table.add_row({'metric': 'Most Productive Hour', 'value': 'N/A'})
         
         # Fastest hour (14)
         if fastest_hour is not None:
@@ -8250,30 +9256,40 @@ class StatisticsWindow:
         else:
             self._summary_table.add_row({'metric': 'Fastest Hour', 'value': 'N/A'})
         
-        # Consistency score (20)
-        if consistency_score is not None:
-            # Lower CV = more consistent (better)
-            consistency_label = "Excellent" if consistency_score < 10 else "Good" if consistency_score < 20 else "Fair" if consistency_score < 30 else "Variable"
-            self._summary_table.add_row({'metric': 'Consistency Score', 'value': f"{consistency_score:.1f}% ({consistency_label})"})
-        else:
-            self._summary_table.add_row({'metric': 'Consistency Score', 'value': 'N/A (need 2+ shifts)'})
-        
         self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
         self._summary_table.add_row({'metric': 'Top Modality', 'value': f"{top_modality} ({modalities.get(top_modality, 0)} studies)"})
-        self._summary_table.add_row({'metric': 'Unique Modalities', 'value': str(len(modalities))})
+        
+        # Recalculate total_studies after expanding "Multiple" records
+        expanded_total_studies = sum(modalities.values()) if modalities else total_studies
+        
+        # Modality Breakdown - show each modality with percent volume and study count
+        if modalities and expanded_total_studies > 0:
+            self._summary_table.add_row({'metric': 'Modality Breakdown', 'value': ''})
+            # Sort modalities alphabetically
+            sorted_modalities = sorted(modalities.items(), key=lambda x: x[0].lower())
+            for mod, count in sorted_modalities:
+                percent = (count / expanded_total_studies) * 100
+                self._summary_table.add_row({'metric': f"  {mod}", 'value': f"{percent:.1f}% ({count} studies)"})
+        else:
+            self._summary_table.add_row({'metric': 'Modality Breakdown', 'value': 'N/A'})
         
         # Add average time to read by modality
         if modality_durations:
             self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+            
+            # Average time to read (10) - moved to just above "by Modality"
+            avg_time_formatted = self._format_duration(avg_time_to_read) if avg_time_to_read > 0 else "N/A"
+            self._summary_table.add_row({'metric': 'Average Time to Read', 'value': avg_time_formatted})
+            
             self._summary_table.add_row({'metric': 'Average Time to Read by Modality', 'value': ''})
-            # Sort modalities by average duration (highest first)
+            # Sort modalities alphabetically
             modality_avgs = []
             for mod, durations in modality_durations.items():
                 if durations:
                     avg_duration = sum(durations) / len(durations)
                     modality_avgs.append((mod, avg_duration, len(durations)))
             
-            modality_avgs.sort(key=lambda x: x[1], reverse=True)
+            modality_avgs.sort(key=lambda x: x[0].lower())
             for mod, avg_duration, count in modality_avgs:
                 avg_formatted = self._format_duration(avg_duration)
                 self._summary_table.add_row({'metric': f"  {mod}", 'value': f"{avg_formatted} ({count} studies)"})
@@ -8333,16 +9349,106 @@ class StatisticsWindow:
         )
         self._compensation_table.add_row({'category': '', 'value': ''})  # Spacer
         
-        # Modality breakdown
+        # Modality breakdown - expand "Multiple" records into individual studies
         modality_stats = {}
         for r in records:
             st = r.get("study_type", "Unknown")
             mod = st.split()[0] if st else "Unknown"
-            if mod not in modality_stats:
-                modality_stats[mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
-            modality_stats[mod]['count'] += 1
-            modality_stats[mod]['rvu'] += r.get("rvu", 0)
-            modality_stats[mod]['compensation'] += self._calculate_study_compensation(r)
+            
+            # Check if this is a "Multiple" modality record that should be expanded
+            if mod == "Multiple" or st.startswith("Multiple "):
+                # Expand into individual studies
+                individual_study_types = r.get("individual_study_types", [])
+                individual_rvus = r.get("individual_rvus", [])
+                individual_procedures = r.get("individual_procedures", [])
+                accession_count = r.get("accession_count", 1)
+                total_rvu = r.get("rvu", 0)
+                original_comp = self._calculate_study_compensation(r)
+                
+                # Check if we have individual data stored
+                has_individual_data = (individual_study_types and individual_rvus and 
+                                     len(individual_study_types) == accession_count and 
+                                     len(individual_rvus) == accession_count)
+                
+                if has_individual_data:
+                    # Use stored individual data
+                    for i in range(accession_count):
+                        individual_st = individual_study_types[i] if i < len(individual_study_types) else "Unknown"
+                        individual_rvu = individual_rvus[i] if i < len(individual_rvus) else 0
+                        
+                        # Extract modality from individual study type
+                        expanded_mod = individual_st.split()[0] if individual_st else "Unknown"
+                        
+                        # Initialize modality if needed
+                        if expanded_mod not in modality_stats:
+                            modality_stats[expanded_mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+                        
+                        # Split compensation proportionally based on RVU
+                        if total_rvu > 0:
+                            comp_per_study = original_comp * (individual_rvu / total_rvu)
+                        else:
+                            comp_per_study = original_comp / accession_count if accession_count > 0 else 0
+                        
+                        modality_stats[expanded_mod]['count'] += 1
+                        modality_stats[expanded_mod]['rvu'] += individual_rvu
+                        modality_stats[expanded_mod]['compensation'] += comp_per_study
+                elif individual_procedures and len(individual_procedures) == accession_count:
+                    # Try to classify individual procedures if we don't have stored study types
+                    rvu_table = self.data_manager.data.get("rvu_table", {})
+                    classification_rules = self.data_manager.data.get("classification_rules", {})
+                    direct_lookups = self.data_manager.data.get("direct_lookups", {})
+                    
+                    # match_study_type is defined at module level in this file
+                    
+                    rvu_per_study = total_rvu / accession_count if accession_count > 0 else 0
+                    comp_per_study = original_comp / accession_count if accession_count > 0 else 0
+                    
+                    for i in range(accession_count):
+                        procedure = individual_procedures[i] if i < len(individual_procedures) else ""
+                        study_type, rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+                        
+                        expanded_mod = study_type.split()[0] if study_type else "Unknown"
+                        
+                        if expanded_mod not in modality_stats:
+                            modality_stats[expanded_mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+                        
+                        # Use calculated RVU if available, otherwise split evenly
+                        actual_rvu = rvu if rvu > 0 else rvu_per_study
+                        # Adjust compensation based on actual RVU if we calculated it
+                        if rvu > 0 and total_rvu > 0:
+                            actual_comp = original_comp * (actual_rvu / total_rvu)
+                        else:
+                            actual_comp = comp_per_study
+                        
+                        modality_stats[expanded_mod]['count'] += 1
+                        modality_stats[expanded_mod]['rvu'] += actual_rvu
+                        modality_stats[expanded_mod]['compensation'] += actual_comp
+                else:
+                    # Fallback: if we can't expand, extract modality from "Multiple XR" format
+                    # Extract actual modality from "Multiple XR" -> "XR"
+                    if st.startswith("Multiple "):
+                        actual_modality = st.replace("Multiple ", "").strip()
+                        if actual_modality:
+                            expanded_mod = actual_modality.split()[0]
+                        else:
+                            expanded_mod = "Unknown"
+                    else:
+                        expanded_mod = "Unknown"
+                    
+                    if expanded_mod not in modality_stats:
+                        modality_stats[expanded_mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+                    
+                    # Split evenly across accession count
+                    modality_stats[expanded_mod]['count'] += accession_count if accession_count > 0 else 1
+                    modality_stats[expanded_mod]['rvu'] += total_rvu
+                    modality_stats[expanded_mod]['compensation'] += original_comp
+            else:
+                # Regular record - not "Multiple"
+                if mod not in modality_stats:
+                    modality_stats[mod] = {'count': 0, 'rvu': 0.0, 'compensation': 0.0}
+                modality_stats[mod]['count'] += 1
+                modality_stats[mod]['rvu'] += r.get("rvu", 0)
+                modality_stats[mod]['compensation'] += self._calculate_study_compensation(r)
         
         # Sort modalities by compensation (highest first)
         sorted_modalities = sorted(modality_stats.items(), key=lambda x: x[1]['compensation'], reverse=True)
@@ -9364,22 +10470,35 @@ class StatisticsWindow:
                         self.data_manager.records_data["shifts"].pop(i)
                         break
         
-        # Create the combined shift
-        combined_shift = {
-            "shift_start": combined_start,
-            "shift_end": combined_end,
-            "records": combined_records
-        }
-        
-        # Add to database
+        # Create the combined shift in database
         try:
-            self.data_manager.db.save_shift(combined_shift)
+            cursor = self.data_manager.db.conn.cursor()
+            cursor.execute('''
+                INSERT INTO shifts (shift_start, shift_end, is_current)
+                VALUES (?, ?, 0)
+            ''', (combined_start, combined_end))
+            self.data_manager.db.conn.commit()
+            combined_shift_id = cursor.lastrowid
+            
+            # Add all records to the combined shift
+            for record in combined_records:
+                self.data_manager.db.add_record(combined_shift_id, record)
+            
+            logger.info(f"Created combined shift in database: ID={combined_shift_id}")
         except Exception as e:
             logger.error(f"Error saving combined shift to database: {e}")
+            return  # Don't add to memory if database save failed
         
-        # Add to in-memory data
-        self.data_manager.data.setdefault("shifts", []).append(combined_shift)
-        self.data_manager.records_data.setdefault("shifts", []).append(combined_shift)
+        # Reload data from database to ensure in-memory data matches database
+        # This prevents duplicates that could occur if we manually add to in-memory data
+        # and then reload from database later
+        try:
+            self.data_manager.records_data = self.data_manager._load_records_from_db()
+            # Update the main data structure as well
+            self.data_manager.data["shifts"] = self.data_manager.records_data.get("shifts", [])
+            logger.info(f"Reloaded data from database after combining shifts")
+        except Exception as e:
+            logger.error(f"Error reloading data from database: {e}")
         
         logger.info(f"Combined {len(shifts)} shifts into one ({len(combined_records)} records)")
     
