@@ -4343,7 +4343,36 @@ class RVUCounterApp:
         if self.is_running:
             # Stop current shift - archive it immediately
             self.is_running = False
-            self.data_manager.data["current_shift"]["shift_end"] = datetime.now().isoformat()
+            
+            # Determine shift end time: use last study time if there's been a significant gap
+            current_time = datetime.now()
+            records = self.data_manager.data["current_shift"].get("records", [])
+            
+            shift_end_time = current_time  # Default to current time
+            
+            if records:
+                # Find the most recent study's time_finished
+                try:
+                    last_study_times = []
+                    for r in records:
+                        if r.get("time_finished"):
+                            last_study_times.append(datetime.fromisoformat(r["time_finished"]))
+                    
+                    if last_study_times:
+                        last_study_time = max(last_study_times)
+                        time_since_last_study = (current_time - last_study_time).total_seconds() / 60  # minutes
+                        
+                        # If last study was more than 30 minutes ago, use that as shift end
+                        if time_since_last_study > 30:
+                            shift_end_time = last_study_time
+                            logger.info(f"Using last study time as shift end ({time_since_last_study:.1f} min gap): {last_study_time}")
+                        else:
+                            logger.info(f"Using current time as shift end (last study {time_since_last_study:.1f} min ago)")
+                except Exception as e:
+                    logger.error(f"Error determining shift end time: {e}")
+                    # Fall back to current time
+            
+            self.data_manager.data["current_shift"]["shift_end"] = shift_end_time.isoformat()
             # Archive the shift to historical shifts
             self.data_manager.end_current_shift()
             # Clear current_shift completely so new studies are truly temporary
@@ -10029,21 +10058,11 @@ class StatisticsWindow:
                 if shift_end_str:
                     shift_end = datetime.fromisoformat(shift_end_str)
                 else:
-                    # Current shift - estimate from records
-                    shift_records = shift.get("records", [])
-                    if shift_records:
-                        record_times = []
-                        for r in shift_records:
-                            try:
-                                record_times.append(datetime.fromisoformat(r.get("time_performed", "")))
-                            except:
-                                pass
-                        if record_times:
-                            shift_end = max(record_times)
-                        else:
-                            continue
-                    else:
-                        continue
+                    # Current shift - use CURRENT TIME, not last record time
+                    # This ensures accurate hours worked for incomplete shifts
+                    # (Using last record time would understate hours and inflate RVU/hour rate)
+                    shift_end = datetime.now()
+                    logger.debug(f"Using current time for incomplete shift duration calculation")
                 
                 # Clip shift to date range if provided
                 if date_range_start is not None:
