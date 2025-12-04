@@ -410,23 +410,34 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := "MR "
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Reorder: Insert "MR" before modifiers instead of at the end
+	; Reorder: Insert "MR" before study type and contrast modifiers
 	ModifierFound := false
 	
-	; Check for modifiers and insert MR before them
-	if InStr(PriorDescript1, " With And Without")
+	; First check for study type modifiers (angiography, venography)
+	if InStr(PriorDescript1, " Angiography")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " MR$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " Angiography", " MR Angiography")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " Venography")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " Venography", " MR Venography")
+		ModifierFound := true
+	}
+	; Then check for contrast modifiers (with proper spacing)
+	else if InStr(PriorDescript1, " With And Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " (With And Without)", " MR $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " Without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " MR$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (Without)", " MR $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " With")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " MR$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (With)", " MR $1")
 		ModifierFound := true
 	}
 	
@@ -836,33 +847,37 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := "CT "
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Reorder: Insert "CT" before modifiers instead of at the end
-	; Pattern: "Body Part Modifier" -> "Body Part CT Modifier"
-	; Common modifiers: "Without", "With", "With And Without"
+	; Reorder: Insert "CT" before study type and contrast modifiers
+	; Desired order: Body Part + CT + Study Type (angiography) + Contrast Modifier
+	; Handle "Angiography" as a study type that comes after CT
 	
-	; Check for modifiers and insert CT before them
 	ModifierFound := false
 	
-	; Try "With And Without" first (longest pattern)
-	if InStr(PriorDescript1, " With And Without")
+	; First check for "Angiography" - it should come after CT
+	if InStr(PriorDescript1, " Angiography")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " CT$2")
+		; Insert CT before "Angiography"
+		PriorDescript1 := RegExReplace(PriorDescript1, " Angiography", " CT Angiography")
 		ModifierFound := true
 	}
-	; Then try "Without"
+	; Then check for contrast modifiers (with proper spacing)
+	else if InStr(PriorDescript1, " With And Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " (With And Without)", " CT $1")
+		ModifierFound := true
+	}
 	else if InStr(PriorDescript1, " Without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " CT$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (Without)", " CT $1")
 		ModifierFound := true
 	}
-	; Then try "With"
 	else if InStr(PriorDescript1, " With")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " CT$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (With)", " CT $1")
 		ModifierFound := true
 	}
 	
-	; If no modifier found, add CT at the end as before
+	; If no modifier found, add CT at the end
 	if (!ModifierFound)
 	{
 		PriorDescript1 := PriorDescript1 . " CT"
