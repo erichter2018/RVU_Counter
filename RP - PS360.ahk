@@ -504,17 +504,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	StringUpper PriorDescript1, PriorDescript, T
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
+	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
 	ModifierFound := false
 	
-	; Check for view modifiers
-	if InStr(PriorDescript1, " PA And Lateral")
+	; Check for numeric view pattern (e.g., "1 View", "2 View")
+	if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		; Insert Radiograph before the number+view pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
 		ModifierFound := true
 	}
 	
@@ -576,16 +583,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
+	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
 	ModifierFound := false
 	
-	if InStr(PriorDescript1, " PA And Lateral")
+	; Check for numeric view pattern (e.g., "1 View", "2 View")
+	if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		; Insert Radiograph before the number+view pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
 		ModifierFound := true
 	}
 	
@@ -722,16 +737,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
+	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
 	ModifierFound := false
 	
-	if InStr(PriorDescript1, " PA And Lateral")
+	; Check for numeric view pattern (e.g., "1 View", "2 View")
+	if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		; Insert Radiograph before the number+view pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " View")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
 		ModifierFound := true
 	}
 	
