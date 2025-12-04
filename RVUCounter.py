@@ -50,6 +50,9 @@ class RecordsDatabase:
     
     Provides fast querying and scales to hundreds of thousands of records.
     Replaces JSON file storage for records (settings remain in JSON).
+    
+    Thread-safe: Uses a lock for all database operations since SQLite
+    connections are shared across threads (check_same_thread=False).
     """
     
     def __init__(self, db_path: str):
@@ -60,6 +63,7 @@ class RecordsDatabase:
         """
         self.db_path = db_path
         self.conn = None
+        self._lock = threading.Lock()  # Thread safety for database operations
         self._connect()
         self._create_tables()
     
@@ -142,9 +146,11 @@ class RecordsDatabase:
     
     def close(self):
         """Close database connection."""
-        if self.conn:
-            self.conn.close()
-            logger.info("Database connection closed")
+        with self._lock:
+            if self.conn:
+                self.conn.close()
+                self.conn = None
+                logger.info("Database connection closed")
     
     # =========================================================================
     # Shift Operations
@@ -152,12 +158,15 @@ class RecordsDatabase:
     
     def get_current_shift(self) -> Optional[dict]:
         """Get the current active shift."""
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT * FROM shifts WHERE is_current = 1 LIMIT 1')
-        row = cursor.fetchone()
-        if row:
-            return self._shift_row_to_dict(row)
-        return None
+        with self._lock:
+            if not self.conn:
+                return None
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT * FROM shifts WHERE is_current = 1 LIMIT 1')
+            row = cursor.fetchone()
+            if row:
+                return self._shift_row_to_dict(row)
+            return None
     
     def start_shift(self, shift_start: str, effective_shift_start: str = None, 
                    projected_shift_end: str = None) -> int:
@@ -165,16 +174,19 @@ class RecordsDatabase:
         # End any existing current shift first
         self.end_current_shift()
         
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO shifts (shift_start, is_current, effective_shift_start, projected_shift_end)
-            VALUES (?, 1, ?, ?)
-        ''', (shift_start, effective_shift_start, projected_shift_end))
-        self.conn.commit()
-        
-        shift_id = cursor.lastrowid
-        logger.info(f"Started new shift: ID={shift_id}, start={shift_start}")
-        return shift_id
+        with self._lock:
+            if not self.conn:
+                return -1
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO shifts (shift_start, is_current, effective_shift_start, projected_shift_end)
+                VALUES (?, 1, ?, ?)
+            ''', (shift_start, effective_shift_start, projected_shift_end))
+            self.conn.commit()
+            
+            shift_id = cursor.lastrowid
+            logger.info(f"Started new shift: ID={shift_id}, start={shift_start}")
+            return shift_id
     
     def end_current_shift(self, shift_end: str = None) -> Optional[int]:
         """End the current shift. Returns the shift ID or None."""
@@ -183,11 +195,14 @@ class RecordsDatabase:
         
         current = self.get_current_shift()
         if current:
-            cursor = self.conn.cursor()
-            cursor.execute('''
-                UPDATE shifts SET shift_end = ?, is_current = 0 WHERE is_current = 1
-            ''', (shift_end,))
-            self.conn.commit()
+            with self._lock:
+                if not self.conn:
+                    return None
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    UPDATE shifts SET shift_end = ?, is_current = 0 WHERE is_current = 1
+                ''', (shift_end,))
+                self.conn.commit()
             logger.info(f"Ended shift: ID={current['id']}, end={shift_end}")
             return current['id']
         return None
@@ -243,30 +258,33 @@ class RecordsDatabase:
     
     def add_record(self, shift_id: int, record: dict) -> int:
         """Add a record to a shift. Returns the record ID."""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            INSERT INTO records (shift_id, accession, procedure, patient_class, study_type,
-                               rvu, time_performed, time_finished, duration_seconds,
-                               individual_procedures, individual_study_types, 
-                               individual_rvus, individual_accessions)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            shift_id,
-            record.get('accession', ''),
-            record.get('procedure', ''),
-            record.get('patient_class', ''),
-            record.get('study_type', ''),
-            record.get('rvu', 0),
-            record.get('time_performed', ''),
-            record.get('time_finished', ''),
-            record.get('duration_seconds', 0),
-            json.dumps(record.get('individual_procedures')) if record.get('individual_procedures') else None,
-            json.dumps(record.get('individual_study_types')) if record.get('individual_study_types') else None,
-            json.dumps(record.get('individual_rvus')) if record.get('individual_rvus') else None,
-            json.dumps(record.get('individual_accessions')) if record.get('individual_accessions') else None,
-        ))
-        self.conn.commit()
-        return cursor.lastrowid
+        with self._lock:
+            if not self.conn:
+                return -1
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                INSERT INTO records (shift_id, accession, procedure, patient_class, study_type,
+                                   rvu, time_performed, time_finished, duration_seconds,
+                                   individual_procedures, individual_study_types, 
+                                   individual_rvus, individual_accessions)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                shift_id,
+                record.get('accession', ''),
+                record.get('procedure', ''),
+                record.get('patient_class', ''),
+                record.get('study_type', ''),
+                record.get('rvu', 0),
+                record.get('time_performed', ''),
+                record.get('time_finished', ''),
+                record.get('duration_seconds', 0),
+                json.dumps(record.get('individual_procedures')) if record.get('individual_procedures') else None,
+                json.dumps(record.get('individual_study_types')) if record.get('individual_study_types') else None,
+                json.dumps(record.get('individual_rvus')) if record.get('individual_rvus') else None,
+                json.dumps(record.get('individual_accessions')) if record.get('individual_accessions') else None,
+            ))
+            self.conn.commit()
+            return cursor.lastrowid
     
     def update_record(self, record_id: int, record: dict):
         """Update an existing record."""
@@ -296,9 +314,12 @@ class RecordsDatabase:
     
     def delete_record(self, record_id: int):
         """Delete a record by ID."""
-        cursor = self.conn.cursor()
-        cursor.execute('DELETE FROM records WHERE id = ?', (record_id,))
-        self.conn.commit()
+        with self._lock:
+            if not self.conn:
+                return
+            cursor = self.conn.cursor()
+            cursor.execute('DELETE FROM records WHERE id = ?', (record_id,))
+            self.conn.commit()
         logger.debug(f"Deleted record: ID={record_id}")
     
     def delete_record_by_accession(self, shift_id: int, accession: str):
@@ -325,14 +346,17 @@ class RecordsDatabase:
     
     def find_record_by_accession(self, shift_id: int, accession: str) -> Optional[dict]:
         """Find a record by accession within a shift."""
-        cursor = self.conn.cursor()
-        cursor.execute('''
-            SELECT * FROM records WHERE shift_id = ? AND accession = ? LIMIT 1
-        ''', (shift_id, accession))
-        row = cursor.fetchone()
-        if row:
-            return self._record_row_to_dict(row)
-        return None
+        with self._lock:
+            if not self.conn:
+                return None
+            cursor = self.conn.cursor()
+            cursor.execute('''
+                SELECT * FROM records WHERE shift_id = ? AND accession = ? LIMIT 1
+            ''', (shift_id, accession))
+            row = cursor.fetchone()
+            if row:
+                return self._record_row_to_dict(row)
+            return None
     
     def get_records_in_date_range(self, start_date: str, end_date: str) -> List[dict]:
         """Get all records within a date range."""
@@ -608,12 +632,40 @@ RVU_TABLE = {
 _cached_desktop = None
 
 
+# Track orphan timeout threads for monitoring (daemon threads, so they won't prevent exit)
+_timeout_thread_count = 0
+_timeout_thread_lock = threading.Lock()
+
+
+def _extract_accession_number(entry: str) -> str:
+    """Extract pure accession number from entry string.
+    
+    Handles formats like "ACC1234 (CT HEAD)" -> "ACC1234" or just "ACC1234" -> "ACC1234".
+    Used by multi-accession tracking logic.
+    
+    Args:
+        entry: Raw listbox entry or accession string
+        
+    Returns:
+        Stripped accession number
+    """
+    if '(' in entry and ')' in entry:
+        m = re.match(r'^([^(]+)', entry)
+        return m.group(1).strip() if m else entry.strip()
+    return entry.strip()
+
+
 def _window_text_with_timeout(element, timeout=1.0, element_name=""):
     """Read window_text() with a timeout to prevent blocking.
     
     When PowerScribe transitions between studies, window_text() can block for
     extended periods (10-18 seconds). This wrapper prevents the worker thread
     from freezing by timing out after the specified duration.
+    
+    Note: When timeout occurs, the spawned thread becomes orphaned (blocking on 
+    the UI call). These are daemon threads so they won't prevent app exit, but 
+    they consume resources until the blocking call eventually returns or the 
+    app exits. We track the count for monitoring purposes.
     
     Args:
         element: The UI element to read text from
@@ -623,16 +675,23 @@ def _window_text_with_timeout(element, timeout=1.0, element_name=""):
     Returns:
         str: The window text, or empty string if timeout/failure occurs
     """
+    global _timeout_thread_count
     import time
     result = [None]
     exception = [None]
     start = time.time()
     
     def read_text():
+        global _timeout_thread_count
         try:
             result[0] = element.window_text()
         except Exception as e:
             exception[0] = e
+        finally:
+            # If we were an orphan thread that finally completed, decrement count
+            with _timeout_thread_lock:
+                if _timeout_thread_count > 0:
+                    _timeout_thread_count -= 1
     
     thread = threading.Thread(target=read_text, daemon=True)
     thread.start()
@@ -641,7 +700,11 @@ def _window_text_with_timeout(element, timeout=1.0, element_name=""):
     
     if thread.is_alive():
         # Thread is still running - window_text() is blocking
-        logger.warning(f"window_text() call timed out after {timeout}s for {element_name}")
+        # Track orphan thread count for monitoring
+        with _timeout_thread_lock:
+            _timeout_thread_count += 1
+            orphan_count = _timeout_thread_count
+        logger.warning(f"window_text() call timed out after {timeout}s for {element_name} (orphan threads: {orphan_count})")
         return ""
     
     if exception[0]:
@@ -666,7 +729,8 @@ def quick_check_powerscribe() -> bool:
             windows = desktop.windows(title=title, visible_only=True)
             if windows:
                 return True
-        except:
+        except Exception as e:
+            logger.debug(f"Error checking PowerScribe window '{title}': {e}")
             continue
     return False
 
@@ -693,10 +757,11 @@ def quick_check_mosaic() -> bool:
                     # Exclude test windows
                     if not any(x in title_lower for x in ["rvu counter", "test", "viewer", "diagnostic"]):
                         return True
-            except:
+            except Exception as e:
+                logger.debug(f"Error checking Mosaic window: {e}")
                 continue
-    except:
-        pass
+    except Exception as e:
+        logger.debug(f"Error iterating windows for Mosaic check: {e}")
     return False
 
 
@@ -714,8 +779,8 @@ def find_powerscribe_window():
         windows = desktop.windows(title="PowerScribe 360 | Reporting", visible_only=True)
         if windows:
             return windows[0]
-    except:
-        pass
+    except Exception as e:
+        logger.debug(f"Error finding PowerScribe window by exact title: {e}")
     
     # Try other common titles including Nuance variations
     for title in ["PowerScribe 360", "PowerScribe 360 - Reporting", "Nuance PowerScribe 360", "Powerscribe 360"]:
@@ -726,9 +791,11 @@ def find_powerscribe_window():
                     window_text = _window_text_with_timeout(window, timeout=1.0, element_name="PowerScribe window check")
                     if "RVU Counter" not in window_text:
                         return window
-                except:
+                except Exception as e:
+                    logger.debug(f"Error checking window text for '{title}': {e}")
                     continue
-        except:
+        except Exception as e:
+            logger.debug(f"Error finding windows with title '{title}': {e}")
             continue
     
     return None
@@ -766,7 +833,8 @@ def find_mosaic_window():
                         automation_id = window.element_info.automation_id
                         if automation_id == "MainForm":
                             return window
-                    except:
+                    except Exception as e:
+                        logger.debug(f"Error checking Mosaic automation ID: {e}")
                         # If we can't check automation ID, still return it if it matches
                         return window
             except:
@@ -910,7 +978,8 @@ def find_clario_chrome_window(use_cache=True):
         try:
             _ = _window_text_with_timeout(_clario_cache['chrome_window'], timeout=1.0, element_name="Clario cache validation")
             return _clario_cache['chrome_window']
-        except:
+        except Exception as e:
+            logger.debug(f"Clario cache validation failed, clearing cache: {e}")
             _clario_cache['chrome_window'] = None
             _clario_cache['content_area'] = None
     
@@ -937,14 +1006,16 @@ def find_clario_chrome_window(use_cache=True):
                         if "chrome" in class_name:
                             _clario_cache['chrome_window'] = window
                             return window
-                    except:
+                    except Exception as e:
                         # If we can't check class name, still return it if title matches
+                        logger.debug(f"Couldn't check Clario class name: {e}")
                         _clario_cache['chrome_window'] = window
                         return window
-            except:
+            except Exception as e:
+                logger.debug(f"Error checking window for Clario: {e}")
                 continue
-    except:
-        pass
+    except Exception as e:
+        logger.debug(f"Error iterating windows for Clario: {e}")
     
     return None
 
@@ -3762,24 +3833,17 @@ class RVUCounterApp:
                     # 1. Check for NEW accessions added (2→3→4, etc.)
                     # 2. Check for accessions REMOVED from the list
                     
-                    # Helper to extract accession number from entry
-                    def extract_acc_num(entry):
-                        if '(' in entry and ')' in entry:
-                            m = re.match(r'^([^(]+)', entry)
-                            return m.group(1).strip() if m else entry.strip()
-                        return entry.strip()
-                    
                     # Get current accession numbers from listbox
-                    current_acc_nums = set(extract_acc_num(e) for e in multiple_accessions)
+                    current_acc_nums = set(_extract_accession_number(e) for e in multiple_accessions)
                     
                     # Get tracked accession numbers
                     tracked_acc_nums = set()
                     for entry, data in self.multi_accession_data.items():
-                        tracked_acc_nums.add(data.get("accession_number") or extract_acc_num(entry))
+                        tracked_acc_nums.add(data.get("accession_number") or _extract_accession_number(entry))
                     
                     # Check for NEW accessions added
                     for acc_entry in multiple_accessions:
-                        acc_num = extract_acc_num(acc_entry)
+                        acc_num = _extract_accession_number(acc_entry)
                         
                         # Skip if already tracked (check by accession number, not entry string)
                         if acc_num in tracked_acc_nums:
@@ -3804,7 +3868,7 @@ class RVUCounterApp:
                     # Check for accessions REMOVED (only if we have data for them)
                     entries_to_remove = []
                     for entry, data in self.multi_accession_data.items():
-                        acc_num = data.get("accession_number") or extract_acc_num(entry)
+                        acc_num = data.get("accession_number") or _extract_accession_number(entry)
                         if acc_num not in current_acc_nums:
                             entries_to_remove.append((entry, acc_num, data))
                     
@@ -3888,18 +3952,11 @@ class RVUCounterApp:
                         remaining_acc = accession.strip() if accession else ""
                         migrated_back = False
                         
-                        # Helper to extract accession number
-                        def extract_acc_num(entry):
-                            if '(' in entry and ')' in entry:
-                                m = re.match(r'^([^(]+)', entry)
-                                return m.group(1).strip() if m else entry.strip()
-                            return entry.strip()
-                        
                         if remaining_acc and len(self.multi_accession_data) > 1:
                             # Multiple accessions were tracked - one is continuing as single
                             # Find and migrate that one back, record the others
                             for entry, data in list(self.multi_accession_data.items()):
-                                acc_num = data.get("accession_number") or extract_acc_num(entry)
+                                acc_num = data.get("accession_number") or _extract_accession_number(entry)
                                 if acc_num == remaining_acc:
                                     # This accession continues - migrate back to single tracking
                                     # Don't restart timer - use the multi_accession_start_time
@@ -3924,7 +3981,7 @@ class RVUCounterApp:
                         elif remaining_acc and len(self.multi_accession_data) == 1:
                             # Only one accession was in multi-mode, now single - just migrate back
                             entry, data = list(self.multi_accession_data.items())[0]
-                            acc_num = data.get("accession_number") or extract_acc_num(entry)
+                            acc_num = data.get("accession_number") or _extract_accession_number(entry)
                             if acc_num == remaining_acc:
                                 self.tracker.active_studies[acc_num] = {
                                     "accession": acc_num,
@@ -5556,9 +5613,36 @@ class RVUCounterApp:
         self.root.after(1000, self._update_time_display)
     
     def on_closing(self):
-        """Handle window closing."""
+        """Handle window closing - properly cleanup resources."""
+        logger.info("Application closing - starting cleanup...")
+        
+        # Stop the background thread first
+        if hasattr(self, '_ps_thread_running'):
+            self._ps_thread_running = False
+            logger.info("Signaled background thread to stop")
+        
+        # Wait for thread to terminate (with timeout to prevent hanging)
+        if hasattr(self, '_ps_thread') and self._ps_thread.is_alive():
+            logger.info("Waiting for background thread to terminate...")
+            self._ps_thread.join(timeout=2.0)
+            if self._ps_thread.is_alive():
+                logger.warning("Background thread did not terminate in time (daemon will be killed on exit)")
+            else:
+                logger.info("Background thread terminated cleanly")
+        
+        # Save window position and data
         self.save_window_position()
         self.data_manager.save()
+        
+        # Close database connection
+        if hasattr(self, 'data_manager') and self.data_manager:
+            try:
+                self.data_manager.close()
+                logger.info("Database connection closed")
+            except Exception as e:
+                logger.error(f"Error closing database: {e}")
+        
+        logger.info("Application cleanup complete")
         self.root.destroy()
 
 
