@@ -18,9 +18,10 @@
     "show_projected_shift": true,
     "show_comp_projected_shift": false,
     "shift_length_hours": 9,
-    "data_source": "PowerScribe",
+    "data_source": "Auto",
     "show_time": true,
-    "stay_on_top": true
+    "stay_on_top": true,
+    "efficiency_heatmap_mode": "duration"
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -88,8 +89,7 @@
         ],
         "excluded_keywords": [
           "CTA",
-          "neck",
-          "angiography"
+          "neck"
         ]
       },
       {
@@ -100,7 +100,8 @@
         "excluded_keywords": [
           "CTA",
           "neck",
-          "angiography"
+          "angiography",
+          "angio"
         ]
       }
     ],
@@ -160,8 +161,8 @@
       {
         "required_keywords": [
           "CT",
-          "brain",
-          "angiography"
+          "head",
+          "angio"
         ],
         "excluded_keywords": [
           "neck"
@@ -357,10 +358,23 @@
         ]
       }
     ],
-    "XR Other": [
+    "CTA Runoff with Abdo/Pelvis": [
       {
         "required_keywords": [
-          "XR"
+          "ct",
+          "abd",
+          "ang",
+          "runoff"
+        ]
+      }
+    ],
+    "US Arterial Lower Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "art",
+          "low",
+          "ext"
         ]
       }
     ],
@@ -383,6 +397,18 @@
         ]
       }
     ],
+    "NM Other": [
+      {
+        "required_keywords": [
+          "NM"
+        ]
+      },
+      {
+        "required_keywords": [
+          "nuclear"
+        ]
+      }
+    ],
     "US Other": [
       {
         "required_keywords": [
@@ -395,15 +421,10 @@
         ]
       }
     ],
-    "NM Other": [
+    "XR Other": [
       {
         "required_keywords": [
-          "NM"
-        ]
-      },
-      {
-        "required_keywords": [
-          "nuclear"
+          "XR"
         ]
       }
     ]
@@ -520,18 +541,18 @@
   },
   "window_positions": {
     "main": {
-      "x": 5019,
-      "y": 517,
+      "x": 4984,
+      "y": -431,
       "width": 240,
-      "height": 500
+      "height": 584
     },
     "settings": {
       "x": 5244,
       "y": -72
     },
     "statistics": {
-      "x": 5267,
-      "y": -234
+      "x": 5095,
+      "y": -278
     }
   }
 }
