@@ -327,10 +327,29 @@ if InStr(PriorOriginal, ModalitySearch)
 
 	StringUpper PriorDescript1, PriorDescript, T
 	
-	; Add "Ultrasound" at the END
-	PriorDescript1 := PriorDescript1 . " Ultrasound"
-
-	;MsgBox, %PriorDescript1%
+	; Reorder: Insert "Ultrasound" before modifiers if present
+	ModifierFound := false
+	
+	if InStr(PriorDescript1, " With And Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " Ultrasound$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " Ultrasound$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " With")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " Ultrasound$2")
+		ModifierFound := true
+	}
+	
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " Ultrasound"
+	}
 
 	Goto, ComparisonFill
 }
@@ -391,10 +410,31 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := "MR "
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Add "MR" at the END
-	PriorDescript1 := PriorDescript1 . " MR"
-
-	;MsgBox, %PriorComplete%
+	; Reorder: Insert "MR" before modifiers instead of at the end
+	ModifierFound := false
+	
+	; Check for modifiers and insert MR before them
+	if InStr(PriorDescript1, " With And Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " MR$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " MR$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " With")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " MR$2")
+		ModifierFound := true
+	}
+	
+	; If no modifier found, add MR at the end
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " MR"
+	}
 
 	Goto, ComparisonFill
 }
@@ -452,8 +492,25 @@ if InStr(PriorOriginal, ModalitySearch)
 
 	StringUpper PriorDescript1, PriorDescript, T
 	
-	; Add "Radiograph" at the END
-	PriorDescript1 := PriorDescript1 . " Radiograph"
+	; Reorder: Insert "Radiograph" before view modifiers if present
+	ModifierFound := false
+	
+	; Check for view modifiers
+	if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " View")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		ModifierFound := true
+	}
+	
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " Radiograph"
+	}
 
 	Goto, ComparisonFill
 }
@@ -507,8 +564,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := " PA and lateral"
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Add "Radiograph" at the END
-	PriorDescript1 := PriorDescript1 . " Radiograph"
+	; Reorder: Insert "Radiograph" before view modifiers if present
+	ModifierFound := false
+	
+	if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " View")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		ModifierFound := true
+	}
+	
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " Radiograph"
+	}
 
 	Goto, ComparisonFill
 }
@@ -558,8 +631,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := " PA and lateral"
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Add "Radiograph" at the END
-	PriorDescript1 := PriorDescript1 . " Radiograph"
+	; Reorder: Insert "Radiograph" before view modifiers if present
+	ModifierFound := false
+	
+	if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " View")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		ModifierFound := true
+	}
+	
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " Radiograph"
+	}
 
 	Goto, ComparisonFill
 }
@@ -621,8 +710,24 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := " PA and lateral"
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Add "Radiograph" at the END
-	PriorDescript1 := PriorDescript1 . " Radiograph"
+	; Reorder: Insert "Radiograph" before view modifiers if present
+	ModifierFound := false
+	
+	if InStr(PriorDescript1, " PA And Lateral")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " View")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		ModifierFound := true
+	}
+	
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " Radiograph"
+	}
 
 	Goto, ComparisonFill
 }
@@ -731,8 +836,37 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := "CT "
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
-	; Add "CT" at the END
-	PriorDescript1 := PriorDescript1 . " CT"
+	; Reorder: Insert "CT" before modifiers instead of at the end
+	; Pattern: "Body Part Modifier" -> "Body Part CT Modifier"
+	; Common modifiers: "Without", "With", "With And Without"
+	
+	; Check for modifiers and insert CT before them
+	ModifierFound := false
+	
+	; Try "With And Without" first (longest pattern)
+	if InStr(PriorDescript1, " With And Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " CT$2")
+		ModifierFound := true
+	}
+	; Then try "Without"
+	else if InStr(PriorDescript1, " Without")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " CT$2")
+		ModifierFound := true
+	}
+	; Then try "With"
+	else if InStr(PriorDescript1, " With")
+	{
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " CT$2")
+		ModifierFound := true
+	}
+	
+	; If no modifier found, add CT at the end as before
+	if (!ModifierFound)
+	{
+		PriorDescript1 := PriorDescript1 . " CT"
+	}
 
 	Goto, ComparisonFill
 
