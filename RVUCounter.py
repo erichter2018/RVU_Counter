@@ -2931,8 +2931,8 @@ class RVUCounterApp:
         if not self.multi_accession_data:
             return
         
-        all_accessions = list(self.multi_accession_data.keys())
-        num_studies = len(all_accessions)
+        all_entries = list(self.multi_accession_data.keys())
+        num_studies = len(all_entries)
         
         # Determine total duration and split evenly
         if self.multi_accession_start_time:
@@ -2950,15 +2950,37 @@ class RVUCounterApp:
         
         time_performed = self.multi_accession_start_time.isoformat() if self.multi_accession_start_time else current_time.isoformat()
         
+        # Extract pure accession numbers for group ID and recording
+        # Handle both old format (key is accession number) and new format (key has "accession_number" field)
+        accession_numbers = []
+        for entry in all_entries:
+            data = self.multi_accession_data[entry]
+            if data.get("accession_number"):
+                # New format: explicit accession_number field
+                accession_numbers.append(data["accession_number"])
+            elif '(' in entry and ')' in entry:
+                # Entry is "ACC (PROC)" format - parse it
+                acc_match = re.match(r'^([^(]+)', entry)
+                if acc_match:
+                    accession_numbers.append(acc_match.group(1).strip())
+                else:
+                    accession_numbers.append(entry.strip())
+            else:
+                # Entry is already just the accession number
+                accession_numbers.append(entry.strip())
+        
         # Generate a unique group ID to link these studies for duplicate detection
-        multi_accession_group_id = "_".join(sorted(all_accessions))
+        multi_accession_group_id = "_".join(sorted(accession_numbers))
         
         total_rvu = 0
         recorded_count = 0
         
         # Record each study individually
-        for accession in all_accessions:
-            data = self.multi_accession_data[accession]
+        for i, entry in enumerate(all_entries):
+            data = self.multi_accession_data[entry]
+            
+            # Get the pure accession number
+            accession = accession_numbers[i] if i < len(accession_numbers) else entry
             
             study_record = {
                 "accession": accession,
@@ -3053,8 +3075,13 @@ class RVUCounterApp:
                         data['accession_title'] = elements.get("labelAccessionTitle", {}).get("text", "").strip()
                         self.cached_elements.update(elements)
             
-            # Handle multiple accessions only if study is open
-            if data['accession'] and elements.get("listBoxAccessions"):
+            # Handle multiple accessions - check listbox if it exists
+            # Read listbox even if labelAccession is empty (multi-accession mode may have empty label)
+            # Check both: study is open (accession exists) OR multi-accession mode (accession_title is plural)
+            is_multi_title = data['accession_title'] in ("Accessions:", "Accessions")
+            should_check_listbox = data['accession'] or is_multi_title
+            
+            if should_check_listbox and elements.get("listBoxAccessions"):
                 try:
                     listbox = elements["listBoxAccessions"]["element"]
                     listbox_children = []
@@ -3077,6 +3104,19 @@ class RVUCounterApp:
                                 data['multiple_accessions'].append(item_text)
                         except:
                             pass
+                    
+                    # In multi-accession mode, if labelAccession is empty but we got listbox items,
+                    # use the first listbox item as the accession for tracking purposes
+                    if is_multi_title and not data['accession'] and data['multiple_accessions']:
+                        first_acc = data['multiple_accessions'][0]
+                        # Extract just the accession number if format is "ACC (PROC)"
+                        if '(' in first_acc:
+                            acc_match = re.match(r'^([^(]+)', first_acc)
+                            if acc_match:
+                                data['accession'] = acc_match.group(1).strip()
+                        else:
+                            data['accession'] = first_acc.strip()
+                        logger.debug(f"Set accession from listbox in multi-accession mode: {data['accession']}")
                 except:
                     pass
         
@@ -3454,6 +3494,16 @@ class RVUCounterApp:
             
             if not ps_data.get('found', False):
                 self.root.title(f"RVU Counter - {source_name} not found")
+                
+                # If we were in multi-accession mode, record the study before clearing state
+                if self.multi_accession_mode and self.multi_accession_data:
+                    logger.info("PowerScribe window closed while in multi-accession mode - recording study")
+                    self._record_multi_accession_study(datetime.now())
+                    self.multi_accession_mode = False
+                    self.multi_accession_data = {}
+                    self.multi_accession_start_time = None
+                    self.multi_accession_last_procedure = ""
+                
                 self.current_accession = ""
                 self.current_procedure = ""
                 self.current_study_type = ""
@@ -3638,6 +3688,7 @@ class RVUCounterApp:
             
             # Only process PowerScribe multi-accession mode if not Mosaic
             if data_source != "Mosaic" and is_multiple_mode and multiple_accessions:
+                logger.debug(f"PowerScribe multi-accession mode: {len(multiple_accessions)} accessions, already in mode: {self.multi_accession_mode}")
                 accession = "Multiple Accessions"
                 is_multi_accession_view = True  # Flag to prevent normal single-study tracking
                 
@@ -3673,22 +3724,94 @@ class RVUCounterApp:
                     self.multi_accession_data = {}
                     self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
                     
+                    # Clear element cache to ensure fresh listbox data on next poll
+                    # This is important for single-to-multi transition where the UI changes
+                    self.cached_elements = {}
+                    
                     # Check if any of the new accessions were being tracked as single
                     # If so, migrate their data to multi-accession tracking
-                    for acc in multiple_accessions:
-                        if acc in self.tracker.active_studies:
-                            study = self.tracker.active_studies[acc]
-                            self.multi_accession_data[acc] = {
+                    # Must extract accession numbers since multiple_accessions may be "ACC (PROC)" format
+                    for acc_entry in multiple_accessions:
+                        # Extract just the accession number from "ACC (PROC)" format
+                        if '(' in acc_entry and ')' in acc_entry:
+                            acc_match = re.match(r'^([^(]+)', acc_entry)
+                            if acc_match:
+                                acc_num = acc_match.group(1).strip()
+                            else:
+                                acc_num = acc_entry.strip()
+                        else:
+                            acc_num = acc_entry.strip()
+                        
+                        if acc_num in self.tracker.active_studies:
+                            study = self.tracker.active_studies[acc_num]
+                            # Store with BOTH the raw acc_entry (for listbox matching) and parsed acc_num
+                            self.multi_accession_data[acc_entry] = {
                                 "procedure": study["procedure"],
                                 "study_type": study["study_type"],
                                 "rvu": study["rvu"],
                                 "patient_class": study.get("patient_class", ""),
+                                "accession_number": acc_num,  # Store parsed accession for recording
                             }
                             # Remove from active_studies to prevent completion
-                            del self.tracker.active_studies[acc]
-                            logger.info(f"Migrated {acc} from single to multi-accession tracking")
+                            del self.tracker.active_studies[acc_num]
+                            logger.info(f"Migrated {acc_num} from single to multi-accession tracking (entry: {acc_entry})")
                     
                     logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
+                else:
+                    # ALREADY in multi-accession mode - handle dynamic changes:
+                    # 1. Check for NEW accessions added (2→3→4, etc.)
+                    # 2. Check for accessions REMOVED from the list
+                    
+                    # Helper to extract accession number from entry
+                    def extract_acc_num(entry):
+                        if '(' in entry and ')' in entry:
+                            m = re.match(r'^([^(]+)', entry)
+                            return m.group(1).strip() if m else entry.strip()
+                        return entry.strip()
+                    
+                    # Get current accession numbers from listbox
+                    current_acc_nums = set(extract_acc_num(e) for e in multiple_accessions)
+                    
+                    # Get tracked accession numbers
+                    tracked_acc_nums = set()
+                    for entry, data in self.multi_accession_data.items():
+                        tracked_acc_nums.add(data.get("accession_number") or extract_acc_num(entry))
+                    
+                    # Check for NEW accessions added
+                    for acc_entry in multiple_accessions:
+                        acc_num = extract_acc_num(acc_entry)
+                        
+                        # Skip if already tracked (check by accession number, not entry string)
+                        if acc_num in tracked_acc_nums:
+                            continue
+                        
+                        # Check if this was being tracked as a single study
+                        if acc_num in self.tracker.active_studies:
+                            study = self.tracker.active_studies[acc_num]
+                            self.multi_accession_data[acc_entry] = {
+                                "procedure": study["procedure"],
+                                "study_type": study["study_type"],
+                                "rvu": study["rvu"],
+                                "patient_class": study.get("patient_class", ""),
+                                "accession_number": acc_num,
+                            }
+                            del self.tracker.active_studies[acc_num]
+                            logger.info(f"ADDED {acc_num} to multi-accession (was single study, now {len(multiple_accessions)} total)")
+                        else:
+                            # New accession not previously tracked - will be collected when user views it
+                            logger.debug(f"New accession {acc_num} added to multi-accession (will collect procedure when viewed)")
+                    
+                    # Check for accessions REMOVED (only if we have data for them)
+                    entries_to_remove = []
+                    for entry, data in self.multi_accession_data.items():
+                        acc_num = data.get("accession_number") or extract_acc_num(entry)
+                        if acc_num not in current_acc_nums:
+                            entries_to_remove.append((entry, acc_num, data))
+                    
+                    if entries_to_remove:
+                        for entry, acc_num, data in entries_to_remove:
+                            del self.multi_accession_data[entry]
+                            logger.info(f"REMOVED {acc_num} from multi-accession (no longer in list, now {len(multiple_accessions)} total)")
                 
                 # Collect procedure for current view - ONLY when procedure changes
                 # This ensures we only collect when user clicks a different accession
@@ -3702,23 +3825,55 @@ class RVUCounterApp:
                         study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
                         
                         # Find which accession this procedure belongs to
-                        # Assign to the first accession that doesn't have data yet
-                        for acc in multiple_accessions:
-                            if acc not in self.multi_accession_data:
-                                self.multi_accession_data[acc] = {
-                                    "procedure": procedure,
-                                    "study_type": study_type,
-                                    "rvu": rvu,
-                                    "patient_class": patient_class,
-                                }
-                                logger.info(f"Collected procedure for {acc}: {procedure} ({rvu} RVU)")
-                                break
+                        # Strategy: 
+                        # 1. Try to match by procedure name in the listbox entry (format: "ACC (PROC)")
+                        # 2. Fall back to first accession without data
+                        matched_acc = None
+                        
+                        # First, try to match by procedure text in the listbox entry
+                        for acc_entry in multiple_accessions:
+                            if acc_entry not in self.multi_accession_data:
+                                # Check if procedure is embedded in the entry (format: "ACC (PROC)")
+                                if '(' in acc_entry and ')' in acc_entry:
+                                    entry_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', acc_entry)
+                                    if entry_match:
+                                        embedded_proc = entry_match.group(2).strip()
+                                        # Check if embedded procedure matches current procedure (case-insensitive partial match)
+                                        if (embedded_proc.upper() in procedure.upper() or 
+                                            procedure.upper() in embedded_proc.upper()):
+                                            matched_acc = acc_entry
+                                            break
+                        
+                        # Fall back: assign to first accession without data
+                        if not matched_acc:
+                            for acc_entry in multiple_accessions:
+                                if acc_entry not in self.multi_accession_data:
+                                    matched_acc = acc_entry
+                                    break
+                        
+                        if matched_acc:
+                            # Extract pure accession number for recording
+                            if '(' in matched_acc and ')' in matched_acc:
+                                acc_match = re.match(r'^([^(]+)', matched_acc)
+                                acc_num = acc_match.group(1).strip() if acc_match else matched_acc.strip()
+                            else:
+                                acc_num = matched_acc.strip()
+                            
+                            self.multi_accession_data[matched_acc] = {
+                                "procedure": procedure,
+                                "study_type": study_type,
+                                "rvu": rvu,
+                                "patient_class": patient_class,
+                                "accession_number": acc_num,  # Store parsed accession for recording
+                            }
+                            logger.info(f"Collected procedure for {acc_num}: {procedure} ({rvu} RVU)")
                         
                         # Update last seen procedure
                         self.multi_accession_last_procedure = procedure
             elif data_source != "Mosaic" and is_multiple_mode:
                 # PowerScribe: Multiple accessions but list not loaded yet
                 accession = "Multiple (loading...)"
+                is_multi_accession_view = True  # Prevent single-study tracking for placeholder
             else:
                 # SINGLE ACCESSION mode (PowerScribe) or Mosaic single/multiple handled above
                 if data_source == "PowerScribe":
@@ -3726,14 +3881,71 @@ class RVUCounterApp:
                     accession = elements.get("labelAccession", {}).get("text", "").strip()
                 # For Mosaic, accession is already set above
                 
-                # If we were in multi-accession mode but now we're not (PowerScribe only), record and reset
-                if data_source == "PowerScribe" and self.multi_accession_mode and self.multi_accession_data:
-                    # Record the multi-accession study before exiting
-                    current_time = datetime.now()
-                    self._record_multi_accession_study(current_time)
-                
-                # Reset multi-accession tracking (PowerScribe only)
+                # Handle MULTI→SINGLE transition (PowerScribe only)
                 if data_source == "PowerScribe" and self.multi_accession_mode:
+                    if self.multi_accession_data:
+                        # Check if the remaining single accession was in our multi-accession tracking
+                        remaining_acc = accession.strip() if accession else ""
+                        migrated_back = False
+                        
+                        # Helper to extract accession number
+                        def extract_acc_num(entry):
+                            if '(' in entry and ')' in entry:
+                                m = re.match(r'^([^(]+)', entry)
+                                return m.group(1).strip() if m else entry.strip()
+                            return entry.strip()
+                        
+                        if remaining_acc and len(self.multi_accession_data) > 1:
+                            # Multiple accessions were tracked - one is continuing as single
+                            # Find and migrate that one back, record the others
+                            for entry, data in list(self.multi_accession_data.items()):
+                                acc_num = data.get("accession_number") or extract_acc_num(entry)
+                                if acc_num == remaining_acc:
+                                    # This accession continues - migrate back to single tracking
+                                    # Don't restart timer - use the multi_accession_start_time
+                                    self.tracker.active_studies[acc_num] = {
+                                        "accession": acc_num,
+                                        "procedure": data["procedure"],
+                                        "study_type": data["study_type"],
+                                        "rvu": data["rvu"],
+                                        "patient_class": data.get("patient_class", ""),
+                                        "start_time": self.multi_accession_start_time or datetime.now(),
+                                        "last_seen": datetime.now(),
+                                    }
+                                    del self.multi_accession_data[entry]
+                                    migrated_back = True
+                                    logger.info(f"MIGRATED {acc_num} back to single-accession tracking (multi→single transition)")
+                                    break
+                            
+                            # Record remaining accessions (the ones that were completed/removed)
+                            if self.multi_accession_data:
+                                logger.info(f"Recording {len(self.multi_accession_data)} completed accessions from multi→single transition")
+                                self._record_multi_accession_study(datetime.now())
+                        elif remaining_acc and len(self.multi_accession_data) == 1:
+                            # Only one accession was in multi-mode, now single - just migrate back
+                            entry, data = list(self.multi_accession_data.items())[0]
+                            acc_num = data.get("accession_number") or extract_acc_num(entry)
+                            if acc_num == remaining_acc:
+                                self.tracker.active_studies[acc_num] = {
+                                    "accession": acc_num,
+                                    "procedure": data["procedure"],
+                                    "study_type": data["study_type"],
+                                    "rvu": data["rvu"],
+                                    "patient_class": data.get("patient_class", ""),
+                                    "start_time": self.multi_accession_start_time or datetime.now(),
+                                    "last_seen": datetime.now(),
+                                }
+                                migrated_back = True
+                                logger.info(f"MIGRATED {acc_num} back to single-accession tracking (was only one in multi-mode)")
+                            else:
+                                # Different accession - record the old one
+                                self._record_multi_accession_study(datetime.now())
+                        else:
+                            # No remaining accession visible or empty multi_accession_data
+                            # Record whatever we have
+                            self._record_multi_accession_study(datetime.now())
+                    
+                    # Reset multi-accession state
                     self.multi_accession_mode = False
                     self.multi_accession_data = {}
                     self.multi_accession_start_time = None
@@ -4243,14 +4455,25 @@ class RVUCounterApp:
                 records.pop(index)
                 logger.info(f"Removed study from memory: {accession}, remaining records: {len(records)}")
                 
-                # Save to sync memory changes
+                # Save to sync memory changes to database
                 self.data_manager.save()
                 logger.info(f"Saved changes after deletion")
                 
-                # Reload data from database to ensure consistency
+                # Reload data from database to ensure consistency between DB and memory
                 if deleted_from_db:
-                    self.data_manager.load_all_data()
-                    logger.info(f"Reloaded data, current records count: {len(self.data_manager.data['current_shift']['records'])}")
+                    try:
+                        # Reload records from database
+                        self.data_manager.records_data = self.data_manager._load_records_from_db()
+                        # Update current_shift in main data structure
+                        self.data_manager.data["current_shift"] = self.data_manager.records_data.get("current_shift", {
+                            "shift_start": None,
+                            "shift_end": None,
+                            "records": []
+                        })
+                        self.data_manager.data["shifts"] = self.data_manager.records_data.get("shifts", [])
+                        logger.info(f"Reloaded data from DB, current records count: {len(self.data_manager.data['current_shift']['records'])}")
+                    except Exception as e:
+                        logger.error(f"Error reloading data from database: {e}", exc_info=True)
                 
                 # Manually destroy all study widgets immediately
                 for widget in list(self.study_widgets):
@@ -4259,7 +4482,23 @@ class RVUCounterApp:
                     except:
                         pass
                 self.study_widgets.clear()
-                logger.info("Manually destroyed all study widgets")
+                
+                # Also clear ALL children from scrollable frame directly
+                for child in list(self.studies_scrollable_frame.winfo_children()):
+                    try:
+                        child.destroy()
+                    except:
+                        pass
+                
+                # Clear time labels too
+                if hasattr(self, 'time_labels'):
+                    self.time_labels.clear()
+                
+                logger.info("Manually destroyed all study widgets and cleared scrollable frame")
+                
+                # Force immediate UI refresh before rebuilding
+                self.root.update_idletasks()
+                self.root.update()
                 
                 # Force a rebuild of the recent studies list
                 self.last_record_count = -1
@@ -4492,8 +4731,8 @@ class RVUCounterApp:
         if is_active_shift:
             # Count recent studies
             recent_count = len(current_shift.get("records", []))
-            # Set text without style parameter to use default style (black text)
-            self.recent_frame.config(text=f"Recent Studies ({recent_count})")
+            # Explicitly reset to default style (black text) - must set style to override Red.TLabelframe
+            self.recent_frame.config(text=f"Recent Studies ({recent_count})", style="TLabelframe")
         else:
             self.recent_frame.config(text="Temporary Recent - No shift started", style="Red.TLabelframe")
     
@@ -4622,13 +4861,23 @@ class RVUCounterApp:
         # Only rebuild widgets if records changed
         if rebuild_widgets:
             # Update recent studies list with X buttons
-            # Clear existing widgets
-            for widget in self.study_widgets:
-                widget.destroy()
+            # Clear existing widgets from list
+            for widget in list(self.study_widgets):
+                try:
+                    widget.destroy()
+                except:
+                    pass
             self.study_widgets.clear()
             # Clear time labels if they exist
             if hasattr(self, 'time_labels'):
                 self.time_labels.clear()
+            
+            # Also clear ALL children from scrollable frame directly to ensure clean slate
+            for child in list(self.studies_scrollable_frame.winfo_children()):
+                try:
+                    child.destroy()
+                except:
+                    pass
             
             # Calculate how many studies can fit based on canvas height
             canvas_height = self.studies_canvas.winfo_height()
