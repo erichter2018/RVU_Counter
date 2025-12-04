@@ -5,74 +5,48 @@
     "shift_end": null,
     "records": [
       {
-        "accession": "AHS27235188LLHS",
+        "accession": "A000477621CVR",
         "procedure": "XR CHEST 1 VIEW",
-        "patient_class": "STAT Inpatient",
+        "patient_class": "STAT Outpatient",
         "study_type": "XR Chest",
         "rvu": 0.3,
-        "time_performed": "2025-11-26T23:10:37.066982",
-        "time_finished": "2025-11-26T23:10:50.174568",
-        "duration_seconds": 13.107586
+        "time_performed": "2025-11-29T18:06:31.846498",
+        "time_finished": "2025-11-29T18:09:09.326630",
+        "duration_seconds": 16.108927
       },
       {
-        "accession": "45634230000600CBMC",
-        "procedure": "US PREGNANCY LIMITED",
+        "accession": "G251129155329871",
+        "procedure": "XR TOE RIGHT",
         "patient_class": "STAT Outpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-26T23:10:56.292128",
-        "time_finished": "2025-11-26T23:11:10.401179",
-        "duration_seconds": 14.109051
+        "study_type": "XR Other",
+        "rvu": 0.3,
+        "time_performed": "2025-11-29T18:07:07.234147",
+        "time_finished": "2025-11-29T18:07:20.376093",
+        "duration_seconds": 13.141946
       },
       {
-        "accession": "001924168MLC",
-        "procedure": "US PREGNANCY TRANSVAGINAL",
-        "patient_class": "STAT Outpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-26T23:11:30.686321",
-        "time_finished": "2025-11-26T23:11:45.857469",
-        "duration_seconds": 15.171148
+        "accession": "00410XR250013702ABZ2",
+        "procedure": "XR CHEST 2 VIEWS",
+        "patient_class": "STAT Emergency",
+        "study_type": "XR Chest",
+        "rvu": 0.3,
+        "time_performed": "2025-11-29T18:10:33.088338",
+        "time_finished": "2025-11-29T18:10:38.114273",
+        "duration_seconds": 5.025935
       },
       {
-        "accession": "A01267254DU",
-        "procedure": "CT UPPER EXTREMITY WITHOUT IV CONTRAST",
-        "patient_class": "STAT Outpatient",
-        "study_type": "CT Other",
-        "rvu": 1.0,
-        "time_performed": "2025-11-26T23:19:33.412736",
-        "time_finished": "2025-11-26T23:19:59.618781",
-        "duration_seconds": 26.206045
-      },
-      {
-        "accession": "14830510002900PM",
-        "procedure": "US LOWER EXTREMITY VEINS BILATERAL",
-        "patient_class": "STAT Outpatient",
-        "study_type": "US Other",
-        "rvu": 0.68,
-        "time_performed": "2025-11-26T23:20:46.117265",
-        "time_finished": "2025-11-26T23:21:05.330059",
-        "duration_seconds": 19.212794
-      },
-      {
-        "accession": "14830510002900PM, 14830510002800PM",
-        "procedure": "Multiple CT (2 studies)",
-        "patient_class": "STAT Outpatient",
-        "study_type": "Multiple CT",
-        "rvu": 2.36,
-        "time_performed": "2025-11-26T23:21:27.707388",
-        "time_finished": "2025-11-26T23:21:41.805010",
-        "duration_seconds": 14.097622,
-        "is_multi_accession": true,
-        "accession_count": 2,
-        "individual_procedures": [
-          "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
-          "US LOWER EXTREMITY VEINS BILATERAL"
-        ]
+        "accession": "AHS27257572LLHS",
+        "procedure": "MR THORACIC SPINE WITHOUT THEN WITH IV CONTRAST",
+        "patient_class": "STAT Inpatient",
+        "study_type": "MRI Other",
+        "rvu": 1.75,
+        "time_performed": "2025-11-29T18:13:04.656646",
+        "time_finished": "2025-11-29T18:13:19.831780",
+        "duration_seconds": 15.175134
       }
     ],
-    "effective_shift_start": "2025-11-25T22:00:00",
-    "projected_shift_end": "2025-11-26T07:00:00"
+    "effective_shift_start": "2025-11-29T17:22:33.797547",
+    "projected_shift_end": "2025-11-30T02:22:33.797547"
   },
   "shifts": [
     {
@@ -932,130 +906,3036 @@
       ]
     },
     {
-      "shift_start": "2025-11-25T16:53:52.057257",
-      "shift_end": "2025-11-25T17:51:23.121270",
+      "shift_start": "2025-11-28T20:02:38.189458",
+      "shift_end": "2025-11-29T04:59:09.272874",
       "records": [
         {
-          "accession": "001923529MLC",
-          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
-          "patient_class": "Inpatient",
-          "study_type": "XR Abdomen",
-          "rvu": 0.3,
-          "time_performed": "2025-11-25T16:54:17.050434",
-          "time_finished": "2025-11-25T16:54:27.129696",
-          "duration_seconds": 10.079262
-        },
-        {
-          "accession": "251121101937MH",
-          "procedure": "CT SHOULDER WITHOUT IV CONTRAST LEFT",
-          "patient_class": "Outpatient",
-          "study_type": "CT Other",
-          "rvu": 1.0,
-          "time_performed": "2025-11-25T16:54:57.421554",
-          "time_finished": "2025-11-25T16:54:58.422687",
-          "duration_seconds": 1.001133
-        },
-        {
-          "accession": "4142532800033NMCH",
-          "procedure": "US EXTREMITY VEINS LEFT",
-          "patient_class": "Inpatient",
-          "study_type": "US Other",
-          "rvu": 0.68,
-          "time_performed": "2025-11-25T16:57:49.925908",
-          "time_finished": "2025-11-25T16:57:56.989307",
-          "duration_seconds": 7.063399
-        },
-        {
-          "accession": "AHS27172699LLHS",
-          "procedure": "XR WRIST 3 OR MORE VIEWS",
-          "patient_class": "Outpatient",
-          "study_type": "XR MSK",
-          "rvu": 0.3,
-          "time_performed": "2025-11-25T17:00:26.218370",
-          "time_finished": "2025-11-25T17:01:05.515925",
-          "duration_seconds": 39.297555
-        },
-        {
-          "accession": "251124101139MH",
+          "accession": "SAH2511280009249CST",
           "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
-          "patient_class": "Outpatient",
+          "patient_class": "STAT Emergency",
           "study_type": "XR MSK",
           "rvu": 0.3,
-          "time_performed": "2025-11-25T17:03:05.234416",
-          "time_finished": "2025-11-25T17:03:14.292422",
-          "duration_seconds": 9.058006
+          "time_performed": "2025-11-28T20:02:38.496318",
+          "time_finished": "2025-11-28T20:02:39.497519",
+          "duration_seconds": 1.001201
         },
         {
-          "accession": "A01266354DU",
-          "procedure": "XR KNEE 3 VIEWS",
-          "patient_class": "Outpatient",
+          "accession": "V003255900WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:02:47.614615",
+          "time_finished": "2025-11-28T20:03:11.794863",
+          "duration_seconds": 24.180248
+        },
+        {
+          "accession": "315112220251128MMC",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T20:03:37.317209",
+          "time_finished": "2025-11-28T20:05:55.608725",
+          "duration_seconds": 138.291516
+        },
+        {
+          "accession": "X002064994WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:06:12.968263",
+          "time_finished": "2025-11-28T20:07:06.396486",
+          "duration_seconds": 53.428223
+        },
+        {
+          "accession": "X002064995WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:07:07.403275",
+          "time_finished": "2025-11-28T20:07:29.767551",
+          "duration_seconds": 22.364276
+        },
+        {
+          "accession": "324CT25044430ELP, 324CT25044431ELP, 324CT25044432ELP",
+          "procedure": "Multiple CT (3 studies)",
+          "patient_class": "Stroke Emergency",
+          "study_type": "Multiple CT",
+          "rvu": 3.55,
+          "time_performed": "2025-11-28T20:07:55.567733",
+          "time_finished": "2025-11-28T20:10:27.876159",
+          "duration_seconds": 152.308426,
+          "is_multi_accession": true,
+          "accession_count": 3,
+          "individual_procedures": [
+            "CT HEAD ANGIOGRAPHY WITH IV CONTRAST",
+            "CT HEAD PERFUSION WITH IV CONTRAST",
+            "CT NECK ANGIOGRAPHY WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "V003255904WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:10:44.394755",
+          "time_finished": "2025-11-28T20:10:45.404270",
+          "duration_seconds": 1.009515
+        },
+        {
+          "accession": "62-CT-25-033290DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Stroke Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:12:43.957297",
+          "time_finished": "2025-11-28T20:13:08.168618",
+          "duration_seconds": 24.211321
+        },
+        {
+          "accession": "14832330000100PM",
+          "procedure": "XR RIBS RIGHT WITH CHEST",
+          "patient_class": "STAT Emergency",
           "study_type": "XR MSK",
           "rvu": 0.3,
-          "time_performed": "2025-11-25T17:03:25.473348",
-          "time_finished": "2025-11-25T17:03:37.540206",
-          "duration_seconds": 12.066858
+          "time_performed": "2025-11-28T20:13:26.207717",
+          "time_finished": "2025-11-28T20:13:27.222682",
+          "duration_seconds": 1.014965
         },
         {
-          "accession": "AHS27178000LLHS",
-          "procedure": "XR HIP 2 OR MORE VIEWS RIGHT WITH PELVIS",
-          "patient_class": "Outpatient",
+          "accession": "62-XR-25-056014DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:15:06.234422",
+          "time_finished": "2025-11-28T20:15:11.283696",
+          "duration_seconds": 5.049274
+        },
+        {
+          "accession": "A0000098464GR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:15:31.388698",
+          "time_finished": "2025-11-28T20:16:06.727770",
+          "duration_seconds": 35.339072
+        },
+        {
+          "accession": "IH2025001110577IC",
+          "procedure": "XR FOOT 3 OR MORE VIEWS",
+          "patient_class": "STAT Emergency",
           "study_type": "XR MSK",
           "rvu": 0.3,
-          "time_performed": "2025-11-25T17:04:02.810001",
-          "time_finished": "2025-11-25T17:04:09.867476",
-          "duration_seconds": 7.057475
-        }
-      ],
-      "effective_shift_start": "2025-11-25T16:53:52.057257",
-      "projected_shift_end": "2025-11-26T01:53:52.057257"
-    },
-    {
-      "shift_start": "2025-11-25T22:01:02.102909",
-      "shift_end": "2025-11-25T22:13:21.412658",
-      "records": [
-        {
-          "accession": "AHS27208946LLHS",
-          "procedure": "MR THORACIC SPINE WITHOUT IV CONTRAST",
-          "patient_class": "Unknown",
-          "study_type": "MRI Other",
-          "rvu": 1.75,
-          "time_performed": "2025-11-25T22:06:49.960492",
-          "time_finished": "2025-11-25T22:07:19.240435",
-          "duration_seconds": 29.279943
+          "time_performed": "2025-11-28T20:19:15.764292",
+          "time_finished": "2025-11-28T20:20:00.135375",
+          "duration_seconds": 44.371083
         },
         {
-          "accession": "AHS27208945LLHS",
-          "procedure": "MR CERVICAL SPINE WITHOUT IV CONTRAST",
-          "patient_class": "Unknown",
-          "study_type": "MRI Other",
-          "rvu": 1.75,
-          "time_performed": "2025-11-25T22:06:49.961336",
-          "time_finished": "2025-11-25T22:07:19.240435",
-          "duration_seconds": 29.279099
+          "accession": "IH2025001110578IC",
+          "procedure": "XR FOOT 3 OR MORE VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:20:08.920888",
+          "time_finished": "2025-11-28T20:20:19.014446",
+          "duration_seconds": 10.093558
         },
         {
-          "accession": "AHS27208947LLHS",
-          "procedure": "MR LUMBAR SPINE WITHOUT IV CONTRAST",
-          "patient_class": "Unknown",
-          "study_type": "MRI Other",
-          "rvu": 1.75,
-          "time_performed": "2025-11-25T22:06:49.962252",
-          "time_finished": "2025-11-25T22:07:19.240435",
-          "duration_seconds": 29.278183
+          "accession": "390CT25016594ELP",
+          "procedure": "CT MAXILLOFACIAL WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Face",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T20:20:42.719288",
+          "time_finished": "2025-11-28T20:22:06.327263",
+          "duration_seconds": 83.607975
         },
         {
-          "accession": "AHS27211442LLHS",
-          "procedure": "CT CHEST WITHOUT IV CONTRAST",
-          "patient_class": "Unknown",
+          "accession": "390CT25016593ELP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:22:22.895474",
+          "time_finished": "2025-11-28T20:22:57.182022",
+          "duration_seconds": 34.286548
+        },
+        {
+          "accession": "390XR25034880ELP",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:23:10.600901",
+          "time_finished": "2025-11-28T20:23:28.775235",
+          "duration_seconds": 18.174334
+        },
+        {
+          "accession": "SAH2511280009498CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:23:44.147026",
+          "time_finished": "2025-11-28T20:24:24.506401",
+          "duration_seconds": 40.359375
+        },
+        {
+          "accession": "00418XR250020705ABZ",
+          "procedure": "XR FOOT 1-2 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:24:37.357946",
+          "time_finished": "2025-11-28T20:25:53.118519",
+          "duration_seconds": 75.760573
+        },
+        {
+          "accession": "SST2511280009138CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:26:09.074899",
+          "time_finished": "2025-11-28T20:26:32.242806",
+          "duration_seconds": 23.167907
+        },
+        {
+          "accession": "SSH2511280009469CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Stroke Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:26:47.864161",
+          "time_finished": "2025-11-28T20:29:01.126625",
+          "duration_seconds": 133.262464
+        },
+        {
+          "accession": "V003255906WTX",
+          "procedure": "XR KNEE 3 VIEWS LEFT",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:32:14.625693",
+          "time_finished": "2025-11-28T20:32:26.727541",
+          "duration_seconds": 12.101848
+        },
+        {
+          "accession": "500100820251128CCH",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:32:45.746463",
+          "time_finished": "2025-11-28T20:33:08.922145",
+          "duration_seconds": 23.175682
+        },
+        {
+          "accession": "500100720251128CCH",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:33:20.351523",
+          "time_finished": "2025-11-28T20:34:03.892352",
+          "duration_seconds": 43.540829
+        },
+        {
+          "accession": "A000477587CVR",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "Stroke Emergency",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-28T20:35:00.076872",
+          "time_finished": "2025-11-28T20:36:17.749441",
+          "duration_seconds": 77.672569
+        },
+        {
+          "accession": "62-XR-25-056010DL",
+          "procedure": "XR TIBIA FIBULA RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:36:36.746452",
+          "time_finished": "2025-11-28T20:37:24.320466",
+          "duration_seconds": 47.574014
+        },
+        {
+          "accession": "62-XR-25-056011DL",
+          "procedure": "XR HIP 2 OR MORE VIEWS BILATERAL",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:37:37.153276",
+          "time_finished": "2025-11-28T20:38:18.502212",
+          "duration_seconds": 41.348936
+        },
+        {
+          "accession": "62-XR-25-056012DL",
+          "procedure": "XR FEMUR RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:38:30.155554",
+          "time_finished": "2025-11-28T20:38:53.418347",
+          "duration_seconds": 23.262793
+        },
+        {
+          "accession": "62-CT-25-033282DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:39:22.537237",
+          "time_finished": "2025-11-28T20:40:03.887708",
+          "duration_seconds": 41.350471
+        },
+        {
+          "accession": "AHS27250904SH1",
+          "procedure": "XR WRIST 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:40:25.601556",
+          "time_finished": "2025-11-28T20:41:12.013786",
+          "duration_seconds": 46.41223
+        },
+        {
+          "accession": "AHS27250905SH1",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:41:21.452656",
+          "time_finished": "2025-11-28T20:41:41.667445",
+          "duration_seconds": 20.214789
+        },
+        {
+          "accession": "X002064999WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:41:54.203476",
+          "time_finished": "2025-11-28T20:42:18.428819",
+          "duration_seconds": 24.225343
+        },
+        {
+          "accession": "AHS27250881LLHS",
+          "procedure": "XR KNEE 3 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:42:30.835526",
+          "time_finished": "2025-11-28T20:43:59.754020",
+          "duration_seconds": 88.918494
+        },
+        {
+          "accession": "V003255909WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:44:09.824533",
+          "time_finished": "2025-11-28T20:44:17.873305",
+          "duration_seconds": 8.048772
+        },
+        {
+          "accession": "SST2511280009510CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:44:32.925276",
+          "time_finished": "2025-11-28T20:44:55.132401",
+          "duration_seconds": 22.207125
+        },
+        {
+          "accession": "AHS27250873LLHS",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:45:09.539769",
+          "time_finished": "2025-11-28T20:45:38.894685",
+          "duration_seconds": 29.354916
+        },
+        {
+          "accession": "X002064998WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:45:59.648631",
+          "time_finished": "2025-11-28T20:46:19.877323",
+          "duration_seconds": 20.228692
+        },
+        {
+          "accession": "AHS27250710LLHS",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T20:46:37.151124",
+          "time_finished": "2025-11-28T20:47:14.520978",
+          "duration_seconds": 37.369854
+        },
+        {
+          "accession": "AHS27250711LLHS",
+          "procedure": "CT MAXILLOFACIAL WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Face",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T20:48:38.798842",
+          "time_finished": "2025-11-28T20:50:17.793452",
+          "duration_seconds": 98.99461
+        },
+        {
+          "accession": "00414XR250062280ABZ1",
+          "procedure": "XR CERVICAL SPINE 2-3 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T20:54:07.844313",
+          "time_finished": "2025-11-28T20:54:46.154724",
+          "duration_seconds": 38.310411
+        },
+        {
+          "accession": "EM54338232E",
+          "procedure": "CT MAXILLOFACIAL WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Face",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T20:55:05.640523",
+          "time_finished": "2025-11-28T20:55:58.070471",
+          "duration_seconds": 52.429948
+        },
+        {
+          "accession": "EM54338231E",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
           "study_type": "CT Chest",
           "rvu": 1.0,
-          "time_performed": "2025-11-25T22:07:38.524795",
-          "time_finished": "2025-11-25T22:07:47.606583",
-          "duration_seconds": 9.081788
+          "time_performed": "2025-11-28T20:56:14.245212",
+          "time_finished": "2025-11-28T20:59:05.626300",
+          "duration_seconds": 171.381088
+        },
+        {
+          "accession": "A000477527CVR",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T20:59:16.609273",
+          "time_finished": "2025-11-28T21:01:29.038114",
+          "duration_seconds": 132.428841
+        },
+        {
+          "accession": "V003255907WTX",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:02:33.102064",
+          "time_finished": "2025-11-28T21:03:15.559715",
+          "duration_seconds": 42.457651
+        },
+        {
+          "accession": "V003255908WTX",
+          "procedure": "XR FOOT 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:03:27.235631",
+          "time_finished": "2025-11-28T21:04:05.573927",
+          "duration_seconds": 38.338296
+        },
+        {
+          "accession": "62-XR-25-055986DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:04:25.410277",
+          "time_finished": "2025-11-28T21:05:20.900879",
+          "duration_seconds": 55.490602
+        },
+        {
+          "accession": "AHS27251040LLHS",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:05:38.671367",
+          "time_finished": "2025-11-28T21:05:55.887193",
+          "duration_seconds": 17.215826
+        },
+        {
+          "accession": "A000477589CVR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:06:07.721289",
+          "time_finished": "2025-11-28T21:06:45.140468",
+          "duration_seconds": 37.419179
+        },
+        {
+          "accession": "62-XR-25-056021DL",
+          "procedure": "XR HUMERUS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:07:10.628678",
+          "time_finished": "2025-11-28T21:07:15.670444",
+          "duration_seconds": 5.041766
+        },
+        {
+          "accession": "62-CT-25-033285DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T21:07:31.746381",
+          "time_finished": "2025-11-28T21:09:08.813324",
+          "duration_seconds": 97.066943
+        },
+        {
+          "accession": "62-CT-25-033286DL",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T21:09:26.253888",
+          "time_finished": "2025-11-28T21:11:04.185577",
+          "duration_seconds": 97.931689
+        },
+        {
+          "accession": "62-XR-25-056023DL",
+          "procedure": "XR HAND 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:11:17.450969",
+          "time_finished": "2025-11-28T21:11:40.828807",
+          "duration_seconds": 23.377838
+        },
+        {
+          "accession": "62-XR-25-056022DL",
+          "procedure": "XR FOREARM 2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:11:55.388464",
+          "time_finished": "2025-11-28T21:12:19.690159",
+          "duration_seconds": 24.301695
+        },
+        {
+          "accession": "440XR25029821ELP",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:12:36.784948",
+          "time_finished": "2025-11-28T21:13:28.366646",
+          "duration_seconds": 51.581698
+        },
+        {
+          "accession": "56731188BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:13:48.088139",
+          "time_finished": "2025-11-28T21:14:13.360835",
+          "duration_seconds": 25.272696
+        },
+        {
+          "accession": "56724101BP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T21:14:35.786236",
+          "time_finished": "2025-11-28T21:18:45.819986",
+          "duration_seconds": 250.03375
+        },
+        {
+          "accession": "X002065003WTX",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T21:21:00.964518",
+          "time_finished": "2025-11-28T21:22:26.861239",
+          "duration_seconds": 85.896721
+        },
+        {
+          "accession": "56731258BP",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:22:41.823909",
+          "time_finished": "2025-11-28T21:22:55.926435",
+          "duration_seconds": 14.102526
+        },
+        {
+          "accession": "SSH2511280009908CST",
+          "procedure": "CT PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T21:23:11.467038",
+          "time_finished": "2025-11-28T21:24:43.358199",
+          "duration_seconds": 91.891161
+        },
+        {
+          "accession": "62-XR-25-056020DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:25:13.173171",
+          "time_finished": "2025-11-28T21:25:16.210281",
+          "duration_seconds": 3.03711
+        },
+        {
+          "accession": "14832370000100PM",
+          "procedure": "XR FOREARM 2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:25:27.932081",
+          "time_finished": "2025-11-28T21:26:25.524126",
+          "duration_seconds": 57.592045
+        },
+        {
+          "accession": "4602533200279NMCH",
+          "procedure": "XR FOOT 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:27:19.675219",
+          "time_finished": "2025-11-28T21:28:08.141996",
+          "duration_seconds": 48.466777
+        },
+        {
+          "accession": "56726010BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:28:23.989013",
+          "time_finished": "2025-11-28T21:28:26.010641",
+          "duration_seconds": 2.021628
+        },
+        {
+          "accession": "V003255914WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:28:42.849977",
+          "time_finished": "2025-11-28T21:29:02.990648",
+          "duration_seconds": 20.140671
+        },
+        {
+          "accession": "62-XR-25-056029DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:29:25.602597",
+          "time_finished": "2025-11-28T21:29:39.728174",
+          "duration_seconds": 14.125577
+        },
+        {
+          "accession": "A01268020DU",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:29:59.245684",
+          "time_finished": "2025-11-28T21:30:40.591173",
+          "duration_seconds": 41.345489
+        },
+        {
+          "accession": "62-XR-25-056028DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:31:26.741578",
+          "time_finished": "2025-11-28T21:31:29.757349",
+          "duration_seconds": 3.015771
+        },
+        {
+          "accession": "62-XR-25-056038DL",
+          "procedure": "XR THORACIC SPINE 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:31:42.150759",
+          "time_finished": "2025-11-28T21:31:54.282818",
+          "duration_seconds": 12.132059
+        },
+        {
+          "accession": "62-XR-25-056027DL",
+          "procedure": "XR TOE LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:32:07.868345",
+          "time_finished": "2025-11-28T21:32:15.939696",
+          "duration_seconds": 8.071351
+        },
+        {
+          "accession": "500101120251128CCH",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T21:32:36.880304",
+          "time_finished": "2025-11-28T21:34:23.753613",
+          "duration_seconds": 106.873309
+        },
+        {
+          "accession": "56729305BP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T21:34:43.145174",
+          "time_finished": "2025-11-28T21:36:42.229430",
+          "duration_seconds": 119.084256
+        },
+        {
+          "accession": "45634370003600CBMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:37:26.924441",
+          "time_finished": "2025-11-28T21:37:38.032937",
+          "duration_seconds": 11.108496
+        },
+        {
+          "accession": "EM54341427E",
+          "procedure": "XR FOREARM 2 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:37:50.685184",
+          "time_finished": "2025-11-28T21:37:53.706717",
+          "duration_seconds": 3.021533
+        },
+        {
+          "accession": "EM54341430E",
+          "procedure": "XR HAND 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:38:06.185801",
+          "time_finished": "2025-11-28T21:38:48.553591",
+          "duration_seconds": 42.36779
+        },
+        {
+          "accession": "V003255916WTX",
+          "procedure": "XR KNEE 3 VIEWS RIGHT",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:39:04.958289",
+          "time_finished": "2025-11-28T21:39:20.070791",
+          "duration_seconds": 15.112502
+        },
+        {
+          "accession": "62-XR-25-056033DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:39:39.095258",
+          "time_finished": "2025-11-28T21:39:40.111422",
+          "duration_seconds": 1.016164
+        },
+        {
+          "accession": "SSH2511280009827CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:39:50.619925",
+          "time_finished": "2025-11-28T21:39:57.666069",
+          "duration_seconds": 7.046144
+        },
+        {
+          "accession": "SSH2511280009830CST",
+          "procedure": "XR HAND 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Observation",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:40:10.101749",
+          "time_finished": "2025-11-28T21:42:54.787377",
+          "duration_seconds": 164.685628
+        },
+        {
+          "accession": "SSH2511280009833CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:43:09.469773",
+          "time_finished": "2025-11-28T21:43:41.808964",
+          "duration_seconds": 32.339191
+        },
+        {
+          "accession": "V003255921WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:44:01.715562",
+          "time_finished": "2025-11-28T21:44:12.879152",
+          "duration_seconds": 11.16359
+        },
+        {
+          "accession": "56729446BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:44:13.885933",
+          "time_finished": "2025-11-28T21:44:26.356918",
+          "duration_seconds": 12.470985
+        },
+        {
+          "accession": "56731333BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:44:42.432507",
+          "time_finished": "2025-11-28T21:44:58.573213",
+          "duration_seconds": 16.140706
+        },
+        {
+          "accession": "V003255934WTX, V003255935WTX",
+          "procedure": "Multiple CT (2 studies)",
+          "patient_class": "Stroke Pre-Admit",
+          "study_type": "Multiple CT",
+          "rvu": 2.65,
+          "time_performed": "2025-11-28T21:45:14.717031",
+          "time_finished": "2025-11-28T21:47:15.850040",
+          "duration_seconds": 121.133009,
+          "is_multi_accession": true,
+          "accession_count": 2,
+          "individual_procedures": [
+            "CT HEAD ANGIOGRAPHY WITH IV CONTRAST",
+            "CT NECK ANGIOGRAPHY WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "513392020251128CRN",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "Trauma Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:47:32.595414",
+          "time_finished": "2025-11-28T21:47:53.785434",
+          "duration_seconds": 21.19002
+        },
+        {
+          "accession": "AHS27251337LLHS",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:48:08.786334",
+          "time_finished": "2025-11-28T21:48:23.937563",
+          "duration_seconds": 15.151229
+        },
+        {
+          "accession": "G251128171924898",
+          "procedure": "XR FOOT 1-2 VIEWS RIGHT",
+          "patient_class": "STAT Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:48:38.238051",
+          "time_finished": "2025-11-28T21:48:56.445190",
+          "duration_seconds": 18.207139
+        },
+        {
+          "accession": "169476920251128OHH",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:49:10.045069",
+          "time_finished": "2025-11-28T21:49:26.173483",
+          "duration_seconds": 16.128414
+        },
+        {
+          "accession": "2025112803735DR",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T21:49:46.993656",
+          "time_finished": "2025-11-28T21:50:48.484001",
+          "duration_seconds": 61.490345
+        },
+        {
+          "accession": "62-XR-25-056037DL",
+          "procedure": "XR FOOT 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:51:05.880903",
+          "time_finished": "2025-11-28T21:51:24.039104",
+          "duration_seconds": 18.158201
+        },
+        {
+          "accession": "134142720251128WH",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:51:40.858725",
+          "time_finished": "2025-11-28T21:51:51.959110",
+          "duration_seconds": 11.100385
+        },
+        {
+          "accession": "X002065010WTX",
+          "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:52:06.993514",
+          "time_finished": "2025-11-28T21:52:17.095097",
+          "duration_seconds": 10.101583
+        },
+        {
+          "accession": "02CT250012727TCR",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T21:52:32.622510",
+          "time_finished": "2025-11-28T21:53:51.181255",
+          "duration_seconds": 78.558745
+        },
+        {
+          "accession": "02XR250018649TCR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:54:08.659381",
+          "time_finished": "2025-11-28T21:54:09.662204",
+          "duration_seconds": 1.002823
+        },
+        {
+          "accession": "SAH2511280010211CST",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:54:18.212234",
+          "time_finished": "2025-11-28T21:54:27.305008",
+          "duration_seconds": 9.092774
+        },
+        {
+          "accession": "56731284BP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T21:54:43.806577",
+          "time_finished": "2025-11-28T21:58:45.926984",
+          "duration_seconds": 242.120407
+        },
+        {
+          "accession": "X002065012WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T21:59:32.690300",
+          "time_finished": "2025-11-28T22:00:04.982738",
+          "duration_seconds": 32.292438
+        },
+        {
+          "accession": "00416XR250039221ABZ3",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:00:19.932365",
+          "time_finished": "2025-11-28T22:00:48.167067",
+          "duration_seconds": 28.234702
+        },
+        {
+          "accession": "00416CT250034896ABZ3",
+          "procedure": "CT NECK WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Neck",
+          "rvu": 1.5,
+          "time_performed": "2025-11-28T22:01:03.024632",
+          "time_finished": "2025-11-28T22:02:36.074080",
+          "duration_seconds": 93.049448
+        },
+        {
+          "accession": "SBH2511280010149CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:03:13.801996",
+          "time_finished": "2025-11-28T22:03:46.091268",
+          "duration_seconds": 32.289272
+        },
+        {
+          "accession": "A0000098468GR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:03:57.725626",
+          "time_finished": "2025-11-28T22:04:14.872170",
+          "duration_seconds": 17.146544
+        },
+        {
+          "accession": "AHS27251211SH1",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:04:28.424536",
+          "time_finished": "2025-11-28T22:04:30.449444",
+          "duration_seconds": 2.024908
+        },
+        {
+          "accession": "RAD20251128-0044PRMC",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:04:47.066432",
+          "time_finished": "2025-11-28T22:04:49.084685",
+          "duration_seconds": 2.018253
+        },
+        {
+          "accession": "EM54341449E",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:04:59.949367",
+          "time_finished": "2025-11-28T22:06:02.472694",
+          "duration_seconds": 62.523327
+        },
+        {
+          "accession": "205707420251128OK",
+          "procedure": "XR FOOT 3 OR MORE VIEWS LEFT",
+          "patient_class": "Trauma Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:06:22.918543",
+          "time_finished": "2025-11-28T22:06:50.137884",
+          "duration_seconds": 27.219341
+        },
+        {
+          "accession": "A000477590CVR",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:07:16.996536",
+          "time_finished": "2025-11-28T22:10:15.449750",
+          "duration_seconds": 178.453214
+        },
+        {
+          "accession": "62-CT-25-033287DL, 62-CT-25-033288DL",
+          "procedure": "Multiple CT (2 studies)",
+          "patient_class": "STAT Emergency",
+          "study_type": "Multiple CT",
+          "rvu": 2.6799999999999997,
+          "time_performed": "2025-11-28T22:10:48.312233",
+          "time_finished": "2025-11-28T22:14:02.048314",
+          "duration_seconds": 193.736081,
+          "is_multi_accession": true,
+          "accession_count": 2,
+          "individual_procedures": [
+            "CT CHEST WITH IV CONTRAST",
+            "CT ABDOMEN PELVIS WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "SAH2511280010221CST",
+          "procedure": "XR KNEE 1-2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:14:20.630470",
+          "time_finished": "2025-11-28T22:14:41.799101",
+          "duration_seconds": 21.168631
+        },
+        {
+          "accession": "14832300001300PM",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T22:17:47.720715",
+          "time_finished": "2025-11-28T22:19:35.696050",
+          "duration_seconds": 107.975335
+        },
+        {
+          "accession": "AHS27251346LLHS",
+          "procedure": "CT ABDOMEN PELVIS ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:19:48.303535",
+          "time_finished": "2025-11-28T22:24:01.497422",
+          "duration_seconds": 253.193887
+        },
+        {
+          "accession": "56731343BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T22:24:25.021794",
+          "time_finished": "2025-11-28T22:25:36.543880",
+          "duration_seconds": 71.522086
+        },
+        {
+          "accession": "56731344BP",
+          "procedure": "CT CHEST ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT CAP",
+          "rvu": 3.06,
+          "time_performed": "2025-11-28T22:25:55.025249",
+          "time_finished": "2025-11-28T22:27:34.911271",
+          "duration_seconds": 99.886022
+        },
+        {
+          "accession": "56729453BP, 56729451BP, 56729452BP",
+          "procedure": "Multiple XR (3 studies)",
+          "patient_class": "STAT Emergency",
+          "study_type": "Multiple XR",
+          "rvu": 0.8999999999999999,
+          "time_performed": "2025-11-28T22:28:47.079647",
+          "time_finished": "2025-11-28T22:29:13.308833",
+          "duration_seconds": 26.229186,
+          "is_multi_accession": true,
+          "accession_count": 3,
+          "individual_procedures": [
+            "XR FOOT 3 OR MORE VIEWS RIGHT",
+            "XR ANKLE 3 OR MORE VIEWS RIGHT",
+            "XR TIBIA FIBULA 2 VIEWS RIGHT"
+          ]
+        },
+        {
+          "accession": "G251128200036037",
+          "procedure": "XR KNEE 1-2 VIEWS",
+          "patient_class": "STAT Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:29:27.707536",
+          "time_finished": "2025-11-28T22:29:34.761770",
+          "duration_seconds": 7.054234
+        },
+        {
+          "accession": "62-CT-25-033299DL",
+          "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T22:29:57.514762",
+          "time_finished": "2025-11-28T22:30:45.870478",
+          "duration_seconds": 48.355716
+        },
+        {
+          "accession": "56722898BP",
+          "procedure": "XR CHEST 1-VIEW CENTRAL LINE OR TUBE CHECK",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:31:01.456151",
+          "time_finished": "2025-11-28T22:31:45.879727",
+          "duration_seconds": 44.423576
+        },
+        {
+          "accession": "56731043BP",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T22:32:04.608480",
+          "time_finished": "2025-11-28T22:35:04.448213",
+          "duration_seconds": 179.839733
+        },
+        {
+          "accession": "62-XR-25-056040DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:35:24.470838",
+          "time_finished": "2025-11-28T22:35:45.681695",
+          "duration_seconds": 21.210857
+        },
+        {
+          "accession": "56727216BP",
+          "procedure": "CT CHEST ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT CAP",
+          "rvu": 3.06,
+          "time_performed": "2025-11-28T22:36:07.334188",
+          "time_finished": "2025-11-28T22:41:25.834168",
+          "duration_seconds": 318.49998
+        },
+        {
+          "accession": "AHS27251041SH1",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:41:51.351886",
+          "time_finished": "2025-11-28T22:43:52.428688",
+          "duration_seconds": 121.076802
+        },
+        {
+          "accession": "324CT25044445ELP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:44:14.621260",
+          "time_finished": "2025-11-28T22:46:29.844178",
+          "duration_seconds": 135.222918
+        },
+        {
+          "accession": "324CT25044434ELP",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T22:46:50.427774",
+          "time_finished": "2025-11-28T22:47:59.988500",
+          "duration_seconds": 69.560726
+        },
+        {
+          "accession": "SSH2511280010298CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T22:48:26.461345",
+          "time_finished": "2025-11-28T22:49:05.818620",
+          "duration_seconds": 39.357275
+        },
+        {
+          "accession": "56729439BP",
+          "procedure": "CT BRAIN PERFUSION CTA HEAD NECK WITH IV CONTRAST",
+          "patient_class": "Stroke Inpatient",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-28T22:49:26.710751",
+          "time_finished": "2025-11-28T22:53:17.717935",
+          "duration_seconds": 231.007184
+        },
+        {
+          "accession": "A01268029JDU",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:53:35.392675",
+          "time_finished": "2025-11-28T22:54:12.690789",
+          "duration_seconds": 37.298114
+        },
+        {
+          "accession": "A0000254150PPGH",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:54:28.529669",
+          "time_finished": "2025-11-28T22:55:00.797140",
+          "duration_seconds": 32.267471
+        },
+        {
+          "accession": "62-CT-25-033303DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Stroke Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T22:55:24.692854",
+          "time_finished": "2025-11-29T01:33:14.742981",
+          "duration_seconds": 38.575927
+        },
+        {
+          "accession": "V003255930WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:56:20.949694",
+          "time_finished": "2025-11-28T22:56:21.963874",
+          "duration_seconds": 1.01418
+        },
+        {
+          "accession": "V003255943WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:56:32.540863",
+          "time_finished": "2025-11-28T22:57:42.158100",
+          "duration_seconds": 69.617237
+        },
+        {
+          "accession": "V003255936WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:57:59.818612",
+          "time_finished": "2025-11-28T22:58:00.990783",
+          "duration_seconds": 1.172171
+        },
+        {
+          "accession": "V003255937WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:58:23.900540",
+          "time_finished": "2025-11-28T22:58:32.995438",
+          "duration_seconds": 9.094898
+        },
+        {
+          "accession": "00412XR250021129ABZ4",
+          "procedure": "XR TOES 2 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:58:50.914227",
+          "time_finished": "2025-11-28T22:58:58.972706",
+          "duration_seconds": 8.058479
+        },
+        {
+          "accession": "62-XR-25-056044DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:59:18.654039",
+          "time_finished": "2025-11-28T22:59:27.740340",
+          "duration_seconds": 9.086301
+        },
+        {
+          "accession": "SKM2511280010534CST",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T22:59:43.294174",
+          "time_finished": "2025-11-28T23:00:23.678996",
+          "duration_seconds": 40.384822
+        },
+        {
+          "accession": "56726005BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:00:41.425413",
+          "time_finished": "2025-11-28T23:01:01.570662",
+          "duration_seconds": 20.145249
+        },
+        {
+          "accession": "4502533200152NMCH",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:01:18.663726",
+          "time_finished": "2025-11-28T23:01:42.925601",
+          "duration_seconds": 24.261875
+        },
+        {
+          "accession": "1545404.001MR",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:02:04.422204",
+          "time_finished": "2025-11-28T23:02:22.563553",
+          "duration_seconds": 18.141349
+        },
+        {
+          "accession": "440CT25018444ELP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:02:46.645912",
+          "time_finished": "2025-11-28T23:03:09.840900",
+          "duration_seconds": 23.194988
+        },
+        {
+          "accession": "SST2511280010280CST",
+          "procedure": "XR RIBS UNILATERAL WITH CHEST",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:04:36.566920",
+          "time_finished": "2025-11-28T23:04:57.699914",
+          "duration_seconds": 21.132994
+        },
+        {
+          "accession": "V003255915WTX",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:05:10.174331",
+          "time_finished": "2025-11-28T23:05:30.339035",
+          "duration_seconds": 20.164704
+        },
+        {
+          "accession": "316669920251128CRE",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:05:45.935498",
+          "time_finished": "2025-11-28T23:06:04.041319",
+          "duration_seconds": 18.105821
+        },
+        {
+          "accession": "440CT25018443ELP, 440CT25018445ELP",
+          "procedure": "Multiple CT (2 studies)",
+          "patient_class": "STAT Emergency",
+          "study_type": "Multiple CT",
+          "rvu": 2.65,
+          "time_performed": "2025-11-28T23:06:22.683091",
+          "time_finished": "2025-11-28T23:08:51.988799",
+          "duration_seconds": 149.305708,
+          "is_multi_accession": true,
+          "accession_count": 2,
+          "individual_procedures": [
+            "CT NECK ANGIOGRAPHY WITH IV CONTRAST",
+            "CT HEAD ANGIOGRAPHY WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "56731381BP",
+          "procedure": "XR ELBOW 3 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:09:07.812718",
+          "time_finished": "2025-11-28T23:09:42.074792",
+          "duration_seconds": 34.262074
+        },
+        {
+          "accession": "324CT25044435ELP",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:10:11.833537",
+          "time_finished": "2025-11-28T23:13:51.243156",
+          "duration_seconds": 219.409619
+        },
+        {
+          "accession": "EM54342128E",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:14:31.436675",
+          "time_finished": "2025-11-28T23:15:27.087519",
+          "duration_seconds": 55.650844
+        },
+        {
+          "accession": "V003255754WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:15:47.542303",
+          "time_finished": "2025-11-28T23:16:52.119694",
+          "duration_seconds": 64.577391
+        },
+        {
+          "accession": "A01268041DU",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:17:18.767687",
+          "time_finished": "2025-11-28T23:18:17.406003",
+          "duration_seconds": 58.638316
+        },
+        {
+          "accession": "56731384BP",
+          "procedure": "XR HIP 1 VIEW LEFT WITH PELVIS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:18:34.123561",
+          "time_finished": "2025-11-28T23:19:23.498612",
+          "duration_seconds": 49.375051
+        },
+        {
+          "accession": "56731385BP",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:19:43.030994",
+          "time_finished": "2025-11-28T23:20:32.421378",
+          "duration_seconds": 49.390384
+        },
+        {
+          "accession": "56731386BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:20:55.923245",
+          "time_finished": "2025-11-28T23:21:38.329488",
+          "duration_seconds": 42.406243
+        },
+        {
+          "accession": "42XR250005524SVH",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:21:59.172599",
+          "time_finished": "2025-11-28T23:22:42.558196",
+          "duration_seconds": 43.385597
+        },
+        {
+          "accession": "42CT250004859SVH",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:23:10.267123",
+          "time_finished": "2025-11-28T23:23:56.662763",
+          "duration_seconds": 46.39564
+        },
+        {
+          "accession": "AHS27251559LLHS",
+          "procedure": "XR ELBOW 1-2 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:24:21.200575",
+          "time_finished": "2025-11-28T23:24:48.509002",
+          "duration_seconds": 27.308427
+        },
+        {
+          "accession": "62-XR-25-056046DL",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:25:09.326208",
+          "time_finished": "2025-11-28T23:25:19.437955",
+          "duration_seconds": 10.111747
+        },
+        {
+          "accession": "V003255957WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:25:41.240923",
+          "time_finished": "2025-11-28T23:25:42.399514",
+          "duration_seconds": 1.158591
+        },
+        {
+          "accession": "AHS27251562LLHS",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:25:57.862294",
+          "time_finished": "2025-11-28T23:26:12.949187",
+          "duration_seconds": 15.086893
+        },
+        {
+          "accession": "AHS27251547LLHS",
+          "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:26:41.351517",
+          "time_finished": "2025-11-28T23:29:04.524880",
+          "duration_seconds": 143.173363
+        },
+        {
+          "accession": "AHS27251546LLHS",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:29:28.039569",
+          "time_finished": "2025-11-28T23:30:44.794119",
+          "duration_seconds": 76.75455
+        },
+        {
+          "accession": "AHS27251545LLHS",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:30:56.354084",
+          "time_finished": "2025-11-28T23:31:55.897458",
+          "duration_seconds": 59.543374
+        },
+        {
+          "accession": "AHS27251560LLHS",
+          "procedure": "XR HIP 2 OR MORE VIEWS RIGHT WITH PELVIS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:32:10.217240",
+          "time_finished": "2025-11-28T23:33:21.885329",
+          "duration_seconds": 71.668089
+        },
+        {
+          "accession": "62-CT-25-033302DL",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T23:33:45.952571",
+          "time_finished": "2025-11-28T23:35:27.908960",
+          "duration_seconds": 101.956389
+        },
+        {
+          "accession": "324XR25063161ELP",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:35:47.615975",
+          "time_finished": "2025-11-28T23:36:27.946817",
+          "duration_seconds": 40.330842
+        },
+        {
+          "accession": "SST2511280010644CST",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T23:36:48.511026",
+          "time_finished": "2025-11-28T23:38:00.219359",
+          "duration_seconds": 71.708333
+        },
+        {
+          "accession": "56726071BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:38:15.775081",
+          "time_finished": "2025-11-28T23:39:04.185097",
+          "duration_seconds": 48.410016
+        },
+        {
+          "accession": "56724327BP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-28T23:39:24.990881",
+          "time_finished": "2025-11-28T23:40:33.460785",
+          "duration_seconds": 68.469904
+        },
+        {
+          "accession": "56727692BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:40:58.015955",
+          "time_finished": "2025-11-28T23:42:26.828439",
+          "duration_seconds": 88.812484
+        },
+        {
+          "accession": "56727693BP",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:42:50.183618",
+          "time_finished": "2025-11-28T23:43:20.416019",
+          "duration_seconds": 30.232401
+        },
+        {
+          "accession": "4602533200302NMCH",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:43:40.935778",
+          "time_finished": "2025-11-28T23:48:21.716455",
+          "duration_seconds": 280.780677
+        },
+        {
+          "accession": "56729523BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:49:00.493346",
+          "time_finished": "2025-11-28T23:50:07.142914",
+          "duration_seconds": 66.649568
+        },
+        {
+          "accession": "56729525BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:50:25.660166",
+          "time_finished": "2025-11-28T23:51:18.166796",
+          "duration_seconds": 52.50663
+        },
+        {
+          "accession": "56731395BP, 56727688BP",
+          "procedure": "Multiple CT (2 studies)",
+          "patient_class": "STAT Emergency",
+          "study_type": "Multiple CT",
+          "rvu": 4.4,
+          "time_performed": "2025-11-28T23:55:11.483805",
+          "time_finished": "2025-11-28T23:55:33.655538",
+          "duration_seconds": 22.171733,
+          "is_multi_accession": true,
+          "accession_count": 2,
+          "individual_procedures": [
+            "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+            "CT HEAD PERFUSION WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "56731394BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-28T23:56:08.235251",
+          "time_finished": "2025-11-28T23:56:17.326378",
+          "duration_seconds": 9.091127
+        },
+        {
+          "accession": "A01268025DU",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-28T23:56:47.101737",
+          "time_finished": "2025-11-28T23:58:05.974168",
+          "duration_seconds": 78.872431
+        },
+        {
+          "accession": "AHS27251767SH1",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:59:07.660945",
+          "time_finished": "2025-11-28T23:59:40.968628",
+          "duration_seconds": 33.307683
+        },
+        {
+          "accession": "4502533200177NMCH",
+          "procedure": "XR FOOT 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-28T23:59:58.080373",
+          "time_finished": "2025-11-29T00:00:37.626936",
+          "duration_seconds": 39.546563
+        },
+        {
+          "accession": "440CT25018450ELP",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T00:00:53.485312",
+          "time_finished": "2025-11-29T00:02:32.537966",
+          "duration_seconds": 99.052654
+        },
+        {
+          "accession": "ERD20251128-0015PRMC",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:03:38.459591",
+          "time_finished": "2025-11-29T00:03:49.545014",
+          "duration_seconds": 11.085423
+        },
+        {
+          "accession": "2025112804013DR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:04:08.517553",
+          "time_finished": "2025-11-29T00:04:18.598233",
+          "duration_seconds": 10.08068
+        },
+        {
+          "accession": "324XR25063163ELP",
+          "procedure": "XR FOOT 1-2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:04:39.667249",
+          "time_finished": "2025-11-29T00:04:53.775202",
+          "duration_seconds": 14.107953
+        },
+        {
+          "accession": "324XR25063172ELP",
+          "procedure": "XR FOOT 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:05:11.371279",
+          "time_finished": "2025-11-29T00:05:28.509096",
+          "duration_seconds": 17.137817
+        },
+        {
+          "accession": "324XR25063173ELP",
+          "procedure": "XR ANKLE 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:05:48.292986",
+          "time_finished": "2025-11-29T00:05:55.350086",
+          "duration_seconds": 7.0571
+        },
+        {
+          "accession": "324XR25063164ELP",
+          "procedure": "XR ANKLE 1-2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:06:10.213774",
+          "time_finished": "2025-11-29T00:06:40.521609",
+          "duration_seconds": 30.307835
+        },
+        {
+          "accession": "324XR25063171ELP",
+          "procedure": "XR KNEE 1-2 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:06:59.461648",
+          "time_finished": "2025-11-29T00:07:54.925235",
+          "duration_seconds": 55.463587
+        },
+        {
+          "accession": "A000477595CVR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:09:31.394392",
+          "time_finished": "2025-11-29T00:09:42.500000",
+          "duration_seconds": 11.105608
+        },
+        {
+          "accession": "A000477594CVR",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T00:10:05.918700",
+          "time_finished": "2025-11-29T00:10:55.314998",
+          "duration_seconds": 49.396298
+        },
+        {
+          "accession": "RAD20251128-0047PRMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:11:17.537042",
+          "time_finished": "2025-11-29T00:11:22.587491",
+          "duration_seconds": 5.050449
+        },
+        {
+          "accession": "V003255974WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:11:41.049089",
+          "time_finished": "2025-11-29T00:11:47.110847",
+          "duration_seconds": 6.061758
+        },
+        {
+          "accession": "56727737BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:12:07.698094",
+          "time_finished": "2025-11-29T00:12:37.961588",
+          "duration_seconds": 30.263494
+        },
+        {
+          "accession": "62-XR-25-056055DL",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:13:01.973573",
+          "time_finished": "2025-11-29T00:13:28.164310",
+          "duration_seconds": 26.190737
+        },
+        {
+          "accession": "X002065041WTX, X002065042WTX",
+          "procedure": "Multiple CTA (2 studies)",
+          "patient_class": "Emergency",
+          "study_type": "Multiple CTA",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T00:17:51.226085",
+          "time_finished": "2025-11-29T00:19:28.982044",
+          "duration_seconds": 97.755959,
+          "is_multi_accession": true,
+          "accession_count": 2,
+          "individual_procedures": [
+            "CT NECK ANGIOGRAPHY WITH IV CONTRAST",
+            "CT HEAD ANGIOGRAPHY WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "X002065043WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:19:29.162252",
+          "time_finished": "2025-11-29T00:19:43.274147",
+          "duration_seconds": 14.111895
+        },
+        {
+          "accession": "CT20251128-0028PRMC",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T00:20:07.510225",
+          "time_finished": "2025-11-29T00:20:55.728418",
+          "duration_seconds": 48.218193
+        },
+        {
+          "accession": "56731395BP",
+          "procedure": "Multiple CTA (1 studies)",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "Multiple CTA",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T00:21:15.376787",
+          "time_finished": "2025-11-29T00:46:04.574419",
+          "duration_seconds": 61.63256,
+          "is_multi_accession": true,
+          "accession_count": 1,
+          "individual_procedures": [
+            "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "X002065029WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:21:52.994274",
+          "time_finished": "2025-11-29T00:22:00.041481",
+          "duration_seconds": 7.047207
+        },
+        {
+          "accession": "X002065030WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:22:20.927509",
+          "time_finished": "2025-11-29T00:22:22.990596",
+          "duration_seconds": 2.063087
+        },
+        {
+          "accession": "390CT25016602ELP",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T00:22:46.065516",
+          "time_finished": "2025-11-29T00:24:39.140026",
+          "duration_seconds": 113.07451
+        },
+        {
+          "accession": "320CT25020400ELP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T00:25:10.181962",
+          "time_finished": "2025-11-29T00:25:13.291304",
+          "duration_seconds": 3.109342
+        },
+        {
+          "accession": "324XR25063176ELP",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:26:34.794547",
+          "time_finished": "2025-11-29T00:26:38.832179",
+          "duration_seconds": 4.037632
+        },
+        {
+          "accession": "56729576BP",
+          "procedure": "XR ANKLE 2 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:26:58.414309",
+          "time_finished": "2025-11-29T00:27:25.662800",
+          "duration_seconds": 27.248491
+        },
+        {
+          "accession": "AHS27251914SH1",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:27:47.159473",
+          "time_finished": "2025-11-29T00:28:00.248112",
+          "duration_seconds": 13.088639
+        },
+        {
+          "accession": "SKM2511280010900CST",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T00:28:24.188079",
+          "time_finished": "2025-11-29T00:28:43.350613",
+          "duration_seconds": 19.162534
+        },
+        {
+          "accession": "CT20251128-0029PRMC",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T00:29:45.307373",
+          "time_finished": "2025-11-29T00:53:54.298694",
+          "duration_seconds": 197.600688
+        },
+        {
+          "accession": "CT20251128-0031PRMC",
+          "procedure": "CT THORACIC SPINE WITHOUT IV CONTRAST",
+          "patient_class": "Trauma Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T00:30:21.079373",
+          "time_finished": "2025-11-29T00:30:50.294845",
+          "duration_seconds": 29.215472
+        },
+        {
+          "accession": "RAD20251128-0050PRMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:31:11.592850",
+          "time_finished": "2025-11-29T00:31:44.899257",
+          "duration_seconds": 33.306407
+        },
+        {
+          "accession": "SST2511280010121CST",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T00:33:22.771265",
+          "time_finished": "2025-11-29T00:36:35.557588",
+          "duration_seconds": 192.786323
+        },
+        {
+          "accession": "440XR25029825ELP",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:37:08.110403",
+          "time_finished": "2025-11-29T00:37:18.219632",
+          "duration_seconds": 10.109229
+        },
+        {
+          "accession": "324XR25063174ELP",
+          "procedure": "XR HAND 3 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:37:19.233459",
+          "time_finished": "2025-11-29T00:37:48.044549",
+          "duration_seconds": 28.81109
+        },
+        {
+          "accession": "320XR25030736ELP",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:38:08.877102",
+          "time_finished": "2025-11-29T00:38:27.072142",
+          "duration_seconds": 18.19504
+        },
+        {
+          "accession": "00414CT250070983ABZ1",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T00:38:59.055967",
+          "time_finished": "2025-11-29T00:39:40.541863",
+          "duration_seconds": 41.485896
+        },
+        {
+          "accession": "00414CT250070982ABZ1",
+          "procedure": "CT MAXILLOFACIAL WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Face",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T00:41:22.913998",
+          "time_finished": "2025-11-29T00:42:08.590093",
+          "duration_seconds": 45.676095
+        },
+        {
+          "accession": "V003255984WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:42:47.115315",
+          "time_finished": "2025-11-29T00:44:49.626802",
+          "duration_seconds": 122.511487
+        },
+        {
+          "accession": "V003255987WTX",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T00:46:29.857666",
+          "time_finished": "2025-11-29T00:48:18.929514",
+          "duration_seconds": 109.071848
+        },
+        {
+          "accession": "V003255988WTX",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T00:48:49.777090",
+          "time_finished": "2025-11-29T00:49:54.473781",
+          "duration_seconds": 64.696691
+        },
+        {
+          "accession": "X002065041WTX",
+          "procedure": "Multiple CTA (1 studies)",
+          "patient_class": "Trauma Emergency",
+          "study_type": "Multiple CTA",
+          "rvu": 1.75,
+          "time_performed": "2025-11-29T00:54:07.122734",
+          "time_finished": "2025-11-29T00:54:21.962395",
+          "duration_seconds": 14.839661,
+          "is_multi_accession": true,
+          "accession_count": 1,
+          "individual_procedures": [
+            "CT HEAD ANGIOGRAPHY WITH IV CONTRAST"
+          ]
+        },
+        {
+          "accession": "00410XR250013691ABZ2",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T00:54:40.169774",
+          "time_finished": "2025-11-29T00:57:22.132373",
+          "duration_seconds": 161.962599
+        },
+        {
+          "accession": "56726151BP",
+          "procedure": "XR CHEST 1-VIEW CENTRAL LINE OR TUBE CHECK",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:11:50.222960",
+          "time_finished": "2025-11-29T01:12:52.324808",
+          "duration_seconds": 62.101848
+        },
+        {
+          "accession": "SBH2511280010875CST",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T01:12:55.690498",
+          "time_finished": "2025-11-29T01:15:36.121999",
+          "duration_seconds": 160.431501
+        },
+        {
+          "accession": "00414XR250062309ABZ1",
+          "procedure": "XR ELBOW 3 VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:15:39.191859",
+          "time_finished": "2025-11-29T01:17:09.614459",
+          "duration_seconds": 90.4226
+        },
+        {
+          "accession": "324CT25044452ELP",
+          "procedure": "CT NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CTA Neck",
+          "rvu": 1.75,
+          "time_performed": "2025-11-29T01:17:13.042232",
+          "time_finished": "2025-11-29T01:18:43.293447",
+          "duration_seconds": 90.251215
+        },
+        {
+          "accession": "4102533200369NMCH",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T01:18:43.804212",
+          "time_finished": "2025-11-29T01:21:45.885149",
+          "duration_seconds": 182.080937
+        },
+        {
+          "accession": "00414XR250062316ABZ1",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:22:32.983510",
+          "time_finished": "2025-11-29T01:23:19.169355",
+          "duration_seconds": 46.185845
+        },
+        {
+          "accession": "00416CT250034927ABZ3",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T01:24:58.114606",
+          "time_finished": "2025-11-29T01:25:59.964580",
+          "duration_seconds": 61.849974
+        },
+        {
+          "accession": "56724393BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T01:26:00.474239",
+          "time_finished": "2025-11-29T01:28:51.628411",
+          "duration_seconds": 171.154172
+        },
+        {
+          "accession": "X002065046WTX",
+          "procedure": "XR KNEE 4 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:29:59.577307",
+          "time_finished": "2025-11-29T01:30:35.965589",
+          "duration_seconds": 36.388282
+        },
+        {
+          "accession": "14832470000700PM",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T01:30:39.409661",
+          "time_finished": "2025-11-29T01:32:20.817479",
+          "duration_seconds": 101.407818
+        },
+        {
+          "accession": "00414XR250062314ABZ1",
+          "procedure": "XR SACRUM COCCYX 2 OR MORE VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:33:17.326639",
+          "time_finished": "2025-11-29T01:34:11.205330",
+          "duration_seconds": 53.878691
+        },
+        {
+          "accession": "V003255990WTX",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T01:34:11.708587",
+          "time_finished": "2025-11-29T01:36:36.273324",
+          "duration_seconds": 144.564737
+        },
+        {
+          "accession": "56724515BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST STROKE",
+          "patient_class": "Stroke Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T01:37:56.350286",
+          "time_finished": "2025-11-29T01:38:45.591421",
+          "duration_seconds": 49.241135
+        },
+        {
+          "accession": "56727834BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST STROKE",
+          "patient_class": "Stroke Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T01:40:20.302167",
+          "time_finished": "2025-11-29T01:43:17.309190",
+          "duration_seconds": 177.007023
+        },
+        {
+          "accession": "62-CT-25-033306DL",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T01:43:21.129611",
+          "time_finished": "2025-11-29T01:48:25.089351",
+          "duration_seconds": 303.95974
+        },
+        {
+          "accession": "56729627BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T01:48:51.912878",
+          "time_finished": "2025-11-29T01:49:23.056110",
+          "duration_seconds": 31.143232
+        },
+        {
+          "accession": "56729628BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T01:49:29.987233",
+          "time_finished": "2025-11-29T01:50:23.777464",
+          "duration_seconds": 53.790231
+        },
+        {
+          "accession": "62-CT-25-033308DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T01:50:26.642902",
+          "time_finished": "2025-11-29T01:51:44.775494",
+          "duration_seconds": 78.132592
+        },
+        {
+          "accession": "02CT250012733TCR",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "Stroke Emergency",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T01:52:16.702969",
+          "time_finished": "2025-11-29T01:54:16.428292",
+          "duration_seconds": 119.725323
+        },
+        {
+          "accession": "02CT250012734TCR",
+          "procedure": "CT CHEST WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T01:56:09.781259",
+          "time_finished": "2025-11-29T01:57:45.618664",
+          "duration_seconds": 95.837405
+        },
+        {
+          "accession": "02CT250012730TCR",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T01:57:46.134405",
+          "time_finished": "2025-11-29T02:00:11.458119",
+          "duration_seconds": 145.323714
+        },
+        {
+          "accession": "56729361BP",
+          "procedure": "CT CHEST ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T02:00:11.974074",
+          "time_finished": "2025-11-29T02:01:07.454143",
+          "duration_seconds": 55.480069
+        },
+        {
+          "accession": "316670120251128CRE",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T02:01:07.958236",
+          "time_finished": "2025-11-29T02:04:22.204570",
+          "duration_seconds": 194.246334
+        },
+        {
+          "accession": "00414XR250062319ABZ1",
+          "procedure": "XR NECK SOFT TISSUE",
+          "patient_class": "Emergency",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:05:00.518513",
+          "time_finished": "2025-11-29T02:06:01.125946",
+          "duration_seconds": 60.607433
+        },
+        {
+          "accession": "4002533201384NMCH",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "Inpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T02:06:02.162579",
+          "time_finished": "2025-11-29T02:09:56.724740",
+          "duration_seconds": 234.562161
+        },
+        {
+          "accession": "V003255995WTX",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "Inpatient",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:10:50.341019",
+          "time_finished": "2025-11-29T02:11:52.940537",
+          "duration_seconds": 62.599518
+        },
+        {
+          "accession": "56727765BP",
+          "procedure": "CT CHEST ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "Emergency",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T02:11:56.178110",
+          "time_finished": "2025-11-29T02:14:43.858176",
+          "duration_seconds": 167.680066
+        },
+        {
+          "accession": "SW0000523216SW",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "Emergency",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T02:17:26.458573",
+          "time_finished": "2025-11-29T02:21:13.009973",
+          "duration_seconds": 226.5514
+        },
+        {
+          "accession": "56727801BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "Emergency",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:21:14.021092",
+          "time_finished": "2025-11-29T02:21:53.486354",
+          "duration_seconds": 39.465262
+        },
+        {
+          "accession": "00416XR250039239ABZ3",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "Inpatient",
+          "study_type": "XR Other",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:26:51.447520",
+          "time_finished": "2025-11-29T02:28:00.821559",
+          "duration_seconds": 69.374039
+        },
+        {
+          "accession": "56727877BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST STROKE",
+          "patient_class": "Emergency",
+          "study_type": "CT Other",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T02:28:01.834905",
+          "time_finished": "2025-11-29T02:28:55.867048",
+          "duration_seconds": 54.032143
+        },
+        {
+          "accession": "56729647BP",
+          "procedure": "XR HAND 3 OR MORE VIEWS RIGHT",
+          "patient_class": "Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:43:25.622988",
+          "time_finished": "2025-11-29T02:44:14.808571",
+          "duration_seconds": 49.185583
+        },
+        {
+          "accession": "56727752BP",
+          "procedure": "CT CHEST ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "Inpatient",
+          "study_type": "CT CAP",
+          "rvu": 3.06,
+          "time_performed": "2025-11-29T02:44:41.257488",
+          "time_finished": "2025-11-29T02:46:21.232796",
+          "duration_seconds": 99.975308
+        },
+        {
+          "accession": "ECT20251129-0002PRMC",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST STROKE",
+          "patient_class": "Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T02:46:39.689138",
+          "time_finished": "2025-11-29T02:47:13.158021",
+          "duration_seconds": 33.468883
+        },
+        {
+          "accession": "56729648BP",
+          "procedure": "XR KNEE 3 VIEWS LEFT",
+          "patient_class": "Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:47:18.743715",
+          "time_finished": "2025-11-29T02:48:06.071997",
+          "duration_seconds": 47.328282
+        },
+        {
+          "accession": "56722943BP",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "Stroke Inpatient",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T02:52:01.473310",
+          "time_finished": "2025-11-29T02:55:58.512543",
+          "duration_seconds": 237.039233
+        },
+        {
+          "accession": "4102533200403NMCH",
+          "procedure": "XR HAND 3 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:56:40.608745",
+          "time_finished": "2025-11-29T02:57:48.289941",
+          "duration_seconds": 67.681196
+        },
+        {
+          "accession": "2025112900232DR",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:57:52.516894",
+          "time_finished": "2025-11-29T02:59:31.527157",
+          "duration_seconds": 99.010263
+        },
+        {
+          "accession": "2025112900231DR",
+          "procedure": "XR LUMBAR SPINE 2-3 VIEWS",
+          "patient_class": "Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T02:59:34.833425",
+          "time_finished": "2025-11-29T03:00:23.279434",
+          "duration_seconds": 48.446009
+        },
+        {
+          "accession": "56724508BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:00:27.606843",
+          "time_finished": "2025-11-29T03:01:43.294098",
+          "duration_seconds": 75.687255
+        },
+        {
+          "accession": "56724521BP",
+          "procedure": "CT CHEST WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T03:01:44.306619",
+          "time_finished": "2025-11-29T03:02:55.313359",
+          "duration_seconds": 71.00674
+        },
+        {
+          "accession": "56724520BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:02:59.833190",
+          "time_finished": "2025-11-29T03:07:15.816620",
+          "duration_seconds": 255.98343
+        },
+        {
+          "accession": "00416CT250034928ABZ3",
+          "procedure": "CT LUMBAR SPINE WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T03:07:16.831643",
+          "time_finished": "2025-11-29T03:07:36.063972",
+          "duration_seconds": 19.232329
+        },
+        {
+          "accession": "RAD20251128-0053PRMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:08:13.314789",
+          "time_finished": "2025-11-29T03:09:45.322787",
+          "duration_seconds": 92.007998
+        },
+        {
+          "accession": "CT20251129-0002PRMC",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T03:09:46.332130",
+          "time_finished": "2025-11-29T03:12:41.084954",
+          "duration_seconds": 174.752824
+        },
+        {
+          "accession": "1545424.001MR",
+          "procedure": "CT LUMBAR SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T03:12:42.089204",
+          "time_finished": "2025-11-29T03:15:06.819970",
+          "duration_seconds": 144.730766
+        },
+        {
+          "accession": "56731526BP",
+          "procedure": "CT HEAD NECK ANGIOGRAPHY WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CTA Brain and Neck",
+          "rvu": 3.5,
+          "time_performed": "2025-11-29T03:15:35.560176",
+          "time_finished": "2025-11-29T03:17:21.928229",
+          "duration_seconds": 106.368053
+        },
+        {
+          "accession": "56731525BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:17:26.205538",
+          "time_finished": "2025-11-29T03:18:49.487949",
+          "duration_seconds": 83.282411
+        },
+        {
+          "accession": "00418XR250020717ABZ",
+          "procedure": "XR KNEE 3 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:20:46.231750",
+          "time_finished": "2025-11-29T03:21:18.623113",
+          "duration_seconds": 32.391363
+        },
+        {
+          "accession": "00418CT250018877ABZ",
+          "procedure": "CT CHEST ANGIOGRAPHY WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Chest",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T03:21:38.450966",
+          "time_finished": "2025-11-29T03:23:36.706066",
+          "duration_seconds": 118.2551
+        },
+        {
+          "accession": "00418CT250018874ABZ",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T03:23:37.712846",
+          "time_finished": "2025-11-29T03:25:04.989628",
+          "duration_seconds": 87.276782
+        },
+        {
+          "accession": "00418XR250020715ABZ",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:26:11.140832",
+          "time_finished": "2025-11-29T03:27:07.660097",
+          "duration_seconds": 56.519265
+        },
+        {
+          "accession": "00418CT250018873ABZ",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T03:28:09.730356",
+          "time_finished": "2025-11-29T03:29:08.576272",
+          "duration_seconds": 58.845916
+        },
+        {
+          "accession": "00418CT250018876ABZ",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:29:12.840900",
+          "time_finished": "2025-11-29T03:30:44.625269",
+          "duration_seconds": 91.784369
+        },
+        {
+          "accession": "4102533200399NMCH",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T03:32:57.637884",
+          "time_finished": "2025-11-29T03:33:32.906487",
+          "duration_seconds": 35.268603
+        },
+        {
+          "accession": "56731532BP",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:34:14.478907",
+          "time_finished": "2025-11-29T03:35:11.025129",
+          "duration_seconds": 56.546222
+        },
+        {
+          "accession": "00414CT250071010ABZ1",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:40:56.242669",
+          "time_finished": "2025-11-29T03:43:37.017922",
+          "duration_seconds": 160.775253
+        },
+        {
+          "accession": "V003256009WTX",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:44:00.827872",
+          "time_finished": "2025-11-29T03:44:43.873223",
+          "duration_seconds": 43.045351
+        },
+        {
+          "accession": "SKM2511290000208CST",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T03:44:48.101355",
+          "time_finished": "2025-11-29T03:47:23.218432",
+          "duration_seconds": 155.117077
+        },
+        {
+          "accession": "56726247BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:50:53.164146",
+          "time_finished": "2025-11-29T03:51:54.020269",
+          "duration_seconds": 60.856123
+        },
+        {
+          "accession": "56726246BP",
+          "procedure": "XR SHOULDER 2 OR MORE VIEWS LEFT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:51:54.020269",
+          "time_finished": "2025-11-29T03:52:54.992642",
+          "duration_seconds": 60.972373
+        },
+        {
+          "accession": "56726219BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:53:15.390958",
+          "time_finished": "2025-11-29T03:54:05.286955",
+          "duration_seconds": 49.895997
+        },
+        {
+          "accession": "56726218BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:54:05.286955",
+          "time_finished": "2025-11-29T03:55:29.594665",
+          "duration_seconds": 84.30771
+        },
+        {
+          "accession": "45635840000300CBMC",
+          "procedure": "XR ABDOMEN 1 VIEW (KUB)",
+          "patient_class": "STAT Outpatient",
+          "study_type": "XR Abdomen",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:55:34.091080",
+          "time_finished": "2025-11-29T03:56:18.523542",
+          "duration_seconds": 44.432462
+        },
+        {
+          "accession": "45635840001000CBMC",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Outpatient",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T03:56:59.546422",
+          "time_finished": "2025-11-29T03:58:37.192118",
+          "duration_seconds": 97.645696
+        },
+        {
+          "accession": "02CT250012738TCR",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T03:58:41.526887",
+          "time_finished": "2025-11-29T03:59:54.828529",
+          "duration_seconds": 73.301642
+        },
+        {
+          "accession": "02XR250018656TCR",
+          "procedure": "XR KNEE 1-2 VIEWS RIGHT",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T03:59:59.073357",
+          "time_finished": "2025-11-29T04:00:57.904394",
+          "duration_seconds": 58.831037
+        },
+        {
+          "accession": "02CT250012739TCR",
+          "procedure": "CT CERVICAL SPINE WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Spine",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T04:00:57.904394",
+          "time_finished": "2025-11-29T04:02:14.873603",
+          "duration_seconds": 76.969209
+        },
+        {
+          "accession": "RAD20251129-0002PRMC",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Pre-Admit",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:03:03.948087",
+          "time_finished": "2025-11-29T04:03:43.338108",
+          "duration_seconds": 39.390021
+        },
+        {
+          "accession": "CT20251129-0003PRMC",
+          "procedure": "CT ABDOMEN PELVIS WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T04:08:46.682242",
+          "time_finished": "2025-11-29T04:09:28.238113",
+          "duration_seconds": 41.555871
+        },
+        {
+          "accession": "56727871BP",
+          "procedure": "XR CHEST 1 VIEW PORTABLE",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:12:39.669939",
+          "time_finished": "2025-11-29T04:13:02.870834",
+          "duration_seconds": 23.200895
+        },
+        {
+          "accession": "SSH2511290000276CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:13:29.386070",
+          "time_finished": "2025-11-29T04:14:43.343195",
+          "duration_seconds": 73.957125
+        },
+        {
+          "accession": "SSH2511280001214CST",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "Routine Inpatient",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:14:43.997109",
+          "time_finished": "2025-11-29T04:15:37.805113",
+          "duration_seconds": 53.808004
+        },
+        {
+          "accession": "56728977BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T04:15:38.139386",
+          "time_finished": "2025-11-29T04:16:34.748945",
+          "duration_seconds": 56.609559
+        },
+        {
+          "accession": "56723761BP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T04:16:38.076240",
+          "time_finished": "2025-11-29T04:17:50.468987",
+          "duration_seconds": 72.392747
+        },
+        {
+          "accession": "62-CT-25-033314DL",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T04:20:55.410977",
+          "time_finished": "2025-11-29T04:21:31.980666",
+          "duration_seconds": 36.569689
+        },
+        {
+          "accession": "SBH2511290000272CST",
+          "procedure": "CT ABDOMEN PELVIS WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT AP",
+          "rvu": 1.68,
+          "time_performed": "2025-11-29T04:25:36.050176",
+          "time_finished": "2025-11-29T04:26:59.158281",
+          "duration_seconds": 83.108105
+        },
+        {
+          "accession": "324CT25044414ELP",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Inpatient",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T04:29:23.926558",
+          "time_finished": "2025-11-29T04:30:46.848238",
+          "duration_seconds": 82.92168
+        },
+        {
+          "accession": "SW0000523219SW",
+          "procedure": "XR FINGERS LEFT",
+          "patient_class": "Emergency",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:30:47.162735",
+          "time_finished": "2025-11-29T04:33:02.378765",
+          "duration_seconds": 135.21603
+        },
+        {
+          "accession": "45635870000100CBMC",
+          "procedure": "XR FOREARM 2 VIEWS",
+          "patient_class": "STAT Outpatient",
+          "study_type": "XR MSK",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:33:41.992383",
+          "time_finished": "2025-11-29T04:34:25.015869",
+          "duration_seconds": 43.023486
+        },
+        {
+          "accession": "392402120251129CKM",
+          "procedure": "XR CHEST 2 VIEWS",
+          "patient_class": "STAT Emergency",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:38:21.722349",
+          "time_finished": "2025-11-29T04:39:33.649887",
+          "duration_seconds": 71.927538
+        },
+        {
+          "accession": "392402020251129CKM",
+          "procedure": "CT HEAD WITHOUT IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Brain",
+          "rvu": 0.9,
+          "time_performed": "2025-11-29T04:40:29.603308",
+          "time_finished": "2025-11-29T04:41:28.390950",
+          "duration_seconds": 58.787642
+        },
+        {
+          "accession": "02XR250018657TCR",
+          "procedure": "XR CHEST 1 VIEW",
+          "patient_class": "STAT Observation",
+          "study_type": "XR Chest",
+          "rvu": 0.3,
+          "time_performed": "2025-11-29T04:41:32.622491",
+          "time_finished": "2025-11-29T04:42:40.373246",
+          "duration_seconds": 67.750755
+        },
+        {
+          "accession": "56729612BP",
+          "procedure": "CT MAXILLOFACIAL WITHOUT THEN WITH IV CONTRAST",
+          "patient_class": "STAT Emergency",
+          "study_type": "CT Face",
+          "rvu": 1.0,
+          "time_performed": "2025-11-29T04:50:57.619726",
+          "time_finished": "2025-11-29T04:54:03.023924",
+          "duration_seconds": 185.404198
         }
       ],
-      "effective_shift_start": "2025-11-25T22:00:00",
-      "projected_shift_end": "2025-11-26T07:00:00"
+      "effective_shift_start": "2025-11-28T20:00:00",
+      "projected_shift_end": "2025-11-29T11:22:31.347442"
     }
   ]
 }
