@@ -2885,8 +2885,9 @@ class RVUCounterApp:
         self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), bd=0)
         self.pace_label_right.pack(side=tk.RIGHT, padx=0, pady=0)
         
-        # Show pace car if enabled in settings
-        if self.data_manager.data["settings"].get("show_pace_car", False):
+        # Show pace car if enabled in settings AND there's an active shift
+        has_active_shift = self.data_manager.data["current_shift"].get("shift_start") is not None
+        if self.data_manager.data["settings"].get("show_pace_car", False) and has_active_shift:
             self.pace_car_frame.pack(fill=tk.X, pady=(0, 2))
         
         # Buttons frame - centered
@@ -5066,6 +5067,8 @@ class RVUCounterApp:
             logger.info("Shift stopped and archived")
             # Recalculate typical shift times now that we have new data
             self._calculate_typical_shift_times()
+            # Hide pace car when no shift is active
+            self.pace_car_frame.pack_forget()
             # Update counters to zero but don't rebuild recent studies list
             self._update_counters_only()
         else:
@@ -5154,6 +5157,9 @@ class RVUCounterApp:
             self.last_record_count = -1
             self.update_shift_start_label()
             self.update_recent_studies_label()
+            # Show pace car if enabled in settings
+            if self.data_manager.data["settings"].get("show_pace_car", False):
+                self.pace_car_frame.pack(fill=tk.X, pady=(0, 2), after=self.counters_frame)
             self.data_manager.save()
             logger.info(f"Shift started at {self.shift_start}")
             self.update_display()
@@ -6749,8 +6755,9 @@ class SettingsWindow:
             # Update stay on top setting
             self.app.root.attributes("-topmost", self.data_manager.data["settings"]["stay_on_top"])
             
-            # Update pace car visibility
-            if self.show_pace_car_var.get():
+            # Update pace car visibility (only show if enabled AND shift is active)
+            has_active_shift = self.app.shift_start is not None
+            if self.show_pace_car_var.get() and has_active_shift:
                 self.app.pace_car_frame.pack(fill=tk.X, pady=(0, 2), after=self.app.counters_frame)
             else:
                 self.app.pace_car_frame.pack_forget()
