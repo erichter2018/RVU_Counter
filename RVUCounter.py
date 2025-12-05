@@ -2736,6 +2736,13 @@ class RVUCounterApp:
         self.data_source_indicator.pack(anchor=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
+        # Version label above counters - small and right-aligned
+        version_frame = ttk.Frame(main_frame)
+        version_frame.pack(fill=tk.X, pady=(3, 0))
+        version_text = f"v{VERSION} ({VERSION_DATE})"
+        self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
+        self.version_label.pack(side=tk.RIGHT, anchor=tk.E, padx=5)
+        
         counters_frame = ttk.LabelFrame(main_frame, padding="3")
         counters_frame.pack(fill=tk.X, pady=(0, 3))  # Fill X for full-width border
         
@@ -2837,14 +2844,6 @@ class RVUCounterApp:
         
         self.settings_btn = ttk.Button(buttons_frame, text="Settings", command=self.open_settings, width=8)
         self.settings_btn.pack(side=tk.LEFT, padx=3)
-        
-        # Version label below buttons - small and subtle
-        version_frame = ttk.Frame(main_frame)
-        version_frame.pack(pady=(0, 3))
-        
-        version_text = f"v{VERSION} ({VERSION_DATE})"
-        self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
-        self.version_label.pack(side=tk.RIGHT, anchor=tk.E, padx=5)
         
         # Current Study frame - pack first so it reserves space at bottom
         debug_frame = ttk.LabelFrame(main_frame, text="Current Study", padding="3")
