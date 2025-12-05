@@ -2736,13 +2736,6 @@ class RVUCounterApp:
         self.data_source_indicator.pack(anchor=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
-        # Version label above counters - small and right-aligned
-        version_frame = ttk.Frame(main_frame)
-        version_frame.pack(fill=tk.X, pady=(3, 0))
-        version_text = f"v{VERSION} ({VERSION_DATE})"
-        self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
-        self.version_label.pack(side=tk.RIGHT, anchor=tk.E, padx=5)
-        
         counters_frame = ttk.LabelFrame(main_frame, padding="3")
         counters_frame.pack(fill=tk.X, pady=(0, 3))  # Fill X for full-width border
         
@@ -5898,12 +5891,16 @@ class SettingsWindow:
         ttk.Button(buttons_frame, text="Clear Current Shift", command=self.clear_current_shift).pack(side=tk.LEFT, padx=2)
         ttk.Button(buttons_frame, text="Clear All Data", command=self.clear_all_data).pack(side=tk.LEFT, padx=2)
         
-        # Save/Cancel
+        # Save/Cancel with version on bottom right
         save_cancel_frame = ttk.Frame(main_frame)
         save_cancel_frame.pack(fill=tk.X, pady=10)
         
         ttk.Button(save_cancel_frame, text="Save", command=self.save_settings).pack(side=tk.LEFT, padx=2)
         ttk.Button(save_cancel_frame, text="Cancel", command=self.window.destroy).pack(side=tk.LEFT, padx=2)
+        
+        # Version info on bottom right
+        version_text = f"v{VERSION} ({VERSION_DATE})"
+        ttk.Label(save_cancel_frame, text=version_text, font=("Arial", 7), foreground="gray").pack(side=tk.RIGHT, padx=5)
     
     def sync_compensation_state(self, key):
         """Sync compensation checkbox state based on counter checkbox."""
