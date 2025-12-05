@@ -508,33 +508,33 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; First, check if "Radiograph" is already present but in wrong position
 	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
 	{
 		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
 		ModifierFound := true
 	}
-	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	else if RegExMatch(PriorDescript1, " \d+\s*View")
+	; Check for numeric view pattern (e.g., "1 view", "2 view")
+	else if RegExMatch(PriorDescript1, " \d+\s*view")
 	{
 		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " PA And Lateral")
+	else if InStr(PriorDescript1, " pa and lateral")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " View")
+	else if InStr(PriorDescript1, " view")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
 		ModifierFound := true
 	}
 	
 	if (!ModifierFound)
 	{
-		PriorDescript1 := PriorDescript1 . " Radiograph"
+		PriorDescript1 := PriorDescript1 . " radiograph"
 	}
 
 	Goto, ComparisonFill
@@ -596,33 +596,33 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; First, check if "Radiograph" is already present but in wrong position
 	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
 	{
 		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
 		ModifierFound := true
 	}
-	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	else if RegExMatch(PriorDescript1, " \d+\s*View")
+	; Check for numeric view pattern (e.g., "1 view", "2 view")
+	else if RegExMatch(PriorDescript1, " \d+\s*view")
 	{
 		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " PA And Lateral")
+	else if InStr(PriorDescript1, " pa and lateral")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " View")
+	else if InStr(PriorDescript1, " view")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
 		ModifierFound := true
 	}
 	
 	if (!ModifierFound)
 	{
-		PriorDescript1 := PriorDescript1 . " Radiograph"
+		PriorDescript1 := PriorDescript1 . " radiograph"
 	}
 
 	Goto, ComparisonFill
@@ -679,26 +679,26 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; First, check if "Radiograph" is already present but in wrong position
 	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
 	{
 		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " PA And Lateral")
+	else if InStr(PriorDescript1, " pa and lateral")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(pa and lateral)", " radiograph$2")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " View")
+	else if InStr(PriorDescript1, " view")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(View)", " Radiograph$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(view)", " radiograph$2")
 		ModifierFound := true
 	}
 	
 	if (!ModifierFound)
 	{
-		PriorDescript1 := PriorDescript1 . " Radiograph"
+		PriorDescript1 := PriorDescript1 . " radiograph"
 	}
 
 	Goto, ComparisonFill
@@ -768,33 +768,33 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; First, check if "Radiograph" is already present but in wrong position
 	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
 	{
 		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
 		ModifierFound := true
 	}
-	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	else if RegExMatch(PriorDescript1, " \d+\s*View")
+	; Check for numeric view pattern (e.g., "1 view", "2 view")
+	else if RegExMatch(PriorDescript1, " \d+\s*view")
 	{
 		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " PA And Lateral")
+	else if InStr(PriorDescript1, " pa and lateral")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (PA And Lateral)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " View")
+	else if InStr(PriorDescript1, " view")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (View)", " Radiograph $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
 		ModifierFound := true
 	}
 	
 	if (!ModifierFound)
 	{
-		PriorDescript1 := PriorDescript1 . " Radiograph"
+		PriorDescript1 := PriorDescript1 . " radiograph"
 	}
 
 	Goto, ComparisonFill
