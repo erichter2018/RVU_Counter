@@ -2837,7 +2837,7 @@ class RVUCounterApp:
         self.settings_btn.pack(side=tk.LEFT, padx=3)
         
         # Current Study frame - pack first so it reserves space at bottom
-        debug_frame = ttk.LabelFrame(main_frame, text="Current Study", padding="3")
+        debug_frame = tk.LabelFrame(main_frame, text="Current Study", bd=1, relief=tk.GROOVE, padx=3, pady=3)
         debug_frame.pack(fill=tk.X, pady=(5, 0), side=tk.BOTTOM)
         
         # Accession row with duration on the right
@@ -2877,7 +2877,7 @@ class RVUCounterApp:
         self.debug_frame = debug_frame
         
         # Recent studies frame - pack after Current Study so it fills remaining space above
-        self.recent_frame = ttk.LabelFrame(main_frame, text="Recent Studies", padding=(3, 5, 3, 5))  # Small padding all around
+        self.recent_frame = tk.LabelFrame(main_frame, text="Recent Studies", bd=1, relief=tk.GROOVE, padx=3, pady=5)
         self.recent_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
         # Canvas with scrollbar for recent studies
@@ -5418,6 +5418,16 @@ class RVUCounterApp:
         counters_frame = getattr(self, 'counters_frame', None)
         if counters_frame:
             counters_frame.configure(bg=bg_color, fg=fg_color)
+        
+        # Update recent studies frame (tk.LabelFrame)
+        recent_frame = getattr(self, 'recent_frame', None)
+        if recent_frame:
+            recent_frame.configure(bg=bg_color, fg=fg_color)
+        
+        # Update debug/current study frame (tk.LabelFrame)
+        debug_frame = getattr(self, 'debug_frame', None)
+        if debug_frame:
+            debug_frame.configure(bg=bg_color, fg=fg_color)
         
         # Update studies_scrollable_frame style to use canvas_bg
         # ttk.Frame uses TFrame style, but we need a specific style for the scrollable frame
