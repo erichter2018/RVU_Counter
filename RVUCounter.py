@@ -2687,6 +2687,7 @@ class RVUCounterApp:
         self.update_recent_studies_label()
         
         self.setup_refresh()
+        self.setup_time_sensitive_update()  # Start time-sensitive counter updates (5s interval)
         
         logger.info("RVU Counter application started")
     
@@ -2945,6 +2946,90 @@ class RVUCounterApp:
         # Always refresh to update debug display, but only track if running
         self.refresh_data()
         self.root.after(self.refresh_interval, self.setup_refresh)
+    
+    def setup_time_sensitive_update(self):
+        """Setup periodic update for time-sensitive counters (runs every 5 seconds)."""
+        self.update_time_sensitive_stats()
+        self.root.after(5000, self.setup_time_sensitive_update)  # 5 seconds
+    
+    def update_time_sensitive_stats(self):
+        """Lightweight update for time-based metrics only (avg/hour, projections).
+        
+        This runs on a slower timer (5s) and only recalculates values that change
+        with time, avoiding expensive full recalculation of all stats.
+        """
+        if not self.shift_start:
+            return
+        
+        try:
+            records = self.data_manager.data["current_shift"]["records"]
+            current_time = datetime.now()
+            settings = self.data_manager.data["settings"]
+            
+            # Calculate values that change with time
+            total_rvu = sum(r["rvu"] for r in records)
+            total_comp = sum(self._calculate_study_compensation(r) for r in records)
+            
+            # Average per hour (changes as time passes even with no new studies)
+            hours_elapsed = (current_time - self.shift_start).total_seconds() / 3600
+            avg_per_hour = total_rvu / hours_elapsed if hours_elapsed > 0 else 0.0
+            avg_comp_per_hour = total_comp / hours_elapsed if hours_elapsed > 0 else 0.0
+            
+            # Update avg labels if visible
+            if settings.get("show_avg", True):
+                self.avg_label.config(text=f"{avg_per_hour:.1f}")
+                if settings.get("show_comp_avg", False):
+                    self.avg_comp_label.config(text=f"(${avg_comp_per_hour:,.0f})")
+            
+            # Projected for current hour (changes as time passes)
+            current_hour_start = current_time.replace(minute=0, second=0, microsecond=0)
+            current_hour_records = [r for r in records if datetime.fromisoformat(r["time_finished"]) >= current_hour_start]
+            current_hour_rvu = sum(r["rvu"] for r in current_hour_records)
+            current_hour_comp = sum(self._calculate_study_compensation(r) for r in current_hour_records)
+            
+            minutes_into_hour = (current_time - current_hour_start).total_seconds() / 60
+            if minutes_into_hour > 0:
+                projected = (current_hour_rvu / minutes_into_hour) * 60
+                projected_comp = (current_hour_comp / minutes_into_hour) * 60
+            else:
+                projected = 0.0
+                projected_comp = 0.0
+            
+            # Update projected labels if visible
+            if settings.get("show_projected", True):
+                self.projected_label.config(text=f"{projected:.1f}")
+                if settings.get("show_comp_projected", False):
+                    self.projected_comp_label.config(text=f"(${projected_comp:,.0f})")
+            
+            # Projected shift total (changes as time passes)
+            projected_shift_rvu = total_rvu
+            projected_shift_comp = total_comp
+            
+            if self.effective_shift_start and self.projected_shift_end:
+                time_remaining = (self.projected_shift_end - current_time).total_seconds()
+                
+                if time_remaining > 0 and hours_elapsed > 0:
+                    rvu_rate_per_hour = avg_per_hour
+                    hours_remaining = time_remaining / 3600
+                    
+                    projected_additional_rvu = rvu_rate_per_hour * hours_remaining
+                    projected_shift_rvu = total_rvu + projected_additional_rvu
+                    
+                    projected_additional_comp = self._calculate_projected_compensation(
+                        current_time, 
+                        self.projected_shift_end, 
+                        rvu_rate_per_hour
+                    )
+                    projected_shift_comp = total_comp + projected_additional_comp
+            
+            # Update projected shift labels if visible
+            if settings.get("show_projected_shift", True):
+                self.projected_shift_label.config(text=f"{projected_shift_rvu:.1f}")
+                if settings.get("show_comp_projected_shift", False):
+                    self.projected_shift_comp_label.config(text=f"(${projected_shift_comp:,.0f})")
+        
+        except Exception as e:
+            logger.debug(f"Error updating time-sensitive stats: {e}")
     
     def _record_or_update_study(self, study_record: dict):
         """
