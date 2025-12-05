@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 # Version information
-VERSION = "1.2.1"
+VERSION = "1.3"
 VERSION_DATE = "2025-12-05"
 
 
