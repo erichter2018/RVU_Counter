@@ -2851,20 +2851,20 @@ class RVUCounterApp:
         self.pace_label_frame.pack(fill=tk.X, padx=2)
         
         # Left side: "Now: XX.X  |  Prior: XX.X at time"
-        self.pace_label_now_text = tk.Label(self.pace_label_frame, text="Now: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_now_text.pack(side=tk.LEFT, padx=0)
+        self.pace_label_now_text = tk.Label(self.pace_label_frame, text="Now: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0)
+        self.pace_label_now_text.pack(side=tk.LEFT, padx=0, ipadx=0, ipady=0)
         
-        self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'))
-        self.pace_label_now_value.pack(side=tk.LEFT, padx=(0, 2))
+        self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), padx=0, pady=0)
+        self.pace_label_now_value.pack(side=tk.LEFT, padx=0, ipadx=0, ipady=0)
         
-        self.pace_label_separator = tk.Label(self.pace_label_frame, text=" | Prior: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_separator.pack(side=tk.LEFT, padx=0)
+        self.pace_label_separator = tk.Label(self.pace_label_frame, text=" | Prior: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0)
+        self.pace_label_separator.pack(side=tk.LEFT, padx=0, ipadx=0, ipady=0)
         
-        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#9090C0")
-        self.pace_label_prior_value.pack(side=tk.LEFT, padx=(0, 1))
+        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#9090C0", padx=0, pady=0)
+        self.pace_label_prior_value.pack(side=tk.LEFT, padx=0, ipadx=0, ipady=0)
         
-        self.pace_label_time = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_time.pack(side=tk.LEFT, padx=0)
+        self.pace_label_time = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0)
+        self.pace_label_time.pack(side=tk.LEFT, padx=0, ipadx=0, ipady=0)
         
         # Right side: status
         self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
