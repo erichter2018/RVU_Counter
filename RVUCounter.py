@@ -3286,41 +3286,37 @@ class RVUCounterApp:
                 widget.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
                 widget.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
-            # --- TOP SECTION: Prior, Week Best, All Time Best ---
+            # --- TOP SECTION: Prior, Week Best, All Time Best (always show all 3 if available) ---
             
-            # Prior Shift (most recent night shift)
+            # Prior Shift (most recent valid shift)
             if prior_shift:
                 prior_rvu = sum(r.get('rvu', 0) for r in prior_shift.get('records', []))
                 prior_date = self._format_shift_label(prior_shift)
-                btn = tk.Label(frame, text=f"Prior: {prior_date} ({prior_rvu:.1f} RVU)", 
+                btn = tk.Label(frame, text=f"  Prior: {prior_date} ({prior_rvu:.1f} RVU)", 
                               font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
                 btn.pack(fill=tk.X, pady=1)
                 btn.bind("<Button-1>", lambda e: make_selection('prior', prior_shift))
                 add_hover(btn, bg_color, dark_mode)
             
-            # Week Best (best this week, if different from prior)
+            # Week Best (best this week)
             if best_week:
                 best_week_rvu = sum(r.get('rvu', 0) for r in best_week.get('records', []))
                 best_week_date = self._format_shift_label(best_week)
-                # Only show if different from prior
-                if best_week != prior_shift:
-                    btn = tk.Label(frame, text=f"Week: {best_week_date} ({best_week_rvu:.1f} RVU)", 
-                                  font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
-                    btn.pack(fill=tk.X, pady=1)
-                    btn.bind("<Button-1>", lambda e: make_selection('best_week', best_week))
-                    add_hover(btn, bg_color, dark_mode)
+                btn = tk.Label(frame, text=f"  Week: {best_week_date} ({best_week_rvu:.1f} RVU)", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                btn.pack(fill=tk.X, pady=1)
+                btn.bind("<Button-1>", lambda e: make_selection('best_week', best_week))
+                add_hover(btn, bg_color, dark_mode)
             
-            # All Time Best (if different from prior and week best)
+            # All Time Best
             if best_ever:
                 best_ever_rvu = sum(r.get('rvu', 0) for r in best_ever.get('records', []))
                 best_ever_date = self._format_shift_label(best_ever)
-                # Only show if different from prior and week best
-                if best_ever != prior_shift and best_ever != best_week:
-                    btn = tk.Label(frame, text=f"Best: {best_ever_date} ({best_ever_rvu:.1f} RVU)", 
-                                  font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
-                    btn.pack(fill=tk.X, pady=1)
-                    btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
-                    add_hover(btn, bg_color, dark_mode)
+                btn = tk.Label(frame, text=f"  Best: {best_ever_date} ({best_ever_rvu:.1f} RVU)", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                btn.pack(fill=tk.X, pady=1)
+                btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
+                add_hover(btn, bg_color, dark_mode)
             
             # --- CURRENT WEEK SECTION ---
             if shifts_this_week:
@@ -3328,10 +3324,9 @@ class RVUCounterApp:
                         bg=bg_color, fg=fg_color, anchor=tk.W).pack(fill=tk.X, pady=(8, 2))
                 
                 for i, shift in enumerate(shifts_this_week):
-                    day_label = self._format_shift_day_label(shift)
-                    shift_date = self._format_shift_label(shift)
+                    shift_date = self._format_shift_label(shift)  # Already has 3-letter day abbrev
                     total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
-                    btn = tk.Label(frame, text=f"  {day_label}: {shift_date} ({total_rvu:.1f} RVU)", 
+                    btn = tk.Label(frame, text=f"  {shift_date} ({total_rvu:.1f} RVU)", 
                                   font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
                     btn.pack(fill=tk.X, pady=1)
                     btn.bind("<Button-1>", lambda e, s=shift, idx=i: make_selection(f'week_{idx}', s))
