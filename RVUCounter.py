@@ -2733,7 +2733,7 @@ class RVUCounterApp:
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
         counters_frame = ttk.LabelFrame(main_frame, padding="2")
-        counters_frame.pack(fill=tk.X, pady=(1, 3))  # Minimal gap above, small gap below
+        counters_frame.pack(fill=tk.X, pady=(0, 3))  # No gap above, small gap below
         
         # Inner frame to center the content
         counters_inner = ttk.Frame(counters_frame)
