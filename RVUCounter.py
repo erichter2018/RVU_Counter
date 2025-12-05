@@ -2835,9 +2835,6 @@ class RVUCounterApp:
         self.pace_bars_container.pack(fill=tk.X, padx=2, pady=1)
         self.pace_bars_container.pack_propagate(False)
         
-        # Bind click to open comparison selector (no cursor change)
-        self.pace_bars_container.bind("<Button-1>", self._open_pace_comparison_selector)
-        
         # Current bar (top) - background track
         self.pace_bar_current_track = tk.Frame(self.pace_bars_container, bg="#e8e8e8", height=9)
         self.pace_bar_current_track.place(x=0, y=1, relwidth=1.0)
@@ -2852,6 +2849,11 @@ class RVUCounterApp:
         
         # Prior bar marker (where prior was at this time)
         self.pace_bar_prior_marker = tk.Frame(self.pace_bars_container, bg="#000000", width=2, height=9)
+        
+        # Bind click to all bar widgets to open comparison selector
+        for widget in [self.pace_bars_container, self.pace_bar_current_track, 
+                       self.pace_bar_current, self.pace_bar_prior_track, self.pace_bar_prior_marker]:
+            widget.bind("<Button-1>", self._open_pace_comparison_selector)
         
         # Labels showing the comparison (using place for precise positioning)
         self.pace_label_frame = tk.Frame(self.pace_car_frame, bg=self.root.cget('bg'), height=12)
@@ -3236,86 +3238,105 @@ class RVUCounterApp:
     def _open_pace_comparison_selector(self, event=None):
         """Open a popup to select which shift to compare against."""
         try:
+            # Prevent opening multiple popups
+            if hasattr(self, '_pace_popup') and self._pace_popup and self._pace_popup.winfo_exists():
+                self._pace_popup.destroy()
+            
             # Create popup window
             popup = tk.Toplevel(self.root)
+            self._pace_popup = popup  # Store reference
             popup.title("Compare To...")
             popup.transient(self.root)
-            popup.grab_set()
+            popup.overrideredirect(True)  # No window decorations for cleaner look
             
             # Position near the pace bar
             x = self.pace_bars_container.winfo_rootx()
-            y = self.pace_bars_container.winfo_rooty() + self.pace_bars_container.winfo_height()
+            y = self.pace_bars_container.winfo_rooty() + self.pace_bars_container.winfo_height() + 2
             popup.geometry(f"+{x}+{y}")
             
             # Apply theme
             dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
             bg_color = "#2d2d2d" if dark_mode else "white"
             fg_color = "#ffffff" if dark_mode else "black"
-            popup.configure(bg=bg_color)
+            border_color = "#555555" if dark_mode else "#cccccc"
+            popup.configure(bg=border_color)  # Border effect
             
-            frame = tk.Frame(popup, bg=bg_color, padx=10, pady=5)
-            frame.pack(fill=tk.BOTH, expand=True)
+            frame = tk.Frame(popup, bg=bg_color, padx=8, pady=5)
+            frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)  # 1px border
             
             # Get shifts for this week and all time
             shifts_this_week, prior_shift, best_week, best_ever = self._get_pace_comparison_options()
-            
-            # Variable for selection
-            selected = tk.StringVar(value=self.pace_comparison_mode)
             
             def make_selection(mode, shift=None):
                 self.pace_comparison_mode = mode
                 self.pace_comparison_shift = shift
                 popup.destroy()
+                self._pace_popup = None
+            
+            def close_popup(e=None):
+                popup.destroy()
+                self._pace_popup = None
             
             # Prior Shift option (default)
             if prior_shift:
                 prior_label = self._format_shift_label(prior_shift)
-                btn = tk.Radiobutton(frame, text=f"Prior Shift ({prior_label})", 
-                                    variable=selected, value='prior',
-                                    bg=bg_color, fg=fg_color, selectcolor=bg_color,
-                                    activebackground=bg_color, activeforeground=fg_color,
-                                    command=lambda: make_selection('prior', prior_shift))
-                btn.pack(anchor=tk.W, pady=1)
+                btn = tk.Label(frame, text=f"● Prior Shift ({prior_label})", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                btn.pack(fill=tk.X, pady=1)
+                btn.bind("<Button-1>", lambda e: make_selection('prior', prior_shift))
+                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
             # This week's shifts header
             if shifts_this_week:
                 tk.Label(frame, text="This Week:", font=("Arial", 8, "bold"),
-                        bg=bg_color, fg=fg_color).pack(anchor=tk.W, pady=(5, 2))
+                        bg=bg_color, fg=fg_color, anchor=tk.W).pack(fill=tk.X, pady=(5, 2))
                 
                 for i, shift in enumerate(shifts_this_week):
                     day_label = self._format_shift_day_label(shift)
                     total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
-                    btn = tk.Radiobutton(frame, text=f"  {day_label} ({total_rvu:.1f} RVU)", 
-                                        variable=selected, value=f'week_{i}',
-                                        bg=bg_color, fg=fg_color, selectcolor=bg_color,
-                                        activebackground=bg_color, activeforeground=fg_color,
-                                        command=lambda s=shift, idx=i: make_selection(f'week_{idx}', s))
-                    btn.pack(anchor=tk.W, pady=1)
+                    btn = tk.Label(frame, text=f"  ○ {day_label} ({total_rvu:.1f} RVU)", 
+                                  font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                    btn.pack(fill=tk.X, pady=1)
+                    btn.bind("<Button-1>", lambda e, s=shift, idx=i: make_selection(f'week_{idx}', s))
+                    btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                    btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
             # Best this week
             if best_week and best_week != prior_shift:
                 best_week_rvu = sum(r.get('rvu', 0) for r in best_week.get('records', []))
                 best_week_label = self._format_shift_day_label(best_week)
-                btn = tk.Radiobutton(frame, text=f"Best This Week: {best_week_label} ({best_week_rvu:.1f} RVU)", 
-                                    variable=selected, value='best_week',
-                                    bg=bg_color, fg=fg_color, selectcolor=bg_color,
-                                    activebackground=bg_color, activeforeground=fg_color,
-                                    command=lambda: make_selection('best_week', best_week))
-                btn.pack(anchor=tk.W, pady=(5, 1))
+                btn = tk.Label(frame, text=f"★ Best This Week: {best_week_label} ({best_week_rvu:.1f} RVU)", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                btn.pack(fill=tk.X, pady=(5, 1))
+                btn.bind("<Button-1>", lambda e: make_selection('best_week', best_week))
+                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
             # Best ever
             if best_ever:
                 best_ever_rvu = sum(r.get('rvu', 0) for r in best_ever.get('records', []))
                 best_ever_label = self._format_shift_label(best_ever)
-                btn = tk.Radiobutton(frame, text=f"Best Ever: {best_ever_label} ({best_ever_rvu:.1f} RVU)", 
-                                    variable=selected, value='best_ever',
-                                    bg=bg_color, fg=fg_color, selectcolor=bg_color,
-                                    activebackground=bg_color, activeforeground=fg_color,
-                                    command=lambda: make_selection('best_ever', best_ever))
-                btn.pack(anchor=tk.W, pady=1)
+                btn = tk.Label(frame, text=f"★ Best Ever: {best_ever_label} ({best_ever_rvu:.1f} RVU)", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                btn.pack(fill=tk.X, pady=1)
+                btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
+                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
-            # Close on click outside
-            popup.bind("<FocusOut>", lambda e: popup.destroy())
+            # Cancel button
+            cancel_btn = tk.Label(frame, text="Cancel", font=("Arial", 8), 
+                                 bg=bg_color, fg="gray", anchor=tk.CENTER)
+            cancel_btn.pack(fill=tk.X, pady=(8, 2))
+            cancel_btn.bind("<Button-1>", close_popup)
+            cancel_btn.bind("<Enter>", lambda e: e.widget.config(fg=fg_color))
+            cancel_btn.bind("<Leave>", lambda e: e.widget.config(fg="gray"))
+            
+            # Close on Escape key
+            popup.bind("<Escape>", close_popup)
+            
+            # Focus the popup
+            popup.focus_set()
             
         except Exception as e:
             logger.debug(f"Error opening pace comparison selector: {e}")
