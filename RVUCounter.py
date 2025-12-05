@@ -2826,23 +2826,34 @@ class RVUCounterApp:
         self.pace_car_frame = ttk.Frame(main_frame)
         # Don't pack yet - will be shown/hidden based on settings
         
-        # Container for the bar
-        self.pace_bar_container = tk.Frame(self.pace_car_frame, bg="#e0e0e0", height=16)
-        self.pace_bar_container.pack(fill=tk.X, padx=2, pady=1)
-        self.pace_bar_container.pack_propagate(False)
+        # Container for both bars (stacked)
+        self.pace_bars_container = tk.Frame(self.pace_car_frame, bg="#e0e0e0", height=20)
+        self.pace_bars_container.pack(fill=tk.X, padx=2, pady=1)
+        self.pace_bars_container.pack_propagate(False)
         
-        # The actual pace indicator bar (will be positioned dynamically)
-        self.pace_bar_current = tk.Frame(self.pace_bar_container, bg="#1565c0", width=3)  # Blue marker for current (ahead) / Red (behind)
-        self.pace_bar_prior = tk.Frame(self.pace_bar_container, bg="#ff8f00", width=3)   # Amber/orange marker for prior
+        # Current bar (top) - background track
+        self.pace_bar_current_track = tk.Frame(self.pace_bars_container, bg="#e8e8e8", height=9)
+        self.pace_bar_current_track.place(x=0, y=1, relwidth=1.0)
+        
+        # Current bar fill (grows with current RVU)
+        self.pace_bar_current = tk.Frame(self.pace_bar_current_track, bg="#1565c0", height=9)
+        self.pace_bar_current.place(x=0, y=0, width=0)
+        
+        # Prior bar (bottom) - full width background
+        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#ff8f00", height=9)
+        self.pace_bar_prior_track.place(x=0, y=11, relwidth=1.0)
+        
+        # Prior bar marker (where prior was at this time)
+        self.pace_bar_prior_marker = tk.Frame(self.pace_bars_container, bg="#000000", width=2, height=9)
         
         # Labels showing the comparison
         self.pace_label_frame = ttk.Frame(self.pace_car_frame)
         self.pace_label_frame.pack(fill=tk.X, padx=2)
         
-        self.pace_label_left = ttk.Label(self.pace_label_frame, text="", font=("Arial", 7))
+        self.pace_label_left = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
         self.pace_label_left.pack(side=tk.LEFT)
         
-        self.pace_label_right = ttk.Label(self.pace_label_frame, text="", font=("Arial", 7))
+        self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
         self.pace_label_right.pack(side=tk.RIGHT)
         
         # Show pace car if enabled in settings
@@ -3068,9 +3079,13 @@ class RVUCounterApp:
         
         Compares current shift RVU vs prior shift RVU at the same elapsed time
         since 11pm (reference shift start time).
+        
+        Design: Two stacked bars
+        - Top bar (current): fills proportionally based on current RVU vs prior total
+        - Bottom bar (prior): full width = prior total, with marker at "prior at this time"
         """
         try:
-            if not hasattr(self, 'pace_bar_container'):
+            if not hasattr(self, 'pace_bars_container'):
                 return
             
             current_time = datetime.now()
@@ -3089,73 +3104,76 @@ class RVUCounterApp:
             if elapsed_minutes < 0:
                 elapsed_minutes = 0
             
-            # Get prior shift data
-            prior_rvu_at_elapsed = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes)
+            # Get prior shift data (returns tuple: rvu_at_elapsed, total_rvu)
+            prior_data = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes)
             
-            if prior_rvu_at_elapsed is None:
+            if prior_data is None:
                 # No prior shift data available
-                self.pace_label_left.config(text="No prior shift data")
-                self.pace_label_right.config(text="")
-                # Hide markers
+                self.pace_label_left.config(text="No prior shift data", fg="gray")
+                self.pace_label_right.config(text="", fg="gray")
                 self.pace_bar_current.place_forget()
-                self.pace_bar_prior.place_forget()
+                self.pace_bar_prior_marker.place_forget()
                 return
+            
+            prior_rvu_at_elapsed, prior_total_rvu = prior_data
             
             # Calculate the difference
             diff = current_rvu - prior_rvu_at_elapsed
             
-            # Determine max for scaling (use the larger of the two, minimum 50 for reasonable scale)
-            max_rvu = max(current_rvu, prior_rvu_at_elapsed, 50)
-            
             # Get container width
-            self.pace_bar_container.update_idletasks()
-            container_width = self.pace_bar_container.winfo_width()
+            self.pace_bars_container.update_idletasks()
+            container_width = self.pace_bars_container.winfo_width()
             if container_width < 10:
                 container_width = 200  # Default fallback
             
-            # Calculate positions (as percentage of max)
-            current_pos = (current_rvu / max_rvu) * (container_width - 4) if max_rvu > 0 else 0
-            prior_pos = (prior_rvu_at_elapsed / max_rvu) * (container_width - 4) if max_rvu > 0 else 0
+            # Scale: prior_total_rvu = full width
+            # Current bar fills proportionally
+            if prior_total_rvu > 0:
+                current_width = int((current_rvu / prior_total_rvu) * container_width)
+                current_width = min(current_width, container_width)  # Cap at full width
+                prior_marker_pos = int((prior_rvu_at_elapsed / prior_total_rvu) * container_width)
+            else:
+                current_width = 0
+                prior_marker_pos = 0
             
             # Update bar colors based on ahead/behind
             if diff >= 0:
-                # Ahead - light blue background
-                bar_color = "#bbdefb"  # Light blue
-                current_marker_color = "#1565c0"  # Blue for current (ahead)
+                current_bar_color = "#1565c0"  # Blue for current (ahead)
                 status_text = f"▲ +{diff:.1f} ahead"
                 status_color = "#1565c0"  # Blue
             else:
-                # Behind - light red background
-                bar_color = "#ffcdd2"  # Light red
-                current_marker_color = "#c62828"  # Red for current (behind)
+                current_bar_color = "#c62828"  # Red for current (behind)
                 status_text = f"▼ {diff:.1f} behind"
                 status_color = "#c62828"  # Red
             
-            # Update container background
-            self.pace_bar_container.config(bg=bar_color)
+            # Update current bar (top) - fills from left
+            self.pace_bar_current.config(bg=current_bar_color)
+            self.pace_bar_current.place(x=0, y=0, width=current_width, height=9)
             
-            # Position the markers - prior is orange/amber
-            self.pace_bar_prior.config(bg="#ff8f00", width=3, height=14)  # Amber/orange for prior
-            self.pace_bar_prior.place(x=int(prior_pos), y=1)
+            # Update prior marker (black line on orange bar showing "prior at this time")
+            self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
             
-            self.pace_bar_current.config(bg=current_marker_color, width=3, height=14)
-            self.pace_bar_current.place(x=int(current_pos), y=1)
+            # Format elapsed time as HH:MM
+            hours = int(elapsed_minutes // 60)
+            mins = int(elapsed_minutes % 60)
+            time_str = f"{hours}:{mins:02d}"
             
-            # Update labels
-            hours_elapsed = elapsed_minutes / 60
+            # Update labels with bold numbers and colors
+            # Using tk.Label allows us to do partial formatting via multiple labels or HTML-like approach
+            # For simplicity, we'll put the key numbers in the text with color coding
             self.pace_label_left.config(
-                text=f"Now: {current_rvu:.1f} | Prior: {prior_rvu_at_elapsed:.1f} @ {hours_elapsed:.1f}h",
-                foreground="gray"
+                text=f"Now: {current_rvu:.1f}  |  Prior: {prior_rvu_at_elapsed:.1f} at {time_str}",
+                fg="gray"
             )
-            self.pace_label_right.config(text=status_text, foreground=status_color)
+            self.pace_label_right.config(text=status_text, fg=status_color)
             
         except Exception as e:
             logger.debug(f"Error updating pace car: {e}")
     
-    def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float) -> float:
+    def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
         """Get RVU from prior shift at the same elapsed time since 11pm.
         
-        Returns None if no prior shift data available.
+        Returns tuple (rvu_at_elapsed, total_rvu) or None if no prior shift data available.
         """
         try:
             # Get historical shifts
@@ -3188,16 +3206,19 @@ class RVUCounterApp:
             target_time = prior_11pm + timedelta(minutes=elapsed_minutes)
             
             # Sum RVU for all records finished before target_time
+            rvu_at_elapsed = 0.0
             total_rvu = 0.0
             for record in prior_shift.get("records", []):
                 try:
+                    rvu = record.get("rvu", 0)
+                    total_rvu += rvu  # Always add to total
                     time_finished = datetime.fromisoformat(record.get("time_finished", ""))
                     if time_finished <= target_time:
-                        total_rvu += record.get("rvu", 0)
+                        rvu_at_elapsed += rvu
                 except:
-                    pass
+                    total_rvu += record.get("rvu", 0)  # Still count toward total even if time parse fails
             
-            return total_rvu
+            return (rvu_at_elapsed, total_rvu)
             
         except Exception as e:
             logger.debug(f"Error getting prior shift RVU: {e}")
