@@ -2832,8 +2832,8 @@ class RVUCounterApp:
         self.pace_bar_container.pack_propagate(False)
         
         # The actual pace indicator bar (will be positioned dynamically)
-        self.pace_bar_current = tk.Frame(self.pace_bar_container, bg="#4CAF50", width=2)  # Green marker for current
-        self.pace_bar_prior = tk.Frame(self.pace_bar_container, bg="#2196F3", width=2)   # Blue marker for prior
+        self.pace_bar_current = tk.Frame(self.pace_bar_container, bg="#1565c0", width=3)  # Blue marker for current (ahead) / Red (behind)
+        self.pace_bar_prior = tk.Frame(self.pace_bar_container, bg="#ff8f00", width=3)   # Amber/orange marker for prior
         
         # Labels showing the comparison
         self.pace_label_frame = ttk.Frame(self.pace_car_frame)
@@ -3119,23 +3119,23 @@ class RVUCounterApp:
             
             # Update bar colors based on ahead/behind
             if diff >= 0:
-                # Ahead - green background for progress
-                bar_color = "#c8e6c9"  # Light green
-                current_marker_color = "#2e7d32"  # Dark green for current
+                # Ahead - light blue background
+                bar_color = "#bbdefb"  # Light blue
+                current_marker_color = "#1565c0"  # Blue for current (ahead)
                 status_text = f"▲ +{diff:.1f} ahead"
-                status_color = "dark green"
+                status_color = "#1565c0"  # Blue
             else:
-                # Behind - red/orange background
+                # Behind - light red background
                 bar_color = "#ffcdd2"  # Light red
-                current_marker_color = "#c62828"  # Dark red for current
+                current_marker_color = "#c62828"  # Red for current (behind)
                 status_text = f"▼ {diff:.1f} behind"
-                status_color = "red"
+                status_color = "#c62828"  # Red
             
             # Update container background
             self.pace_bar_container.config(bg=bar_color)
             
-            # Position the markers
-            self.pace_bar_prior.config(bg="#1565c0", width=3, height=14)  # Blue for prior
+            # Position the markers - prior is orange/amber
+            self.pace_bar_prior.config(bg="#ff8f00", width=3, height=14)  # Amber/orange for prior
             self.pace_bar_prior.place(x=int(prior_pos), y=1)
             
             self.pace_bar_current.config(bg=current_marker_color, width=3, height=14)
