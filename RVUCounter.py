@@ -3237,22 +3237,27 @@ class RVUCounterApp:
     
     def _open_pace_comparison_selector(self, event=None):
         """Open a popup to select which shift to compare against."""
+        logger.info("Pace comparison selector clicked!")
         try:
             # Prevent opening multiple popups
-            if hasattr(self, '_pace_popup') and self._pace_popup and self._pace_popup.winfo_exists():
-                self._pace_popup.destroy()
+            if hasattr(self, '_pace_popup') and self._pace_popup:
+                try:
+                    if self._pace_popup.winfo_exists():
+                        self._pace_popup.destroy()
+                except:
+                    pass
+                self._pace_popup = None
             
             # Create popup window
             popup = tk.Toplevel(self.root)
             self._pace_popup = popup  # Store reference
             popup.title("Compare To...")
             popup.transient(self.root)
-            popup.overrideredirect(True)  # No window decorations for cleaner look
             
             # Position near the pace bar
             x = self.pace_bars_container.winfo_rootx()
-            y = self.pace_bars_container.winfo_rooty() + self.pace_bars_container.winfo_height() + 2
-            popup.geometry(f"+{x}+{y}")
+            y = self.pace_bars_container.winfo_rooty() + self.pace_bars_container.winfo_height() + 5
+            popup.geometry(f"200x250+{x}+{y}")
             
             # Apply theme
             dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
@@ -3324,6 +3329,11 @@ class RVUCounterApp:
                 btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
                 btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
             
+            # If no shifts found at all, show a message
+            if not prior_shift and not shifts_this_week and not best_week and not best_ever:
+                tk.Label(frame, text="No historical shifts found", 
+                        font=("Arial", 8), bg=bg_color, fg="gray", anchor=tk.W).pack(fill=tk.X, pady=5)
+            
             # Cancel button
             cancel_btn = tk.Label(frame, text="Cancel", font=("Arial", 8), 
                                  bg=bg_color, fg="gray", anchor=tk.CENTER)
@@ -3335,11 +3345,14 @@ class RVUCounterApp:
             # Close on Escape key
             popup.bind("<Escape>", close_popup)
             
-            # Focus the popup
-            popup.focus_set()
+            # Make sure popup is visible
+            popup.lift()
+            popup.focus_force()
+            
+            logger.info(f"Pace popup opened with {len(shifts_this_week)} week shifts, prior={prior_shift is not None}")
             
         except Exception as e:
-            logger.debug(f"Error opening pace comparison selector: {e}")
+            logger.error(f"Error opening pace comparison selector: {e}", exc_info=True)
     
     def _get_pace_comparison_options(self):
         """Get shifts available for pace comparison.
