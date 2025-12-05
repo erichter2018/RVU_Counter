@@ -5844,18 +5844,36 @@ class RVUCounterApp:
                     else:
                         all_accession_numbers.append(acc_entry.strip())
                 
-                # Check how many accessions are duplicates
+                # Check how many accessions are duplicates (actually recorded to database)
+                # Don't use seen_accessions because it includes currently active studies
                 duplicate_count = 0
                 total_count = len(all_accession_numbers)
                 ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
                 if ignore_duplicates and all_accession_numbers and not self.multi_accession_mode:
                     # Only check if not actively tracking (multi_accession_mode)
+                    current_shift = None
+                    try:
+                        current_shift = self.data_manager.db.get_current_shift()
+                    except:
+                        pass
+                    
                     for acc in all_accession_numbers:
-                        # Check both seen_accessions and multi-accession history
-                        if acc in self.tracker.seen_accessions:
+                        # Skip if currently active
+                        if acc in self.tracker.active_studies:
+                            continue
+                        # Check multi-accession history
+                        if self.tracker._was_part_of_multi_accession(acc, self.data_manager):
                             duplicate_count += 1
-                        elif self.tracker._was_part_of_multi_accession(acc, self.data_manager):
-                            duplicate_count += 1
+                        # Check database for actual recorded study
+                        elif current_shift:
+                            try:
+                                db_record = self.data_manager.db.find_record_by_accession(
+                                    current_shift['id'], acc
+                                )
+                                if db_record:
+                                    duplicate_count += 1
+                            except:
+                                pass
                 
                 all_duplicates = duplicate_count == total_count
                 some_duplicates = duplicate_count > 0 and duplicate_count < total_count
@@ -5946,25 +5964,30 @@ class RVUCounterApp:
             else:
                 accession_text = self.current_accession if self.current_accession else '-'
                 
-                # Check if this is a duplicate (already recorded)
+                # Check if this is a duplicate (already recorded to database)
+                # Important: Don't use seen_accessions because it includes currently active studies
+                # Only check database and multi-accession history
                 is_duplicate = False
                 if self.current_accession:
                     ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                    # Check if accession is in seen_accessions OR in current shift records
                     if ignore_duplicates:
-                        is_duplicate = (self.current_accession in self.tracker.seen_accessions or 
-                                       self.tracker._was_part_of_multi_accession(self.current_accession, self.data_manager))
-                        # Also check database if not in memory
-                        if not is_duplicate:
-                            try:
-                                current_shift = self.data_manager.db.get_current_shift()
-                                if current_shift:
-                                    db_record = self.data_manager.db.find_record_by_accession(
-                                        current_shift['id'], self.current_accession
-                                    )
-                                    is_duplicate = db_record is not None
-                            except:
-                                pass
+                        # Skip duplicate check if study is currently active (being tracked)
+                        if self.current_accession in self.tracker.active_studies:
+                            is_duplicate = False
+                        else:
+                            # Check if was part of a multi-accession study
+                            is_duplicate = self.tracker._was_part_of_multi_accession(self.current_accession, self.data_manager)
+                            # Check database for actual recorded study
+                            if not is_duplicate:
+                                try:
+                                    current_shift = self.data_manager.db.get_current_shift()
+                                    if current_shift:
+                                        db_record = self.data_manager.db.find_record_by_accession(
+                                            current_shift['id'], self.current_accession
+                                        )
+                                        is_duplicate = db_record is not None
+                                except:
+                                    pass
                 
                 # Calculate duration for current study (only if not duplicate)
                 duration_text = ""
