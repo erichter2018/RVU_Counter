@@ -2699,8 +2699,8 @@ class RVUCounterApp:
         # Apply theme based on settings
         self.apply_theme()
         
-        # Main frame
-        main_frame = ttk.Frame(self.root, padding="5")
+        # Main frame - minimal top/bottom padding, normal sides
+        main_frame = ttk.Frame(self.root, padding=(5, 2, 5, 5))  # left, top, right, bottom
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Title bar is draggable (bind to main frame)
@@ -2708,13 +2708,9 @@ class RVUCounterApp:
         main_frame.bind("<B1-Motion>", self.on_drag)
         main_frame.bind("<ButtonRelease-1>", self.on_drag_end)
         
-        # Spacer at top for visual padding
-        spacer_top = ttk.Label(main_frame, text="")
-        spacer_top.pack(pady=(5, 0))
-        
         # Top bar with Start/Stop Shift button, timer, and data source indicator
         top_bar_frame = ttk.Frame(main_frame)
-        top_bar_frame.pack(fill=tk.X, pady=(0, 1))
+        top_bar_frame.pack(fill=tk.X, pady=(0, 0))
         
         # Left column: button + label below
         left_col = ttk.Frame(top_bar_frame)
@@ -2736,8 +2732,8 @@ class RVUCounterApp:
         self.data_source_indicator.pack(anchor=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
-        counters_frame = ttk.LabelFrame(main_frame, padding="3")
-        counters_frame.pack(fill=tk.X, pady=(0, 3))  # Fill X for full-width border
+        counters_frame = ttk.LabelFrame(main_frame, padding="2")
+        counters_frame.pack(fill=tk.X, pady=(1, 3))  # Minimal gap above, small gap below
         
         # Inner frame to center the content
         counters_inner = ttk.Frame(counters_frame)
