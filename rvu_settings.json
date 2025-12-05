@@ -21,7 +21,8 @@
     "data_source": "Auto",
     "show_time": true,
     "stay_on_top": true,
-    "efficiency_heatmap_mode": "duration"
+    "efficiency_heatmap_mode": "duration",
+    "show_pace_car": true
   },
   "direct_lookups": {
     "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
@@ -101,7 +102,8 @@
           "CTA",
           "neck",
           "angiography",
-          "angio"
+          "angio",
+          "perf"
         ]
       }
     ],
@@ -541,10 +543,10 @@
   },
   "window_positions": {
     "main": {
-      "x": 4986,
-      "y": -429,
+      "x": 4987,
+      "y": -352,
       "width": 240,
-      "height": 584
+      "height": 496
     },
     "settings": {
       "x": 5244,
