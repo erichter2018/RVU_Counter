@@ -2570,6 +2570,11 @@ class RVUCounterApp:
         self.current_window = None
         self.refresh_interval = 300  # 300ms for faster completion detection
         
+        # Typical shift times (calculated from historical data, defaults to 11pm-8am)
+        self.typical_shift_start_hour = 23  # 11pm default
+        self.typical_shift_end_hour = 8     # 8am default
+        self._calculate_typical_shift_times()  # Update from historical data
+        
         # Adaptive polling variables for PowerScribe worker thread
         import time
         self._last_accession_seen = ""
@@ -3102,7 +3107,7 @@ class RVUCounterApp:
         """Update the pace car comparison bar.
         
         Compares current shift RVU vs prior shift RVU at the same elapsed time
-        since 11pm (reference shift start time).
+        since typical shift start (dynamically calculated from historical data).
         
         Design: Two stacked bars
         - Top bar (current): fills proportionally based on current RVU vs prior total
@@ -3114,17 +3119,11 @@ class RVUCounterApp:
             
             current_time = datetime.now()
             
-            # Calculate reference 11pm for current shift
-            # If it's before 11pm, use yesterday's 11pm
-            today_11pm = current_time.replace(hour=23, minute=0, second=0, microsecond=0)
-            if current_time.hour < 23:
-                # We're past midnight, so 11pm was yesterday
-                reference_11pm = today_11pm - timedelta(days=1)
-            else:
-                reference_11pm = today_11pm
+            # Calculate reference shift start time for current shift
+            reference_start = self._get_reference_shift_start(current_time)
             
-            # Elapsed time since 11pm in minutes
-            elapsed_minutes = (current_time - reference_11pm).total_seconds() / 60
+            # Elapsed time since shift start in minutes
+            elapsed_minutes = (current_time - reference_start).total_seconds() / 60
             if elapsed_minutes < 0:
                 elapsed_minutes = 0
             
@@ -3366,7 +3365,7 @@ class RVUCounterApp:
     def _get_pace_comparison_options(self):
         """Get shifts available for pace comparison.
         
-        Only includes night shifts (started between 11pm and 8am).
+        Only includes shifts within typical shift window (calculated from historical data).
         Returns: (shifts_this_week, prior_shift, best_week_shift, best_ever_shift)
         """
         historical_shifts = self.data_manager.data.get("shifts", [])
@@ -3375,11 +3374,11 @@ class RVUCounterApp:
         
         now = datetime.now()
         
-        # Find start of current week (Monday at 11pm for night shifts)
+        # Find start of current week (Monday at typical shift start hour)
         days_since_monday = now.weekday()  # Monday = 0
         week_start = now - timedelta(days=days_since_monday)
-        week_start = week_start.replace(hour=23, minute=0, second=0, microsecond=0)
-        # If we haven't reached Monday 11pm yet, use last week's Monday 11pm
+        week_start = week_start.replace(hour=self.typical_shift_start_hour, minute=0, second=0, microsecond=0)
+        # If we haven't reached Monday shift start yet, use last week's Monday
         if now < week_start:
             week_start -= timedelta(days=7)
         
@@ -3397,10 +3396,10 @@ class RVUCounterApp:
             try:
                 shift_start = datetime.fromisoformat(shift["shift_start"])
                 
-                # Only include night shifts (started between 11pm and 8am)
+                # Only include shifts that started within typical shift window
                 hour = shift_start.hour
-                if not (hour >= 23 or hour < 8):
-                    continue  # Skip non-night shifts
+                if not self._is_valid_shift_hour(hour):
+                    continue  # Skip shifts outside typical window
                 
                 total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
                 
@@ -3451,8 +3450,100 @@ class RVUCounterApp:
         except:
             return "???"
     
+    def _calculate_typical_shift_times(self):
+        """Calculate typical shift start and end hours from historical data.
+        
+        Analyzes completed shifts to find the most common (mode) start and end hours.
+        Uses fuzzy matching by rounding to nearest hour.
+        Falls back to 11pm-8am if insufficient data.
+        """
+        historical_shifts = self.data_manager.data.get("shifts", [])
+        
+        if len(historical_shifts) < 2:
+            # Not enough data, keep defaults
+            logger.info(f"Using default shift times: {self.typical_shift_start_hour}:00 - {self.typical_shift_end_hour}:00")
+            return
+        
+        start_hours = []
+        end_hours = []
+        
+        for shift in historical_shifts:
+            try:
+                if not shift.get("shift_start") or not shift.get("shift_end"):
+                    continue
+                
+                start = datetime.fromisoformat(shift["shift_start"])
+                end = datetime.fromisoformat(shift["shift_end"])
+                
+                # Round to nearest hour (fuzzy matching)
+                # e.g., 10:45pm -> 11pm, 11:15pm -> 11pm, 8:20am -> 8am
+                start_hour = start.hour
+                if start.minute >= 30:
+                    start_hour = (start_hour + 1) % 24
+                
+                end_hour = end.hour
+                if end.minute >= 30:
+                    end_hour = (end_hour + 1) % 24
+                
+                start_hours.append(start_hour)
+                end_hours.append(end_hour)
+            except:
+                pass
+        
+        if start_hours and end_hours:
+            # Find mode (most common hour) for start and end
+            from collections import Counter
+            
+            start_counter = Counter(start_hours)
+            end_counter = Counter(end_hours)
+            
+            # Get most common
+            self.typical_shift_start_hour = start_counter.most_common(1)[0][0]
+            self.typical_shift_end_hour = end_counter.most_common(1)[0][0]
+            
+            logger.info(f"Calculated typical shift times from {len(start_hours)} shifts: "
+                       f"{self.typical_shift_start_hour}:00 - {self.typical_shift_end_hour}:00")
+        else:
+            logger.info(f"Using default shift times: {self.typical_shift_start_hour}:00 - {self.typical_shift_end_hour}:00")
+    
+    def _is_valid_shift_hour(self, hour: int) -> bool:
+        """Check if an hour falls within the typical shift window (with 1-hour fuzzy margin).
+        
+        Handles overnight shifts where start > end (e.g., 23 to 8).
+        """
+        start = self.typical_shift_start_hour
+        end = self.typical_shift_end_hour
+        
+        # Add 1-hour margin for fuzzy matching
+        # e.g., if typical is 23-8, accept 22-9
+        start_fuzzy = (start - 1) % 24
+        end_fuzzy = (end + 1) % 24
+        
+        if start_fuzzy > end_fuzzy:
+            # Overnight shift (e.g., 22 to 9)
+            return hour >= start_fuzzy or hour <= end_fuzzy
+        else:
+            # Same-day shift (e.g., 6 to 14)
+            return start_fuzzy <= hour <= end_fuzzy
+    
+    def _get_reference_shift_start(self, current_time: datetime) -> datetime:
+        """Get the reference shift start time (typical start hour) for elapsed time calculations.
+        
+        Returns the most recent occurrence of the typical shift start hour.
+        """
+        start_hour = self.typical_shift_start_hour
+        
+        # Create today's reference start time
+        reference = current_time.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+        
+        if current_time.hour < start_hour:
+            # We're past midnight, so shift start was yesterday
+            reference = reference - timedelta(days=1)
+        
+        return reference
+    
     def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
-        """Get RVU from comparison shift at the same elapsed time since 11pm.
+        """Get RVU from comparison shift at the same elapsed time since typical shift start.
         
         Returns tuple (rvu_at_elapsed, total_rvu) or None if no shift data available.
         Uses self.pace_comparison_mode to determine which shift to compare against.
@@ -3465,32 +3556,37 @@ class RVUCounterApp:
                 # Use cached comparison shift
                 comparison_shift = self.pace_comparison_shift
             else:
-                # Default: use prior shift (most recent)
+                # Default: use prior shift (most recent valid one)
                 historical_shifts = self.data_manager.data.get("shifts", [])
                 if not historical_shifts:
                     return None
                 
                 for shift in historical_shifts:
                     if shift.get("shift_start") and shift.get("records"):
-                        comparison_shift = shift
-                        break
+                        # Check if it's a valid shift hour
+                        try:
+                            shift_start = datetime.fromisoformat(shift["shift_start"])
+                            if self._is_valid_shift_hour(shift_start.hour):
+                                comparison_shift = shift
+                                break
+                        except:
+                            pass
             
             if not comparison_shift:
                 return None
             
-            # Get comparison shift's reference 11pm
+            # Get comparison shift's reference start time
             prior_start = datetime.fromisoformat(comparison_shift["shift_start"])
             
-            # Calculate prior shift's 11pm reference
-            # If shift started before 11pm, use that day's 11pm
-            # If shift started after 11pm, use that 11pm
-            prior_11pm = prior_start.replace(hour=23, minute=0, second=0, microsecond=0)
-            if prior_start.hour < 23:
-                # Started after midnight, so reference is previous day's 11pm
-                prior_11pm = prior_11pm - timedelta(days=1)
+            # Calculate prior shift's reference start (typical shift start hour)
+            start_hour = self.typical_shift_start_hour
+            prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+            if prior_start.hour < start_hour:
+                # Started after midnight, so reference is previous day's shift start
+                prior_reference = prior_reference - timedelta(days=1)
             
             # Calculate what time in the prior shift corresponds to our elapsed time
-            target_time = prior_11pm + timedelta(minutes=elapsed_minutes)
+            target_time = prior_reference + timedelta(minutes=elapsed_minutes)
             
             # Sum RVU for all records finished before target_time
             rvu_at_elapsed = 0.0
@@ -4961,6 +5057,8 @@ class RVUCounterApp:
             self.study_widgets.clear()
             self.data_manager.save()
             logger.info("Shift stopped and archived")
+            # Recalculate typical shift times now that we have new data
+            self._calculate_typical_shift_times()
             # Update counters to zero but don't rebuild recent studies list
             self._update_counters_only()
         else:
@@ -7712,14 +7810,14 @@ class StatisticsWindow:
             return [], "No shift selected"
         
         elif period == "this_work_week":
-            # Current work week: Monday 11pm to next Monday 8am
+            # Current work week: Monday at typical shift start to next Monday at shift end
             start, end = self._get_work_week_range(now, "this")
             records = self._get_records_in_range(start, end)
             date_range = self._format_date_range(start, end)
             return records, f"This Work Week - {date_range}"
         
         elif period == "last_work_week":
-            # Previous work week: Monday 11pm to next Monday 8am
+            # Previous work week: Monday at typical shift start to next Monday at shift end
             start, end = self._get_work_week_range(now, "last")
             records = self._get_records_in_range(start, end)
             date_range = self._format_date_range(start, end)
@@ -7827,7 +7925,10 @@ class StatisticsWindow:
         return [], "Unknown period"
     
     def _get_work_week_range(self, target_date: datetime, which_week: str = "last") -> Tuple[datetime, datetime]:
-        """Calculate work week range (Monday 11pm to next Monday 8am).
+        """Calculate work week range based on typical shift times.
+        
+        Uses dynamically calculated typical_shift_start_hour and typical_shift_end_hour.
+        E.g., Monday at shift start to next Monday at shift end.
         
         Args:
             target_date: Reference date
@@ -7836,28 +7937,29 @@ class StatisticsWindow:
         Returns:
             Tuple of (start_datetime, end_datetime) for the work week
         """
-        # Work week: Monday 11pm to next Monday 8am
+        start_hour = self.typical_shift_start_hour
+        end_hour = self.typical_shift_end_hour
+        
         # Find the Monday that started the current work week
         days_since_monday = target_date.weekday()  # Monday = 0
         
         # Determine which work week we're in
-        if days_since_monday == 0 and target_date.hour < 8:
-            # It's Monday before 8am - we're still in the previous work week
-            # Find last Monday 11pm (which is 8 days ago Monday 11pm)
+        if days_since_monday == 0 and target_date.hour < end_hour:
+            # It's Monday before shift end - we're still in the previous work week
             work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=8)
         else:
-            # After 8am Monday or later in week - find the Monday that started this week
+            # After shift end Monday or later in week - find the Monday that started this week
             if days_since_monday == 0:
-                # It's Monday after 8am - current work week started yesterday (last Monday 11pm)
+                # It's Monday after shift end - current work week started last Monday
                 work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7)
             else:
                 # It's Tuesday-Sunday - find the most recent Monday
                 work_week_start_monday = target_date.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days_since_monday)
         
-        # Work week starts Monday 11pm (23:00)
-        work_week_start = work_week_start_monday.replace(hour=23, minute=0, second=0, microsecond=0)
-        # Work week ends next Monday 8am
-        work_week_end = (work_week_start_monday + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
+        # Work week starts Monday at typical shift start hour
+        work_week_start = work_week_start_monday.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+        # Work week ends next Monday at typical shift end hour
+        work_week_end = (work_week_start_monday + timedelta(days=7)).replace(hour=end_hour, minute=0, second=0, microsecond=0)
         
         if which_week == "last":
             # Go back one week (7 days)
@@ -11117,15 +11219,19 @@ class StatisticsWindow:
         self.theme_bg = bg_color
         self.theme_canvas_bg = canvas_bg
     
-    def detect_partial_shifts(self) -> List[List[dict]]:
+    def detect_partial_shifts(self, typical_start_hour: int = None) -> List[List[dict]]:
         """
-        Detect 'interrupted' shifts - shifts that started around 11pm, lasted <9 hours,
+        Detect 'interrupted' shifts - shifts that started around typical start time, lasted <9 hours,
         and have consecutive shorter shifts that make up the remaining time.
         Returns a list of shift groups that could be combined.
         """
         shifts = self.get_all_shifts()
         # Filter out current shift and sort by start time (oldest first)
         historical = [s for s in shifts if not s.get("is_current") and s.get("shift_start")]
+        
+        # Use provided typical start hour or default to 23 (11pm)
+        if typical_start_hour is None:
+            typical_start_hour = 23
         
         def parse_shift(s):
             try:
@@ -11149,15 +11255,21 @@ class StatisticsWindow:
             if not start:
                 continue
             
-            # Check if shift started around 11pm (10:30pm - 11:30pm)
+            # Check if shift started around typical start time (±0.5 hour)
             start_hour = start.hour + start.minute / 60
-            is_evening_start = 22.5 <= start_hour <= 23.5 or (0 <= start_hour <= 0.5)  # 10:30pm-11:30pm or 00:00-00:30
+            typical_low = typical_start_hour - 0.5
+            typical_high = typical_start_hour + 0.5
+            # Handle wraparound at midnight
+            if typical_start_hour >= 23:
+                is_typical_start = start_hour >= typical_low or start_hour <= (typical_high % 24)
+            else:
+                is_typical_start = typical_low <= start_hour <= typical_high
             
             # Calculate duration
             duration_hours = (end - start).total_seconds() / 3600
             
-            # If started around 11pm and lasted <9 hours, look for continuation shifts
-            if is_evening_start and duration_hours < 9:
+            # If started around typical time and lasted <9 hours, look for continuation shifts
+            if is_typical_start and duration_hours < 9:
                 group = [shift]
                 used_indices.add(i)
                 total_duration = duration_hours
