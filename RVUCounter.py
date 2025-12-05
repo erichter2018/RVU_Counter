@@ -2708,32 +2708,29 @@ class RVUCounterApp:
         main_frame.bind("<B1-Motion>", self.on_drag)
         main_frame.bind("<ButtonRelease-1>", self.on_drag_end)
         
-        # Top bar with Start/Stop Shift button, timer, and data source indicator
-        top_bar_frame = ttk.Frame(main_frame)
-        top_bar_frame.pack(fill=tk.X, pady=(0, 0))
+        # Top section using grid for precise vertical control
+        top_section = ttk.Frame(main_frame)
+        top_section.pack(fill=tk.X)
+        top_section.columnconfigure(0, weight=0)
+        top_section.columnconfigure(1, weight=1)
         
-        # Left column: button + label below
-        left_col = ttk.Frame(top_bar_frame)
-        left_col.pack(side=tk.LEFT, anchor=tk.NW)
+        # Row 0: Button and shift start time
+        self.start_btn = ttk.Button(top_section, text="Start Shift", command=self.start_shift, width=12)
+        self.start_btn.grid(row=0, column=0, sticky=tk.W, pady=(0, 0))
         
-        # Button and timer on same row
-        btn_row = ttk.Frame(left_col)
-        btn_row.pack(anchor=tk.W)
+        self.shift_start_label = ttk.Label(top_section, text="", font=("Arial", 8), foreground="gray")
+        self.shift_start_label.grid(row=0, column=1, sticky=tk.W, padx=(8, 0), pady=(0, 0))
         
-        self.start_btn = ttk.Button(btn_row, text="Start Shift", command=self.start_shift, width=12)
-        self.start_btn.pack(side=tk.LEFT)
-        
-        self.shift_start_label = ttk.Label(btn_row, text="", font=("Arial", 8), foreground="gray")
-        self.shift_start_label.pack(side=tk.LEFT, padx=(8, 0))
-        
-        # Data source indicator below button (clickable to toggle)
-        self.data_source_indicator = ttk.Label(left_col, text="detecting...", 
+        # Row 1: Data source indicator - tight to button above
+        self.data_source_indicator = ttk.Label(top_section, text="detecting...", 
                                                font=("Arial", 7), foreground="gray", cursor="hand2")
-        self.data_source_indicator.pack(anchor=tk.W, padx=(2, 0), pady=(0, 0))
+        self.data_source_indicator.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
-        counters_frame = ttk.LabelFrame(main_frame, padding="2")
-        counters_frame.pack(fill=tk.X, pady=(0, 3))  # No gap above, small gap below
+        # Counters frame - use tk.LabelFrame with explicit border control for tighter spacing
+        self.counters_frame = tk.LabelFrame(main_frame, bd=1, relief=tk.GROOVE, padx=2, pady=2)
+        self.counters_frame.pack(fill=tk.X, pady=(0, 3))
+        counters_frame = self.counters_frame  # Keep local reference for code below
         
         # Inner frame to center the content
         counters_inner = ttk.Frame(counters_frame)
@@ -5411,6 +5408,11 @@ class RVUCounterApp:
         canvas = getattr(self, 'studies_canvas', None)
         if canvas:
             canvas.configure(bg=canvas_bg)
+        
+        # Update counters frame (tk.LabelFrame)
+        counters_frame = getattr(self, 'counters_frame', None)
+        if counters_frame:
+            counters_frame.configure(bg=bg_color, fg=fg_color)
         
         # Update studies_scrollable_frame style to use canvas_bg
         # ttk.Frame uses TFrame style, but we need a specific style for the scrollable frame
