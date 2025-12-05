@@ -325,7 +325,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 	
 	; Reorder: Insert "Ultrasound" before modifiers if present
 	ModifierFound := false
@@ -404,11 +404,9 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
-	SearchText := "Mr "
-	ReplaceText := "MR "
-	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
+	; MR will be uppercased in ComparisonFill section
 	
 	; Reorder: Insert "MR" before study type and contrast modifiers
 	ModifierFound := false
@@ -469,7 +467,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	ReplaceText := ""
 	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
 	PriorComplete := PriorDate . " " . PriorDescript1 . ". " . PriorReport . PriorImages
 
@@ -501,7 +499,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
 	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
@@ -585,7 +583,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
 	SearchText := " Pa and lateral"
 	ReplaceText := " PA and lateral"
@@ -669,7 +667,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
 	SearchText := " Pa and lateral"
 	ReplaceText := " PA and lateral"
@@ -757,7 +755,7 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
 	SearchText := " Pa and lateral"
 	ReplaceText := " PA and lateral"
@@ -900,11 +898,9 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Trim whitespace
 	PriorDescript := Trim(PriorDescript)
 
-	StringUpper PriorDescript1, PriorDescript, T
+	StringLower PriorDescript1, PriorDescript
 
-	SearchText := "Ct "
-	ReplaceText := "CT "
-	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
+	; CT will be uppercased in ComparisonFill section
 	
 	; Reorder: Insert "CT" before study type and contrast modifiers
 	; Desired order: Body Part + CT + Study Type (angiography) + Contrast Modifier
@@ -947,6 +943,14 @@ if InStr(PriorOriginal, ModalitySearch)
 }
 
 ComparisonFill:
+; Uppercase modality indicators (CT, MR, MRI, US, XR, CR) when they appear as whole words
+; This must happen after all StringLower operations
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bct\b", "CT")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmr\b", "MR")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmri\b", "MRI")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bus\b", "US")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bxr\b", "XR")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcr\b", "CR")
 ; Check if prior study was within the last 2 days - if so, include time
 IncludeTime := false
 if (PriorDate != "" and PriorTimeFormatted != "")
