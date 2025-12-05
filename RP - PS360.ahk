@@ -505,10 +505,19 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
 	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
+	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
 	ModifierFound := false
 	
+	; First, check if "Radiograph" is already present but in wrong position
+	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
+	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	{
+		; Move Radiograph before the numeric pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		ModifierFound := true
+	}
 	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	if RegExMatch(PriorDescript1, " \d+\s*View")
+	else if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
 		; Insert Radiograph before the number+view pattern
 		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
@@ -584,10 +593,19 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
 	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
+	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
 	ModifierFound := false
 	
+	; First, check if "Radiograph" is already present but in wrong position
+	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
+	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	{
+		; Move Radiograph before the numeric pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		ModifierFound := true
+	}
 	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	if RegExMatch(PriorDescript1, " \d+\s*View")
+	else if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
 		; Insert Radiograph before the number+view pattern
 		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
@@ -658,9 +676,18 @@ if InStr(PriorOriginal, ModalitySearch)
 	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
+	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
 	ModifierFound := false
 	
-	if InStr(PriorDescript1, " PA And Lateral")
+	; First, check if "Radiograph" is already present but in wrong position
+	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
+	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	{
+		; Move Radiograph before the numeric pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		ModifierFound := true
+	}
+	else if InStr(PriorDescript1, " PA And Lateral")
 	{
 		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(PA And Lateral)", " Radiograph$2")
 		ModifierFound := true
@@ -738,10 +765,19 @@ if InStr(PriorOriginal, ModalitySearch)
 	
 	; Reorder: Insert "Radiograph" before view modifiers if present
 	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
+	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
 	ModifierFound := false
 	
+	; First, check if "Radiograph" is already present but in wrong position
+	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
+	if RegExMatch(PriorDescript1, "i) \d+\s+Or\s+More\s+Radiograph\s+Views?")
+	{
+		; Move Radiograph before the numeric pattern
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+Or\s+More)\s+Radiograph\s+(Views?)", " Radiograph $1 $2")
+		ModifierFound := true
+	}
 	; Check for numeric view pattern (e.g., "1 View", "2 View")
-	if RegExMatch(PriorDescript1, " \d+\s*View")
+	else if RegExMatch(PriorDescript1, " \d+\s*View")
 	{
 		; Insert Radiograph before the number+view pattern
 		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*View)", " Radiograph $1")
