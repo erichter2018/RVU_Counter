@@ -2836,11 +2836,11 @@ class RVUCounterApp:
         self.pace_bar_current_track.place(x=0, y=1, relwidth=1.0)
         
         # Current bar fill (grows with current RVU)
-        self.pace_bar_current = tk.Frame(self.pace_bar_current_track, bg="#1565c0", height=9)
+        self.pace_bar_current = tk.Frame(self.pace_bar_current_track, bg="#87CEEB", height=9)  # Sky blue
         self.pace_bar_current.place(x=0, y=0, width=0)
         
         # Prior bar (bottom) - full width background
-        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#ff8f00", height=9)
+        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#E6E6FA", height=9)  # Lavender
         self.pace_bar_prior_track.place(x=0, y=11, relwidth=1.0)
         
         # Prior bar marker (where prior was at this time)
@@ -3137,9 +3137,9 @@ class RVUCounterApp:
             
             # Update bar colors based on ahead/behind
             if diff >= 0:
-                current_bar_color = "#1565c0"  # Blue for current (ahead)
+                current_bar_color = "#87CEEB"  # Light blue for current (ahead)
                 status_text = f"▲ +{diff:.1f} ahead"
-                status_color = "#1565c0"  # Blue
+                status_color = "#4682B4"  # Steel blue for text
             else:
                 current_bar_color = "#c62828"  # Red for current (behind)
                 status_text = f"▼ {diff:.1f} behind"
