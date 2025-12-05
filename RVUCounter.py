@@ -1919,6 +1919,7 @@ class RVUData:
                 "pace_goal_rvu_per_hour": 15.0,  # Goal RVU/hour for theoretical pace
                 "pace_goal_shift_hours": 9.0,  # Goal shift length in hours
                 "pace_goal_total_rvu": 135.0,  # Goal total RVU (calculated: rvu_per_hour × hours)
+                "pace_comparison_mode": "prior",  # Last selected pace comparison: 'prior', 'goal', 'best_week', 'best_ever', 'week_N'
                 "shift_length_hours": 9,
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
@@ -2834,9 +2835,10 @@ class RVUCounterApp:
         self.pace_car_frame = ttk.Frame(main_frame)
         # Don't pack yet - will be shown/hidden based on settings
         
-        # Pace car comparison state: 'prior', 'best_week', 'best_ever', or shift_index
-        self.pace_comparison_mode = 'prior'
-        self.pace_comparison_shift = None  # Cache of the shift data being compared
+        # Pace car comparison state: 'prior', 'goal', 'best_week', 'best_ever', or 'week_N'
+        # Load from settings (persists between sessions)
+        self.pace_comparison_mode = self.data_manager.data["settings"].get("pace_comparison_mode", "prior")
+        self.pace_comparison_shift = None  # Cache of the shift data being compared (not persisted)
         
         # Container for both bars (stacked) - clickable to change comparison
         self.pace_bars_container = tk.Frame(self.pace_car_frame, bg="#e0e0e0", height=20)
@@ -3293,6 +3295,9 @@ class RVUCounterApp:
             def make_selection(mode, shift=None):
                 self.pace_comparison_mode = mode
                 self.pace_comparison_shift = shift
+                # Save mode to settings (persists between sessions)
+                self.data_manager.data["settings"]["pace_comparison_mode"] = mode
+                self.data_manager.save()
                 popup.destroy()
                 self._pace_popup = None
             
