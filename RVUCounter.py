@@ -2840,7 +2840,7 @@ class RVUCounterApp:
         self.pace_bar_current.place(x=0, y=0, width=0)
         
         # Prior bar (bottom) - full width background
-        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#E6E6FA", height=9)  # Lavender
+        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#B8B8DC", height=9)  # Darker lavender
         self.pace_bar_prior_track.place(x=0, y=11, relwidth=1.0)
         
         # Prior bar marker (where prior was at this time)
@@ -2852,19 +2852,19 @@ class RVUCounterApp:
         
         # Left side: "Now: XX.X  |  Prior: XX.X at time"
         self.pace_label_now_text = tk.Label(self.pace_label_frame, text="Now: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_now_text.pack(side=tk.LEFT)
+        self.pace_label_now_text.pack(side=tk.LEFT, padx=0)
         
         self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'))
-        self.pace_label_now_value.pack(side=tk.LEFT)
+        self.pace_label_now_value.pack(side=tk.LEFT, padx=(0, 2))
         
-        self.pace_label_separator = tk.Label(self.pace_label_frame, text="  |  Prior: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_separator.pack(side=tk.LEFT)
+        self.pace_label_separator = tk.Label(self.pace_label_frame, text=" | Prior: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
+        self.pace_label_separator.pack(side=tk.LEFT, padx=0)
         
-        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#E6E6FA")
-        self.pace_label_prior_value.pack(side=tk.LEFT)
+        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#9090C0")
+        self.pace_label_prior_value.pack(side=tk.LEFT, padx=(0, 1))
         
         self.pace_label_time = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
-        self.pace_label_time.pack(side=tk.LEFT)
+        self.pace_label_time.pack(side=tk.LEFT, padx=0)
         
         # Right side: status
         self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
@@ -3155,13 +3155,15 @@ class RVUCounterApp:
             
             # Update bar colors based on ahead/behind
             if diff >= 0:
-                current_bar_color = "#87CEEB"  # Light blue for current (ahead)
+                current_bar_color = "#5DADE2"  # Slightly darker light blue for bar (ahead)
+                current_text_color = "#2874A6"  # Darker blue for text
                 status_text = f"▲ +{diff:.1f} ahead"
-                status_color = "#4682B4"  # Steel blue for text
+                status_color = "#2874A6"  # Darker blue for status text
             else:
-                current_bar_color = "#c62828"  # Red for current (behind)
+                current_bar_color = "#c62828"  # Red for bar (behind)
+                current_text_color = "#B71C1C"  # Slightly darker red for text
                 status_text = f"▼ {diff:.1f} behind"
-                status_color = "#c62828"  # Red
+                status_color = "#B71C1C"  # Darker red for status text
             
             # Update current bar (top) - fills from left
             self.pace_bar_current.config(bg=current_bar_color)
@@ -3170,18 +3172,18 @@ class RVUCounterApp:
             # Update prior bar (bottom) - width scales with prior total relative to max
             self.pace_bar_prior_track.place(x=0, y=11, width=prior_total_width, height=9)
             
-            # Update prior marker (black line on orange bar showing "prior at this time")
+            # Update prior marker (black line on lavender bar showing "prior at this time")
             self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
             
             # Format current time as H:MM am/pm
             time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
             
-            # Update labels with color-coded RVU values
-            # "Now: XX.X" - XX.X is colored based on ahead/behind
-            self.pace_label_now_value.config(text=f"{current_rvu:.1f}", fg=current_bar_color)
+            # Update labels with color-coded RVU values (darker than bars)
+            # "Now: XX.X" - XX.X is darker blue/red based on ahead/behind
+            self.pace_label_now_value.config(text=f"{current_rvu:.1f}", fg=current_text_color)
             
-            # "| Prior: XX.X" - XX.X is lavender
-            self.pace_label_prior_value.config(text=f"{prior_rvu_at_elapsed:.1f}")
+            # "| Prior: XX.X" - XX.X is darker lavender
+            self.pace_label_prior_value.config(text=f"{prior_rvu_at_elapsed:.1f}", fg="#7070A0")
             
             # " at time" - gray
             self.pace_label_time.config(text=f" at {time_str}")
