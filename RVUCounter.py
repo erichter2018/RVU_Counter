@@ -1916,6 +1916,9 @@ class RVUData:
                 "show_projected_shift": True,
                 "show_comp_projected_shift": True,
                 "show_pace_car": False,  # Show pace comparison bar vs prior shift
+                "pace_goal_rvu_per_hour": 15.0,  # Goal RVU/hour for theoretical pace
+                "pace_goal_shift_hours": 9.0,  # Goal shift length in hours
+                "pace_goal_total_rvu": 135.0,  # Goal total RVU (calculated: rvu_per_hour × hours)
                 "shift_length_hours": 9,
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
@@ -3207,11 +3210,13 @@ class RVUCounterApp:
             
             # Comparison label - shows what we're comparing to
             compare_label = "Prior:"
-            if self.pace_comparison_mode == 'best_week':
+            if self.pace_comparison_mode == 'goal':
+                compare_label = "Goal:"  # Theoretical pace
+            elif self.pace_comparison_mode == 'best_week':
                 compare_label = "Week:"  # Week's best
             elif self.pace_comparison_mode == 'best_ever':
                 compare_label = "Best:"  # All time best
-            elif self.pace_comparison_mode.startswith('week_'):
+            elif self.pace_comparison_mode and self.pace_comparison_mode.startswith('week_'):
                 # Show 3-letter day abbreviation for specific week shift
                 if self.pace_comparison_shift:
                     compare_label = self._format_shift_day_abbrev(self.pace_comparison_shift) + ":"
@@ -3257,7 +3262,7 @@ class RVUCounterApp:
             # Position near the pace bar
             x = self.pace_bars_container.winfo_rootx()
             y = self.pace_bars_container.winfo_rooty() + self.pace_bars_container.winfo_height() + 5
-            popup.geometry(f"200x250+{x}+{y}")
+            popup.geometry(f"220x350+{x}+{y}")
             
             # Apply theme
             dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
@@ -3286,6 +3291,95 @@ class RVUCounterApp:
             def add_hover(widget, bg_color, dark_mode):
                 widget.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
                 widget.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
+            
+            # --- GOAL SECTION: Theoretical pace with editable parameters ---
+            goal_frame = tk.Frame(frame, bg=bg_color)
+            goal_frame.pack(fill=tk.X, pady=(0, 5))
+            
+            # Get current goal settings
+            goal_rvu_h = self.data_manager.data["settings"].get("pace_goal_rvu_per_hour", 15.0)
+            goal_hours = self.data_manager.data["settings"].get("pace_goal_shift_hours", 9.0)
+            goal_total = self.data_manager.data["settings"].get("pace_goal_total_rvu", 135.0)
+            
+            # Goal label (clickable)
+            goal_btn = tk.Label(goal_frame, text=f"  Goal: {goal_rvu_h:.1f}/h × {goal_hours:.0f}h = {goal_total:.0f} RVU", 
+                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+            goal_btn.pack(fill=tk.X, pady=1)
+            goal_btn.bind("<Button-1>", lambda e: make_selection('goal', None))
+            add_hover(goal_btn, bg_color, dark_mode)
+            
+            # Mini editor frame (expandable)
+            goal_editor = tk.Frame(frame, bg=bg_color)
+            goal_editor.pack(fill=tk.X, padx=(10, 0))
+            
+            # Variables for goal settings
+            rvu_h_var = tk.StringVar(value=f"{goal_rvu_h:.1f}")
+            hours_var = tk.StringVar(value=f"{goal_hours:.1f}")
+            total_var = tk.StringVar(value=f"{goal_total:.1f}")
+            
+            def update_total(*args):
+                """Recalculate total when RVU/h or hours changes."""
+                try:
+                    rvu_h = float(rvu_h_var.get())
+                    hours = float(hours_var.get())
+                    new_total = rvu_h * hours
+                    total_var.set(f"{new_total:.1f}")
+                    # Save settings
+                    self.data_manager.data["settings"]["pace_goal_rvu_per_hour"] = rvu_h
+                    self.data_manager.data["settings"]["pace_goal_shift_hours"] = hours
+                    self.data_manager.data["settings"]["pace_goal_total_rvu"] = new_total
+                    self.data_manager.save()
+                    # Update goal label
+                    goal_btn.config(text=f"  Goal: {rvu_h:.1f}/h × {hours:.0f}h = {new_total:.0f} RVU")
+                except ValueError:
+                    pass
+            
+            def update_rvu_h_from_total(*args):
+                """Recalculate RVU/h when total changes directly."""
+                try:
+                    total = float(total_var.get())
+                    hours = float(hours_var.get())
+                    if hours > 0:
+                        new_rvu_h = total / hours
+                        rvu_h_var.set(f"{new_rvu_h:.1f}")
+                        # Save settings
+                        self.data_manager.data["settings"]["pace_goal_rvu_per_hour"] = new_rvu_h
+                        self.data_manager.data["settings"]["pace_goal_total_rvu"] = total
+                        self.data_manager.save()
+                        # Update goal label
+                        goal_btn.config(text=f"  Goal: {new_rvu_h:.1f}/h × {hours:.0f}h = {total:.0f} RVU")
+                except ValueError:
+                    pass
+            
+            # RVU/h row
+            rvu_h_frame = tk.Frame(goal_editor, bg=bg_color)
+            rvu_h_frame.pack(fill=tk.X, pady=1)
+            tk.Label(rvu_h_frame, text="RVU/h:", font=("Arial", 7), bg=bg_color, fg="gray", width=6, anchor=tk.E).pack(side=tk.LEFT)
+            rvu_h_entry = tk.Entry(rvu_h_frame, textvariable=rvu_h_var, font=("Arial", 7), width=6)
+            rvu_h_entry.pack(side=tk.LEFT, padx=2)
+            rvu_h_entry.bind("<FocusOut>", update_total)
+            rvu_h_entry.bind("<Return>", update_total)
+            
+            # Hours row
+            hours_frame = tk.Frame(goal_editor, bg=bg_color)
+            hours_frame.pack(fill=tk.X, pady=1)
+            tk.Label(hours_frame, text="Hours:", font=("Arial", 7), bg=bg_color, fg="gray", width=6, anchor=tk.E).pack(side=tk.LEFT)
+            hours_entry = tk.Entry(hours_frame, textvariable=hours_var, font=("Arial", 7), width=6)
+            hours_entry.pack(side=tk.LEFT, padx=2)
+            hours_entry.bind("<FocusOut>", update_total)
+            hours_entry.bind("<Return>", update_total)
+            
+            # Total row
+            total_frame = tk.Frame(goal_editor, bg=bg_color)
+            total_frame.pack(fill=tk.X, pady=1)
+            tk.Label(total_frame, text="Total:", font=("Arial", 7), bg=bg_color, fg="gray", width=6, anchor=tk.E).pack(side=tk.LEFT)
+            total_entry = tk.Entry(total_frame, textvariable=total_var, font=("Arial", 7), width=6)
+            total_entry.pack(side=tk.LEFT, padx=2)
+            total_entry.bind("<FocusOut>", update_rvu_h_from_total)
+            total_entry.bind("<Return>", update_rvu_h_from_total)
+            
+            # Separator
+            tk.Frame(frame, bg=border_color, height=1).pack(fill=tk.X, pady=5)
             
             # --- TOP SECTION: Prior, Week Best, All Time Best (always show all 3 if available) ---
             
@@ -3539,12 +3633,29 @@ class RVUCounterApp:
         return reference
     
     def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
-        """Get RVU from comparison shift at the same elapsed time since typical shift start.
+        """Get RVU from comparison source at the same elapsed time.
         
-        Returns tuple (rvu_at_elapsed, total_rvu) or None if no shift data available.
-        Uses self.pace_comparison_mode to determine which shift to compare against.
+        Returns tuple (rvu_at_elapsed, total_rvu) or None if no data available.
+        Uses self.pace_comparison_mode to determine comparison source:
+        - 'goal': Theoretical pace based on settings (RVU/h × hours)
+        - 'prior', 'best_week', 'best_ever', 'week_N': Actual historical shifts
         """
         try:
+            # Handle 'goal' mode - theoretical pace
+            if self.pace_comparison_mode == 'goal':
+                goal_rvu_h = self.data_manager.data["settings"].get("pace_goal_rvu_per_hour", 15.0)
+                goal_hours = self.data_manager.data["settings"].get("pace_goal_shift_hours", 9.0)
+                goal_total = goal_rvu_h * goal_hours
+                
+                # Calculate RVU at current elapsed time
+                elapsed_hours = elapsed_minutes / 60.0
+                rvu_at_elapsed = goal_rvu_h * elapsed_hours
+                
+                # Cap at total (in case elapsed exceeds goal hours)
+                rvu_at_elapsed = min(rvu_at_elapsed, goal_total)
+                
+                return (rvu_at_elapsed, goal_total)
+            
             # Determine which shift to use for comparison
             comparison_shift = None
             
@@ -3571,18 +3682,33 @@ class RVUCounterApp:
             if not comparison_shift:
                 return None
             
-            # Get comparison shift's reference start time
+            # Get comparison shift's actual start time
             prior_start = datetime.fromisoformat(comparison_shift["shift_start"])
             
-            # Calculate prior shift's reference start (typical shift start hour)
-            start_hour = self.typical_shift_start_hour
-            prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-            if prior_start.hour < start_hour:
-                # Started after midnight, so reference is previous day's shift start
-                prior_reference = prior_reference - timedelta(days=1)
+            # Get current shift's actual start time
+            current_start = self.shift_start if self.shift_start else datetime.now()
             
-            # Calculate what time in the prior shift corresponds to our elapsed time
-            target_time = prior_reference + timedelta(minutes=elapsed_minutes)
+            # Check if shifts started at similar times (within 2 hours of same hour)
+            # If so, use the old approach (reference time based on typical start hour)
+            # If not, use elapsed time from actual shift starts
+            start_hour_diff = abs(prior_start.hour - current_start.hour)
+            if start_hour_diff > 12:
+                start_hour_diff = 24 - start_hour_diff  # Handle wraparound
+            
+            use_elapsed_from_actual_start = start_hour_diff > 2
+            
+            if use_elapsed_from_actual_start:
+                # Shifts started at different times - use elapsed time from actual starts
+                # Calculate what time in the prior shift corresponds to our elapsed time
+                target_time = prior_start + timedelta(minutes=elapsed_minutes)
+            else:
+                # Shifts started at similar times - use reference time approach
+                start_hour = self.typical_shift_start_hour
+                prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+                if prior_start.hour < start_hour:
+                    # Started after midnight, so reference is previous day's shift start
+                    prior_reference = prior_reference - timedelta(days=1)
+                target_time = prior_reference + timedelta(minutes=elapsed_minutes)
             
             # Sum RVU for all records finished before target_time
             rvu_at_elapsed = 0.0
