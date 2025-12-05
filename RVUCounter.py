@@ -3123,8 +3123,11 @@ class RVUCounterApp:
             
             current_time = datetime.now()
             
-            # Calculate reference shift start time for current shift
-            reference_start = self._get_reference_shift_start(current_time)
+            # Use actual shift start time if available, otherwise fall back to reference
+            if self.shift_start:
+                reference_start = self.shift_start
+            else:
+                reference_start = self._get_reference_shift_start(current_time)
             
             # Elapsed time since shift start in minutes
             elapsed_minutes = (current_time - reference_start).total_seconds() / 60
@@ -3188,8 +3191,18 @@ class RVUCounterApp:
             # Update prior marker (black line on lavender bar showing "prior at this time")
             self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
             
-            # Format current time as H:MM am/pm
-            time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
+            # Format time display - show elapsed time for goal mode, otherwise current time
+            if self.pace_comparison_mode == 'goal':
+                # For goal mode, show elapsed time (e.g., "at 2h 15m")
+                elapsed_hours = int(elapsed_minutes // 60)
+                elapsed_mins = int(elapsed_minutes % 60)
+                if elapsed_hours > 0:
+                    time_str = f"{elapsed_hours}h {elapsed_mins}m"
+                else:
+                    time_str = f"{elapsed_mins}m"
+            else:
+                # For actual shifts, show current time
+                time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
             
             # Update labels with color-coded RVU values and position precisely
             # Position labels tightly side-by-side by calculating cumulative x positions
