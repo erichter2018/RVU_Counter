@@ -3155,8 +3155,8 @@ class RVUCounterApp:
             # Update prior marker (black line on orange bar showing "prior at this time")
             self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
             
-            # Format current time as H:MM AM/PM
-            time_str = current_time.strftime("%I:%M %p").lstrip("0")
+            # Format current time as H:MM am/pm
+            time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
             
             # Update labels with bold numbers and colors
             # Using tk.Label allows us to do partial formatting via multiple labels or HTML-like approach
