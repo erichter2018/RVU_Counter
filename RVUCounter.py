@@ -3705,12 +3705,24 @@ class RVUCounterApp:
         total_rvu = 0
         recorded_count = 0
         
+        # Check duplicate settings
+        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+        
         # Record each study individually
         for i, entry in enumerate(all_entries):
             data = self.multi_accession_data[entry]
             
             # Get the pure accession number
             accession = accession_numbers[i] if i < len(accession_numbers) else entry
+            
+            # Skip if this accession was already recorded (as individual or part of another multi)
+            if ignore_duplicates:
+                if accession in self.tracker.seen_accessions:
+                    logger.debug(f"Skipping duplicate accession in multi-accession recording: {accession}")
+                    continue
+                if self.tracker._was_part_of_multi_accession(accession, self.data_manager):
+                    logger.debug(f"Skipping accession already recorded in another multi-accession: {accession}")
+                    continue
             
             study_record = {
                 "accession": accession,
@@ -5832,20 +5844,29 @@ class RVUCounterApp:
                     else:
                         all_accession_numbers.append(acc_entry.strip())
                 
-                # Check if ALL accessions are duplicates
-                is_duplicate = False
+                # Check how many accessions are duplicates
+                duplicate_count = 0
+                total_count = len(all_accession_numbers)
                 ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
                 if ignore_duplicates and all_accession_numbers and not self.multi_accession_mode:
                     # Only check if not actively tracking (multi_accession_mode)
-                    is_duplicate = all(acc in self.tracker.seen_accessions for acc in all_accession_numbers)
+                    for acc in all_accession_numbers:
+                        # Check both seen_accessions and multi-accession history
+                        if acc in self.tracker.seen_accessions:
+                            duplicate_count += 1
+                        elif self.tracker._was_part_of_multi_accession(acc, self.data_manager):
+                            duplicate_count += 1
+                
+                all_duplicates = duplicate_count == total_count
+                some_duplicates = duplicate_count > 0 and duplicate_count < total_count
                 
                 acc_display = ", ".join(acc_display_list)
                 if len(self.current_multiple_accessions) > 2:
                     acc_display += f" (+{len(self.current_multiple_accessions) - 2})"
                 
-                # Calculate duration for current study (only if not duplicate)
+                # Calculate duration for current study (only if not all duplicates)
                 duration_text = ""
-                if show_time and (self.current_accession or self.multi_accession_mode) and not is_duplicate:
+                if show_time and (self.current_accession or self.multi_accession_mode) and not all_duplicates:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
@@ -5865,11 +5886,17 @@ class RVUCounterApp:
                         if len(acc_display) > max_chars:
                             acc_display = self._truncate_text(acc_display, max_chars)
                 
-                # If duplicate, show "already recorded" in red instead of accession
-                if is_duplicate:
-                    self.debug_accession_label.config(text="already recorded", foreground="#c62828")  # Same red as pace car "behind"
+                # Display based on duplicate status
+                if all_duplicates:
+                    # All accessions already recorded
+                    self.debug_accession_label.config(text="already recorded", foreground="#c62828")
                     self.debug_duration_label.config(text="")
+                elif some_duplicates:
+                    # Partial duplicates - show "X of Y already recorded" in red
+                    self.debug_accession_label.config(text=f"{duplicate_count} of {total_count} already recorded", foreground="#c62828")
+                    self.debug_duration_label.config(text=duration_text if show_time else "")
                 else:
+                    # No duplicates - show normal accession display
                     self.debug_accession_label.config(text=f"Accession: {acc_display}", foreground="gray")
                     self.debug_duration_label.config(text=duration_text if show_time else "")
                 
