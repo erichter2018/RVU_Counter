@@ -1915,7 +1915,6 @@ class RVUData:
                 "show_projected": True,
                 "show_projected_shift": True,
                 "show_comp_projected_shift": True,
-                "show_pace_car": False,  # Show pace comparison bar vs prior shift
                 "shift_length_hours": 9,
                 "min_study_seconds": 5,
                 "ignore_duplicate_accessions": True,
@@ -2688,7 +2687,6 @@ class RVUCounterApp:
         self.update_recent_studies_label()
         
         self.setup_refresh()
-        self.setup_time_sensitive_update()  # Start time-sensitive counter updates (5s interval)
         
         logger.info("RVU Counter application started")
     
@@ -2822,59 +2820,6 @@ class RVUCounterApp:
         self.projected_shift_comp_label.pack(side=tk.LEFT, padx=(3, 0))
         self.projected_shift_value_frame = projected_shift_value_frame
         
-        # Pace Car bar - comparison vs prior shift (initially hidden)
-        self.pace_car_frame = ttk.Frame(main_frame)
-        # Don't pack yet - will be shown/hidden based on settings
-        
-        # Container for both bars (stacked)
-        self.pace_bars_container = tk.Frame(self.pace_car_frame, bg="#e0e0e0", height=20)
-        self.pace_bars_container.pack(fill=tk.X, padx=2, pady=1)
-        self.pace_bars_container.pack_propagate(False)
-        
-        # Current bar (top) - background track
-        self.pace_bar_current_track = tk.Frame(self.pace_bars_container, bg="#e8e8e8", height=9)
-        self.pace_bar_current_track.place(x=0, y=1, relwidth=1.0)
-        
-        # Current bar fill (grows with current RVU)
-        self.pace_bar_current = tk.Frame(self.pace_bar_current_track, bg="#87CEEB", height=9)  # Sky blue
-        self.pace_bar_current.place(x=0, y=0, width=0)
-        
-        # Prior bar (bottom) - full width background
-        self.pace_bar_prior_track = tk.Frame(self.pace_bars_container, bg="#B8B8DC", height=9)  # Darker lavender
-        self.pace_bar_prior_track.place(x=0, y=11, relwidth=1.0)
-        
-        # Prior bar marker (where prior was at this time)
-        self.pace_bar_prior_marker = tk.Frame(self.pace_bars_container, bg="#000000", width=2, height=9)
-        
-        # Labels showing the comparison (using place for precise positioning)
-        self.pace_label_frame = tk.Frame(self.pace_car_frame, bg=self.root.cget('bg'), height=12)
-        self.pace_label_frame.pack(fill=tk.X, padx=2)
-        self.pace_label_frame.pack_propagate(False)
-        
-        # Left side: Build string with colored numbers using place() for tight spacing
-        # We'll position labels precisely to eliminate gaps
-        self.pace_label_now_text = tk.Label(self.pace_label_frame, text="Now:", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
-        self.pace_label_now_text.place(x=0, y=0)
-        
-        self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), padx=0, pady=0, bd=0)
-        # Will be positioned after measuring text width
-        
-        self.pace_label_separator = tk.Label(self.pace_label_frame, text=" | ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
-        
-        self.pace_label_prior_text = tk.Label(self.pace_label_frame, text="Prior:", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
-        
-        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#9090C0", padx=0, pady=0, bd=0)
-        
-        self.pace_label_time = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
-        
-        # Right side: status
-        self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), bd=0)
-        self.pace_label_right.pack(side=tk.RIGHT, padx=0, pady=0)
-        
-        # Show pace car if enabled in settings
-        if self.data_manager.data["settings"].get("show_pace_car", False):
-            self.pace_car_frame.pack(fill=tk.X, pady=(0, 2))
-        
         # Buttons frame - centered
         buttons_frame = ttk.Frame(main_frame)
         buttons_frame.pack(pady=5)
@@ -3000,274 +2945,6 @@ class RVUCounterApp:
         # Always refresh to update debug display, but only track if running
         self.refresh_data()
         self.root.after(self.refresh_interval, self.setup_refresh)
-    
-    def setup_time_sensitive_update(self):
-        """Setup periodic update for time-sensitive counters (runs every 5 seconds)."""
-        self.update_time_sensitive_stats()
-        self.root.after(5000, self.setup_time_sensitive_update)  # 5 seconds
-    
-    def update_time_sensitive_stats(self):
-        """Lightweight update for time-based metrics only (avg/hour, projections).
-        
-        This runs on a slower timer (5s) and only recalculates values that change
-        with time, avoiding expensive full recalculation of all stats.
-        """
-        if not self.shift_start:
-            return
-        
-        try:
-            records = self.data_manager.data["current_shift"]["records"]
-            current_time = datetime.now()
-            settings = self.data_manager.data["settings"]
-            
-            # Calculate values that change with time
-            total_rvu = sum(r["rvu"] for r in records)
-            total_comp = sum(self._calculate_study_compensation(r) for r in records)
-            
-            # Average per hour (changes as time passes even with no new studies)
-            hours_elapsed = (current_time - self.shift_start).total_seconds() / 3600
-            avg_per_hour = total_rvu / hours_elapsed if hours_elapsed > 0 else 0.0
-            avg_comp_per_hour = total_comp / hours_elapsed if hours_elapsed > 0 else 0.0
-            
-            # Update avg labels if visible
-            if settings.get("show_avg", True):
-                self.avg_label.config(text=f"{avg_per_hour:.1f}")
-                if settings.get("show_comp_avg", False):
-                    self.avg_comp_label.config(text=f"(${avg_comp_per_hour:,.0f})")
-            
-            # Projected for current hour (changes as time passes)
-            current_hour_start = current_time.replace(minute=0, second=0, microsecond=0)
-            current_hour_records = [r for r in records if datetime.fromisoformat(r["time_finished"]) >= current_hour_start]
-            current_hour_rvu = sum(r["rvu"] for r in current_hour_records)
-            current_hour_comp = sum(self._calculate_study_compensation(r) for r in current_hour_records)
-            
-            minutes_into_hour = (current_time - current_hour_start).total_seconds() / 60
-            if minutes_into_hour > 0:
-                projected = (current_hour_rvu / minutes_into_hour) * 60
-                projected_comp = (current_hour_comp / minutes_into_hour) * 60
-            else:
-                projected = 0.0
-                projected_comp = 0.0
-            
-            # Update projected labels if visible
-            if settings.get("show_projected", True):
-                self.projected_label.config(text=f"{projected:.1f}")
-                if settings.get("show_comp_projected", False):
-                    self.projected_comp_label.config(text=f"(${projected_comp:,.0f})")
-            
-            # Projected shift total (changes as time passes)
-            projected_shift_rvu = total_rvu
-            projected_shift_comp = total_comp
-            
-            if self.effective_shift_start and self.projected_shift_end:
-                time_remaining = (self.projected_shift_end - current_time).total_seconds()
-                
-                if time_remaining > 0 and hours_elapsed > 0:
-                    rvu_rate_per_hour = avg_per_hour
-                    hours_remaining = time_remaining / 3600
-                    
-                    projected_additional_rvu = rvu_rate_per_hour * hours_remaining
-                    projected_shift_rvu = total_rvu + projected_additional_rvu
-                    
-                    projected_additional_comp = self._calculate_projected_compensation(
-                        current_time, 
-                        self.projected_shift_end, 
-                        rvu_rate_per_hour
-                    )
-                    projected_shift_comp = total_comp + projected_additional_comp
-            
-            # Update projected shift labels if visible
-            if settings.get("show_projected_shift", True):
-                self.projected_shift_label.config(text=f"{projected_shift_rvu:.1f}")
-                if settings.get("show_comp_projected_shift", False):
-                    self.projected_shift_comp_label.config(text=f"(${projected_shift_comp:,.0f})")
-            
-            # Update pace car if visible
-            if settings.get("show_pace_car", False):
-                self.update_pace_car(total_rvu)
-        
-        except Exception as e:
-            logger.debug(f"Error updating time-sensitive stats: {e}")
-    
-    def update_pace_car(self, current_rvu: float):
-        """Update the pace car comparison bar.
-        
-        Compares current shift RVU vs prior shift RVU at the same elapsed time
-        since 11pm (reference shift start time).
-        
-        Design: Two stacked bars
-        - Top bar (current): fills proportionally based on current RVU vs prior total
-        - Bottom bar (prior): full width = prior total, with marker at "prior at this time"
-        """
-        try:
-            if not hasattr(self, 'pace_bars_container'):
-                return
-            
-            current_time = datetime.now()
-            
-            # Calculate reference 11pm for current shift
-            # If it's before 11pm, use yesterday's 11pm
-            today_11pm = current_time.replace(hour=23, minute=0, second=0, microsecond=0)
-            if current_time.hour < 23:
-                # We're past midnight, so 11pm was yesterday
-                reference_11pm = today_11pm - timedelta(days=1)
-            else:
-                reference_11pm = today_11pm
-            
-            # Elapsed time since 11pm in minutes
-            elapsed_minutes = (current_time - reference_11pm).total_seconds() / 60
-            if elapsed_minutes < 0:
-                elapsed_minutes = 0
-            
-            # Get prior shift data (returns tuple: rvu_at_elapsed, total_rvu)
-            prior_data = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes)
-            
-            if prior_data is None:
-                # No prior shift data available
-                self.pace_label_now_text.config(text="No prior shift data")
-                self.pace_label_now_value.config(text="")
-                self.pace_label_separator.config(text="")
-                self.pace_label_prior_value.config(text="")
-                self.pace_label_time.config(text="")
-                self.pace_label_right.config(text="")
-                self.pace_bar_current.place_forget()
-                self.pace_bar_prior_marker.place_forget()
-                return
-            
-            prior_rvu_at_elapsed, prior_total_rvu = prior_data
-            
-            # Calculate the difference
-            diff = current_rvu - prior_rvu_at_elapsed
-            
-            # Get container width
-            self.pace_bars_container.update_idletasks()
-            container_width = self.pace_bars_container.winfo_width()
-            if container_width < 10:
-                container_width = 200  # Default fallback
-            
-            # Dynamic scale: use whichever is larger (current or prior total) as 100%
-            # This way if you're exceeding prior total, both bars scale down appropriately
-            max_scale = max(current_rvu, prior_total_rvu, 1)  # minimum 1 to avoid division by zero
-            
-            # Calculate widths relative to max_scale
-            current_width = int((current_rvu / max_scale) * container_width)
-            prior_total_width = int((prior_total_rvu / max_scale) * container_width)
-            prior_marker_pos = int((prior_rvu_at_elapsed / max_scale) * container_width)
-            
-            # Update bar colors based on ahead/behind
-            if diff >= 0:
-                current_bar_color = "#5DADE2"  # Slightly darker light blue for bar (ahead)
-                current_text_color = "#2874A6"  # Darker blue for text
-                status_text = f"▲ +{diff:.1f} ahead"
-                status_color = "#2874A6"  # Darker blue for status text
-            else:
-                current_bar_color = "#c62828"  # Red for bar (behind)
-                current_text_color = "#B71C1C"  # Slightly darker red for text
-                status_text = f"▼ {diff:.1f} behind"
-                status_color = "#B71C1C"  # Darker red for status text
-            
-            # Update current bar (top) - fills from left
-            self.pace_bar_current.config(bg=current_bar_color)
-            self.pace_bar_current.place(x=0, y=0, width=current_width, height=9)
-            
-            # Update prior bar (bottom) - width scales with prior total relative to max
-            self.pace_bar_prior_track.place(x=0, y=11, width=prior_total_width, height=9)
-            
-            # Update prior marker (black line on lavender bar showing "prior at this time")
-            self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
-            
-            # Format current time as H:MM am/pm
-            time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
-            
-            # Update labels with color-coded RVU values and position precisely
-            # Position labels tightly side-by-side by calculating cumulative x positions
-            x_pos = 0
-            
-            # "Now:" - gray
-            self.pace_label_now_text.place(x=x_pos, y=0)
-            x_pos += self.pace_label_now_text.winfo_reqwidth()
-            
-            # "XX.X" - colored based on ahead/behind
-            self.pace_label_now_value.config(text=f" {current_rvu:.1f}", fg=current_text_color)
-            self.pace_label_now_value.place(x=x_pos, y=0)
-            x_pos += self.pace_label_now_value.winfo_reqwidth()
-            
-            # " | " - gray
-            self.pace_label_separator.place(x=x_pos, y=0)
-            x_pos += self.pace_label_separator.winfo_reqwidth()
-            
-            # "Prior:" - gray
-            self.pace_label_prior_text.place(x=x_pos, y=0)
-            x_pos += self.pace_label_prior_text.winfo_reqwidth()
-            
-            # "XX.X" - darker lavender
-            self.pace_label_prior_value.config(text=f" {prior_rvu_at_elapsed:.1f}", fg="#7070A0")
-            self.pace_label_prior_value.place(x=x_pos, y=0)
-            x_pos += self.pace_label_prior_value.winfo_reqwidth()
-            
-            # " at time" - gray
-            self.pace_label_time.config(text=f" at {time_str}")
-            self.pace_label_time.place(x=x_pos, y=0)
-            
-            # Status on right
-            self.pace_label_right.config(text=status_text, fg=status_color)
-            
-        except Exception as e:
-            logger.debug(f"Error updating pace car: {e}")
-    
-    def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
-        """Get RVU from prior shift at the same elapsed time since 11pm.
-        
-        Returns tuple (rvu_at_elapsed, total_rvu) or None if no prior shift data available.
-        """
-        try:
-            # Get historical shifts
-            historical_shifts = self.data_manager.data.get("shifts", [])
-            if not historical_shifts:
-                return None
-            
-            # Find the most recent completed shift (first in the list, sorted by date desc)
-            prior_shift = None
-            for shift in historical_shifts:
-                if shift.get("shift_start") and shift.get("records"):
-                    prior_shift = shift
-                    break
-            
-            if not prior_shift:
-                return None
-            
-            # Get prior shift's reference 11pm
-            prior_start = datetime.fromisoformat(prior_shift["shift_start"])
-            
-            # Calculate prior shift's 11pm reference
-            # If shift started before 11pm, use that day's 11pm
-            # If shift started after 11pm, use that 11pm
-            prior_11pm = prior_start.replace(hour=23, minute=0, second=0, microsecond=0)
-            if prior_start.hour < 23:
-                # Started after midnight, so reference is previous day's 11pm
-                prior_11pm = prior_11pm - timedelta(days=1)
-            
-            # Calculate what time in the prior shift corresponds to our elapsed time
-            target_time = prior_11pm + timedelta(minutes=elapsed_minutes)
-            
-            # Sum RVU for all records finished before target_time
-            rvu_at_elapsed = 0.0
-            total_rvu = 0.0
-            for record in prior_shift.get("records", []):
-                try:
-                    rvu = record.get("rvu", 0)
-                    total_rvu += rvu  # Always add to total
-                    time_finished = datetime.fromisoformat(record.get("time_finished", ""))
-                    if time_finished <= target_time:
-                        rvu_at_elapsed += rvu
-                except:
-                    total_rvu += record.get("rvu", 0)  # Still count toward total even if time parse fails
-            
-            return (rvu_at_elapsed, total_rvu)
-            
-        except Exception as e:
-            logger.debug(f"Error getting prior shift RVU: {e}")
-            return None
     
     def _record_or_update_study(self, study_record: dict):
         """
@@ -4867,6 +4544,11 @@ class RVUCounterApp:
                 records.pop(index)
                 logger.info(f"Removed study from memory: {accession}, remaining records: {len(records)}")
                 
+                # Remove from seen_accessions to allow retracking if reopened
+                if accession and accession in self.tracker.seen_accessions:
+                    self.tracker.seen_accessions.remove(accession)
+                    logger.info(f"Removed {accession} from seen_accessions - can be tracked again if reopened")
+                
                 # Save to sync memory changes to database
                 self.data_manager.save()
                 logger.info(f"Saved changes after deletion")
@@ -5756,27 +5438,6 @@ class RVUCounterApp:
         if debug_frame:
             debug_frame.configure(bg=bg_color, fg=fg_color)
         
-        # Update pace car labels (tk.Label)
-        pace_labels = [
-            getattr(self, 'pace_label_now_text', None),
-            getattr(self, 'pace_label_separator', None),
-            getattr(self, 'pace_label_time', None),
-            getattr(self, 'pace_label_right', None),
-        ]
-        for label in pace_labels:
-            if label:
-                label.configure(bg=bg_color)
-        
-        # pace_label_now_value and pace_label_prior_value keep their dynamic colors
-        if hasattr(self, 'pace_label_now_value') and self.pace_label_now_value:
-            self.pace_label_now_value.configure(bg=bg_color)
-        if hasattr(self, 'pace_label_prior_value') and self.pace_label_prior_value:
-            self.pace_label_prior_value.configure(bg=bg_color)
-        
-        # Update pace label frame
-        if hasattr(self, 'pace_label_frame') and self.pace_label_frame:
-            self.pace_label_frame.configure(bg=bg_color)
-        
         # Update studies_scrollable_frame style to use canvas_bg
         # ttk.Frame uses TFrame style, but we need a specific style for the scrollable frame
         self.style.configure("StudiesScrollable.TFrame", background=canvas_bg)
@@ -6177,11 +5838,6 @@ class SettingsWindow:
                                              command=lambda: self.sync_compensation_state("projected_shift"))
         self.projected_shift_cb.pack(anchor=tk.W, pady=2)
         
-        # Pace car checkbox (compare vs prior shift)
-        self.show_pace_car_var = tk.BooleanVar(value=settings.get("show_pace_car", False))
-        self.pace_car_cb = ttk.Checkbutton(counters_col, text="pace vs prior shift", variable=self.show_pace_car_var)
-        self.pace_car_cb.pack(anchor=tk.W, pady=2)
-        
         # Role radio buttons (Partner/Associate)
         role_frame = ttk.Frame(counters_col)
         role_frame.pack(anchor=tk.W, pady=(10, 2))
@@ -6299,19 +5955,12 @@ class SettingsWindow:
             self.data_manager.data["settings"]["ignore_duplicate_accessions"] = self.ignore_duplicates_var.get()
             self.data_manager.data["settings"]["show_time"] = self.show_time_var.get()
             self.data_manager.data["settings"]["stay_on_top"] = self.stay_on_top_var.get()
-            self.data_manager.data["settings"]["show_pace_car"] = self.show_pace_car_var.get()
             
             # Update tracker min_seconds
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
             
             # Update stay on top setting
             self.app.root.attributes("-topmost", self.data_manager.data["settings"]["stay_on_top"])
-            
-            # Update pace car visibility
-            if self.show_pace_car_var.get():
-                self.app.pace_car_frame.pack(fill=tk.X, pady=(0, 2), after=self.app.counters_frame)
-            else:
-                self.app.pace_car_frame.pack_forget()
             
             self.data_manager.save()
             self.app.apply_theme()
