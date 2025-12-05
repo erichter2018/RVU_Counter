@@ -10977,8 +10977,7 @@ class StatisticsWindow:
         # Projected study type breakdown
         self._projection_table.add_row({'metric': 'Projected Study Type Breakdown:', 'value': ''})
         sorted_study_types = sorted(study_type_distribution.items(), 
-                                   key=lambda x: x[1]['compensation'] * (x[1]['percentage'] if historical_studies > 0 else 0), 
-                                   reverse=True)
+                                   key=lambda x: x[0])  # Sort by study type name
         
         for st, stats in sorted_study_types[:10]:  # Top 10 study types
             projected_count = stats['percentage'] * projected_studies if historical_studies > 0 else 0
