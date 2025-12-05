@@ -2721,11 +2721,16 @@ class RVUCounterApp:
         self.shift_start_label = ttk.Label(top_section, text="", font=("Arial", 8), foreground="gray")
         self.shift_start_label.grid(row=0, column=1, sticky=tk.W, padx=(8, 0), pady=(0, 0))
         
-        # Row 1: Data source indicator - tight to button above
+        # Row 1: Data source indicator (left) and version (right)
         self.data_source_indicator = ttk.Label(top_section, text="detecting...", 
                                                font=("Arial", 7), foreground="gray", cursor="hand2")
-        self.data_source_indicator.grid(row=1, column=0, columnspan=2, sticky=tk.W, padx=(2, 0), pady=(0, 0))
+        self.data_source_indicator.grid(row=1, column=0, sticky=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
+        
+        # Version info on the right
+        version_text = f"v{VERSION} ({VERSION_DATE})"
+        self.version_label = ttk.Label(top_section, text=version_text, font=("Arial", 7), foreground="gray")
+        self.version_label.grid(row=1, column=1, sticky=tk.E, padx=(0, 2), pady=(0, 0))
         
         # Counters frame - use tk.LabelFrame with explicit border control for tighter spacing
         self.counters_frame = tk.LabelFrame(main_frame, bd=1, relief=tk.GROOVE, padx=2, pady=2)
@@ -5895,10 +5900,6 @@ class SettingsWindow:
         
         ttk.Button(save_cancel_frame, text="Save", command=self.save_settings).pack(side=tk.LEFT, padx=2)
         ttk.Button(save_cancel_frame, text="Cancel", command=self.window.destroy).pack(side=tk.LEFT, padx=2)
-        
-        # Version info on bottom right
-        version_text = f"v{VERSION} ({VERSION_DATE})"
-        ttk.Label(save_cancel_frame, text=version_text, font=("Arial", 7), foreground="gray").pack(side=tk.RIGHT, padx=5)
     
     def sync_compensation_state(self, key):
         """Sync compensation checkbox state based on counter checkbox."""
