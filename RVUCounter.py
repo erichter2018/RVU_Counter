@@ -3206,13 +3206,13 @@ class RVUCounterApp:
             # Comparison label - shows what we're comparing to
             compare_label = "Prior:"
             if self.pace_comparison_mode == 'best_week':
-                compare_label = "Best Wk:"
+                compare_label = "Week:"  # Week's best
             elif self.pace_comparison_mode == 'best_ever':
-                compare_label = "Best:"
+                compare_label = "Best:"  # All time best
             elif self.pace_comparison_mode.startswith('week_'):
-                # Show day name for specific week shift
+                # Show 3-letter day abbreviation for specific week shift
                 if self.pace_comparison_shift:
-                    compare_label = self._format_shift_day_label(self.pace_comparison_shift)[:3] + ":"
+                    compare_label = self._format_shift_day_abbrev(self.pace_comparison_shift) + ":"
             
             self.pace_label_prior_text.config(text=compare_label)
             self.pace_label_prior_text.place(x=x_pos, y=0)
@@ -3331,11 +3331,11 @@ class RVUCounterApp:
         
         now = datetime.now()
         
-        # Find start of current week (Monday at 11pm, or Sunday if that makes more sense for night shifts)
-        # For night shifts starting at 11pm, we'll consider the week starting Sunday at 11pm
-        days_since_sunday = (now.weekday() + 1) % 7  # Sunday = 0
-        week_start = now - timedelta(days=days_since_sunday)
+        # Find start of current week (Monday at 11pm for night shifts)
+        days_since_monday = now.weekday()  # Monday = 0
+        week_start = now - timedelta(days=days_since_monday)
         week_start = week_start.replace(hour=23, minute=0, second=0, microsecond=0)
+        # If we haven't reached Monday 11pm yet, use last week's Monday 11pm
         if now < week_start:
             week_start -= timedelta(days=7)
         
@@ -3392,6 +3392,14 @@ class RVUCounterApp:
             return shift_start.strftime("%A")  # Full day name
         except:
             return "Unknown"
+    
+    def _format_shift_day_abbrev(self, shift):
+        """Format shift as 3-letter day abbreviation (Mon, Tue, Wed, etc.)."""
+        try:
+            shift_start = datetime.fromisoformat(shift["shift_start"])
+            return shift_start.strftime("%a")  # 3-letter day abbreviation
+        except:
+            return "???"
     
     def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
         """Get RVU from comparison shift at the same elapsed time since 11pm.
