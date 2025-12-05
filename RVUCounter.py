@@ -5790,7 +5790,7 @@ class RVUCounterApp:
         show_time = self.data_manager.data["settings"].get("show_time", False)
         
         if is_na or not self.current_procedure:
-            self.debug_accession_label.config(text="")
+            self.debug_accession_label.config(text="", foreground="gray")
             self.debug_duration_label.config(text="")
             self.debug_procedure_label.config(text="", foreground="gray")
             self.debug_patient_class_label.config(text="")
@@ -5805,25 +5805,47 @@ class RVUCounterApp:
                 # PowerScribe: ["ACC1", "ACC2"]
                 # Mosaic: ["ACC1 (PROC1)", "ACC2 (PROC2)"]
                 acc_display_list = []
+                accession_numbers = []  # For duplicate checking
                 for acc_entry in self.current_multiple_accessions[:2]:
                     if '(' in acc_entry and ')' in acc_entry:
                         # Mosaic format - extract just the accession
                         acc_match = re.match(r'^([^(]+)', acc_entry)
                         if acc_match:
-                            acc_display_list.append(acc_match.group(1).strip())
+                            acc_num = acc_match.group(1).strip()
+                            acc_display_list.append(acc_num)
+                            accession_numbers.append(acc_num)
                         else:
                             acc_display_list.append(acc_entry)
+                            accession_numbers.append(acc_entry)
                     else:
                         # PowerScribe format - use as-is
                         acc_display_list.append(acc_entry)
+                        accession_numbers.append(acc_entry)
+                
+                # Also get all accession numbers for duplicate check
+                all_accession_numbers = []
+                for acc_entry in self.current_multiple_accessions:
+                    if '(' in acc_entry and ')' in acc_entry:
+                        acc_match = re.match(r'^([^(]+)', acc_entry)
+                        if acc_match:
+                            all_accession_numbers.append(acc_match.group(1).strip())
+                    else:
+                        all_accession_numbers.append(acc_entry.strip())
+                
+                # Check if ALL accessions are duplicates
+                is_duplicate = False
+                ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+                if ignore_duplicates and all_accession_numbers and not self.multi_accession_mode:
+                    # Only check if not actively tracking (multi_accession_mode)
+                    is_duplicate = all(acc in self.tracker.seen_accessions for acc in all_accession_numbers)
                 
                 acc_display = ", ".join(acc_display_list)
                 if len(self.current_multiple_accessions) > 2:
                     acc_display += f" (+{len(self.current_multiple_accessions) - 2})"
                 
-                # Calculate duration for current study
+                # Calculate duration for current study (only if not duplicate)
                 duration_text = ""
-                if show_time and (self.current_accession or self.multi_accession_mode):
+                if show_time and (self.current_accession or self.multi_accession_mode) and not is_duplicate:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
@@ -5843,8 +5865,13 @@ class RVUCounterApp:
                         if len(acc_display) > max_chars:
                             acc_display = self._truncate_text(acc_display, max_chars)
                 
-                self.debug_accession_label.config(text=f"Accession: {acc_display}")
-                self.debug_duration_label.config(text=duration_text if show_time else "")
+                # If duplicate, show "already recorded" in red instead of accession
+                if is_duplicate:
+                    self.debug_accession_label.config(text="already recorded", foreground="#c62828")  # Same red as pace car "behind"
+                    self.debug_duration_label.config(text="")
+                else:
+                    self.debug_accession_label.config(text=f"Accession: {acc_display}", foreground="gray")
+                    self.debug_duration_label.config(text=duration_text if show_time else "")
                 
                 # Check if this is Mosaic multi-accession (no multi_accession_mode, but has multiple)
                 data_source = self._active_source or "PowerScribe"
@@ -5892,9 +5919,29 @@ class RVUCounterApp:
             else:
                 accession_text = self.current_accession if self.current_accession else '-'
                 
-                # Calculate duration for current study
+                # Check if this is a duplicate (already recorded)
+                is_duplicate = False
+                if self.current_accession:
+                    ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
+                    # Check if accession is in seen_accessions OR in current shift records
+                    if ignore_duplicates:
+                        is_duplicate = (self.current_accession in self.tracker.seen_accessions or 
+                                       self.tracker._was_part_of_multi_accession(self.current_accession, self.data_manager))
+                        # Also check database if not in memory
+                        if not is_duplicate:
+                            try:
+                                current_shift = self.data_manager.db.get_current_shift()
+                                if current_shift:
+                                    db_record = self.data_manager.db.find_record_by_accession(
+                                        current_shift['id'], self.current_accession
+                                    )
+                                    is_duplicate = db_record is not None
+                            except:
+                                pass
+                
+                # Calculate duration for current study (only if not duplicate)
                 duration_text = ""
-                if show_time and (self.current_accession or self.multi_accession_mode):
+                if show_time and (self.current_accession or self.multi_accession_mode) and not is_duplicate:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
@@ -5914,8 +5961,13 @@ class RVUCounterApp:
                         if len(accession_text) > max_chars:
                             accession_text = self._truncate_text(accession_text, max_chars)
                 
-                self.debug_accession_label.config(text=f"Accession: {accession_text}")
-                self.debug_duration_label.config(text=duration_text if show_time else "")
+                # If duplicate, show "already recorded" in red instead of accession
+                if is_duplicate:
+                    self.debug_accession_label.config(text="already recorded", foreground="#c62828")  # Same red as pace car "behind"
+                    self.debug_duration_label.config(text="")
+                else:
+                    self.debug_accession_label.config(text=f"Accession: {accession_text}", foreground="gray")
+                    self.debug_duration_label.config(text=duration_text if show_time else "")
                 
                 # No truncation for procedure - show full name
                 procedure_display = self.current_procedure if self.current_procedure else '-'
