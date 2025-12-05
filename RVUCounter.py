@@ -4817,13 +4817,17 @@ class RVUCounterApp:
         # 2. Data file has shift_start but no shift_end (active shift)
         is_active_shift = (self.is_running and self.shift_start) or (shift_start_str and not shift_end_str)
         
+        # Get default foreground color from theme
+        default_fg = self.theme_colors.get("fg", "black") if hasattr(self, 'theme_colors') else "black"
+        
         if is_active_shift:
             # Count recent studies
             recent_count = len(current_shift.get("records", []))
-            # Explicitly reset to default style (black text) - must set style to override Red.TLabelframe
-            self.recent_frame.config(text=f"Recent Studies ({recent_count})", style="TLabelframe")
+            # Normal text color
+            self.recent_frame.config(text=f"Recent Studies ({recent_count})", fg=default_fg)
         else:
-            self.recent_frame.config(text="Temporary Recent - No shift started", style="Red.TLabelframe")
+            # Red text to indicate no active shift
+            self.recent_frame.config(text="Temporary Recent - No shift started", fg="red")
     
     def _update_counters_only(self):
         """Update just the counter displays to zero (used when shift ends)."""
