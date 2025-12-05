@@ -3282,52 +3282,61 @@ class RVUCounterApp:
                 popup.destroy()
                 self._pace_popup = None
             
-            # Prior Shift option (default)
+            # Helper to create hover effect
+            def add_hover(widget, bg_color, dark_mode):
+                widget.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                widget.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
+            
+            # --- TOP SECTION: Prior, Week Best, All Time Best ---
+            
+            # Prior Shift (most recent night shift)
             if prior_shift:
-                prior_label = self._format_shift_label(prior_shift)
-                btn = tk.Label(frame, text=f"● Prior Shift ({prior_label})", 
+                prior_rvu = sum(r.get('rvu', 0) for r in prior_shift.get('records', []))
+                prior_date = self._format_shift_label(prior_shift)
+                btn = tk.Label(frame, text=f"Prior: {prior_date} ({prior_rvu:.1f} RVU)", 
                               font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
                 btn.pack(fill=tk.X, pady=1)
                 btn.bind("<Button-1>", lambda e: make_selection('prior', prior_shift))
-                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
-                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
+                add_hover(btn, bg_color, dark_mode)
             
-            # This week's shifts header
+            # Week Best (best this week, if different from prior)
+            if best_week:
+                best_week_rvu = sum(r.get('rvu', 0) for r in best_week.get('records', []))
+                best_week_date = self._format_shift_label(best_week)
+                # Only show if different from prior
+                if best_week != prior_shift:
+                    btn = tk.Label(frame, text=f"Week: {best_week_date} ({best_week_rvu:.1f} RVU)", 
+                                  font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                    btn.pack(fill=tk.X, pady=1)
+                    btn.bind("<Button-1>", lambda e: make_selection('best_week', best_week))
+                    add_hover(btn, bg_color, dark_mode)
+            
+            # All Time Best (if different from prior and week best)
+            if best_ever:
+                best_ever_rvu = sum(r.get('rvu', 0) for r in best_ever.get('records', []))
+                best_ever_date = self._format_shift_label(best_ever)
+                # Only show if different from prior and week best
+                if best_ever != prior_shift and best_ever != best_week:
+                    btn = tk.Label(frame, text=f"Best: {best_ever_date} ({best_ever_rvu:.1f} RVU)", 
+                                  font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+                    btn.pack(fill=tk.X, pady=1)
+                    btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
+                    add_hover(btn, bg_color, dark_mode)
+            
+            # --- CURRENT WEEK SECTION ---
             if shifts_this_week:
                 tk.Label(frame, text="This Week:", font=("Arial", 8, "bold"),
-                        bg=bg_color, fg=fg_color, anchor=tk.W).pack(fill=tk.X, pady=(5, 2))
+                        bg=bg_color, fg=fg_color, anchor=tk.W).pack(fill=tk.X, pady=(8, 2))
                 
                 for i, shift in enumerate(shifts_this_week):
                     day_label = self._format_shift_day_label(shift)
+                    shift_date = self._format_shift_label(shift)
                     total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
-                    btn = tk.Label(frame, text=f"  ○ {day_label} ({total_rvu:.1f} RVU)", 
+                    btn = tk.Label(frame, text=f"  {day_label}: {shift_date} ({total_rvu:.1f} RVU)", 
                                   font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
                     btn.pack(fill=tk.X, pady=1)
                     btn.bind("<Button-1>", lambda e, s=shift, idx=i: make_selection(f'week_{idx}', s))
-                    btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
-                    btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
-            
-            # Best this week
-            if best_week and best_week != prior_shift:
-                best_week_rvu = sum(r.get('rvu', 0) for r in best_week.get('records', []))
-                best_week_label = self._format_shift_day_label(best_week)
-                btn = tk.Label(frame, text=f"★ Best This Week: {best_week_label} ({best_week_rvu:.1f} RVU)", 
-                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
-                btn.pack(fill=tk.X, pady=(5, 1))
-                btn.bind("<Button-1>", lambda e: make_selection('best_week', best_week))
-                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
-                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
-            
-            # Best ever
-            if best_ever:
-                best_ever_rvu = sum(r.get('rvu', 0) for r in best_ever.get('records', []))
-                best_ever_label = self._format_shift_label(best_ever)
-                btn = tk.Label(frame, text=f"★ Best Ever: {best_ever_label} ({best_ever_rvu:.1f} RVU)", 
-                              font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
-                btn.pack(fill=tk.X, pady=1)
-                btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
-                btn.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
-                btn.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
+                    add_hover(btn, bg_color, dark_mode)
             
             # If no shifts found at all, show a message
             if not prior_shift and not shifts_this_week and not best_week and not best_ever:
@@ -3357,6 +3366,7 @@ class RVUCounterApp:
     def _get_pace_comparison_options(self):
         """Get shifts available for pace comparison.
         
+        Only includes night shifts (started between 11pm and 8am).
         Returns: (shifts_this_week, prior_shift, best_week_shift, best_ever_shift)
         """
         historical_shifts = self.data_manager.data.get("shifts", [])
@@ -3386,9 +3396,15 @@ class RVUCounterApp:
             
             try:
                 shift_start = datetime.fromisoformat(shift["shift_start"])
+                
+                # Only include night shifts (started between 11pm and 8am)
+                hour = shift_start.hour
+                if not (hour >= 23 or hour < 8):
+                    continue  # Skip non-night shifts
+                
                 total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
                 
-                # Prior shift is the first one (most recent)
+                # Prior shift is the first valid one (most recent night shift)
                 if prior_shift is None:
                     prior_shift = shift
                 
@@ -3399,7 +3415,7 @@ class RVUCounterApp:
                         best_week_rvu = total_rvu
                         best_week = shift
                 
-                # Best ever
+                # Best ever (among night shifts only)
                 if total_rvu > best_ever_rvu:
                     best_ever_rvu = total_rvu
                     best_ever = shift
