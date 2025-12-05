@@ -2846,13 +2846,27 @@ class RVUCounterApp:
         # Prior bar marker (where prior was at this time)
         self.pace_bar_prior_marker = tk.Frame(self.pace_bars_container, bg="#000000", width=2, height=9)
         
-        # Labels showing the comparison
-        self.pace_label_frame = ttk.Frame(self.pace_car_frame)
+        # Labels showing the comparison (multiple labels for color coding)
+        self.pace_label_frame = tk.Frame(self.pace_car_frame, bg=self.root.cget('bg'))
         self.pace_label_frame.pack(fill=tk.X, padx=2)
         
-        self.pace_label_left = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
-        self.pace_label_left.pack(side=tk.LEFT)
+        # Left side: "Now: XX.X  |  Prior: XX.X at time"
+        self.pace_label_now_text = tk.Label(self.pace_label_frame, text="Now: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
+        self.pace_label_now_text.pack(side=tk.LEFT)
         
+        self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'))
+        self.pace_label_now_value.pack(side=tk.LEFT)
+        
+        self.pace_label_separator = tk.Label(self.pace_label_frame, text="  |  Prior: ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
+        self.pace_label_separator.pack(side=tk.LEFT)
+        
+        self.pace_label_prior_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), fg="#E6E6FA")
+        self.pace_label_prior_value.pack(side=tk.LEFT)
+        
+        self.pace_label_time = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray")
+        self.pace_label_time.pack(side=tk.LEFT)
+        
+        # Right side: status
         self.pace_label_right = tk.Label(self.pace_label_frame, text="", font=("Arial", 7), bg=self.root.cget('bg'))
         self.pace_label_right.pack(side=tk.RIGHT)
         
@@ -3109,8 +3123,12 @@ class RVUCounterApp:
             
             if prior_data is None:
                 # No prior shift data available
-                self.pace_label_left.config(text="No prior shift data", fg="gray")
-                self.pace_label_right.config(text="", fg="gray")
+                self.pace_label_now_text.config(text="No prior shift data")
+                self.pace_label_now_value.config(text="")
+                self.pace_label_separator.config(text="")
+                self.pace_label_prior_value.config(text="")
+                self.pace_label_time.config(text="")
+                self.pace_label_right.config(text="")
                 self.pace_bar_current.place_forget()
                 self.pace_bar_prior_marker.place_forget()
                 return
@@ -3158,13 +3176,17 @@ class RVUCounterApp:
             # Format current time as H:MM am/pm
             time_str = current_time.strftime("%I:%M %p").lstrip("0").lower()
             
-            # Update labels with bold numbers and colors
-            # Using tk.Label allows us to do partial formatting via multiple labels or HTML-like approach
-            # For simplicity, we'll put the key numbers in the text with color coding
-            self.pace_label_left.config(
-                text=f"Now: {current_rvu:.1f}  |  Prior: {prior_rvu_at_elapsed:.1f} at {time_str}",
-                fg="gray"
-            )
+            # Update labels with color-coded RVU values
+            # "Now: XX.X" - XX.X is colored based on ahead/behind
+            self.pace_label_now_value.config(text=f"{current_rvu:.1f}", fg=current_bar_color)
+            
+            # "| Prior: XX.X" - XX.X is lavender
+            self.pace_label_prior_value.config(text=f"{prior_rvu_at_elapsed:.1f}")
+            
+            # " at time" - gray
+            self.pace_label_time.config(text=f" at {time_str}")
+            
+            # Status on right
             self.pace_label_right.config(text=status_text, fg=status_color)
             
         except Exception as e:
@@ -5710,6 +5732,27 @@ class RVUCounterApp:
         debug_frame = getattr(self, 'debug_frame', None)
         if debug_frame:
             debug_frame.configure(bg=bg_color, fg=fg_color)
+        
+        # Update pace car labels (tk.Label)
+        pace_labels = [
+            getattr(self, 'pace_label_now_text', None),
+            getattr(self, 'pace_label_separator', None),
+            getattr(self, 'pace_label_time', None),
+            getattr(self, 'pace_label_right', None),
+        ]
+        for label in pace_labels:
+            if label:
+                label.configure(bg=bg_color)
+        
+        # pace_label_now_value and pace_label_prior_value keep their dynamic colors
+        if hasattr(self, 'pace_label_now_value') and self.pace_label_now_value:
+            self.pace_label_now_value.configure(bg=bg_color)
+        if hasattr(self, 'pace_label_prior_value') and self.pace_label_prior_value:
+            self.pace_label_prior_value.configure(bg=bg_color)
+        
+        # Update pace label frame
+        if hasattr(self, 'pace_label_frame') and self.pace_label_frame:
+            self.pace_label_frame.configure(bg=bg_color)
         
         # Update studies_scrollable_frame style to use canvas_bg
         # ttk.Frame uses TFrame style, but we need a specific style for the scrollable frame
