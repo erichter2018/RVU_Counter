@@ -3126,15 +3126,14 @@ class RVUCounterApp:
             if container_width < 10:
                 container_width = 200  # Default fallback
             
-            # Scale: prior_total_rvu = full width
-            # Current bar fills proportionally
-            if prior_total_rvu > 0:
-                current_width = int((current_rvu / prior_total_rvu) * container_width)
-                current_width = min(current_width, container_width)  # Cap at full width
-                prior_marker_pos = int((prior_rvu_at_elapsed / prior_total_rvu) * container_width)
-            else:
-                current_width = 0
-                prior_marker_pos = 0
+            # Dynamic scale: use whichever is larger (current or prior total) as 100%
+            # This way if you're exceeding prior total, both bars scale down appropriately
+            max_scale = max(current_rvu, prior_total_rvu, 1)  # minimum 1 to avoid division by zero
+            
+            # Calculate widths relative to max_scale
+            current_width = int((current_rvu / max_scale) * container_width)
+            prior_total_width = int((prior_total_rvu / max_scale) * container_width)
+            prior_marker_pos = int((prior_rvu_at_elapsed / max_scale) * container_width)
             
             # Update bar colors based on ahead/behind
             if diff >= 0:
@@ -3149,6 +3148,9 @@ class RVUCounterApp:
             # Update current bar (top) - fills from left
             self.pace_bar_current.config(bg=current_bar_color)
             self.pace_bar_current.place(x=0, y=0, width=current_width, height=9)
+            
+            # Update prior bar (bottom) - width scales with prior total relative to max
+            self.pace_bar_prior_track.place(x=0, y=11, width=prior_total_width, height=9)
             
             # Update prior marker (black line on orange bar showing "prior at this time")
             self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
