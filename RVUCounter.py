@@ -3473,7 +3473,8 @@ class RVUCounterApp:
     def _get_pace_comparison_options(self):
         """Get shifts available for pace comparison.
         
-        Only includes shifts within typical shift window (calculated from historical data).
+        For prior/week shifts: Only includes shifts within typical shift window.
+        For best ever: Includes any ~9 hour shift regardless of start time.
         Returns: (shifts_this_week, prior_shift, best_week_shift, best_ever_shift)
         """
         historical_shifts = self.data_manager.data.get("shifts", [])
@@ -3503,13 +3504,25 @@ class RVUCounterApp:
             
             try:
                 shift_start = datetime.fromisoformat(shift["shift_start"])
+                total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
                 
-                # Only include shifts that started within typical shift window
+                # Calculate shift duration for best_ever eligibility
+                shift_end_str = shift.get("shift_end")
+                shift_hours = None
+                if shift_end_str:
+                    shift_end = datetime.fromisoformat(shift_end_str)
+                    shift_hours = (shift_end - shift_start).total_seconds() / 3600
+                
+                # Best ever: any shift that's approximately 9 hours (7-11 hours)
+                if shift_hours and 7 <= shift_hours <= 11:
+                    if total_rvu > best_ever_rvu:
+                        best_ever_rvu = total_rvu
+                        best_ever = shift
+                
+                # For prior/week: only include shifts within typical shift window
                 hour = shift_start.hour
                 if not self._is_valid_shift_hour(hour):
-                    continue  # Skip shifts outside typical window
-                
-                total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
+                    continue  # Skip shifts outside typical window for prior/week
                 
                 # Prior shift is the first valid one (most recent night shift)
                 if prior_shift is None:
@@ -3521,11 +3534,6 @@ class RVUCounterApp:
                     if total_rvu > best_week_rvu:
                         best_week_rvu = total_rvu
                         best_week = shift
-                
-                # Best ever (among night shifts only)
-                if total_rvu > best_ever_rvu:
-                    best_ever_rvu = total_rvu
-                    best_ever = shift
             except:
                 pass
         
