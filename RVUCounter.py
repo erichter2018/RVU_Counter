@@ -2859,7 +2859,7 @@ class RVUCounterApp:
         self.pace_label_now_value = tk.Label(self.pace_label_frame, text="", font=("Arial", 7, "bold"), bg=self.root.cget('bg'), padx=0, pady=0, bd=0)
         # Will be positioned after measuring text width
         
-        self.pace_label_separator = tk.Label(self.pace_label_frame, text="|", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
+        self.pace_label_separator = tk.Label(self.pace_label_frame, text=" | ", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
         
         self.pace_label_prior_text = tk.Label(self.pace_label_frame, text="Prior:", font=("Arial", 7), bg=self.root.cget('bg'), fg="gray", padx=0, pady=0, bd=0)
         
