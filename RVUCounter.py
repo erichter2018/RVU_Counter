@@ -5085,7 +5085,11 @@ class RVUCounterApp:
                                    "after each shift ends.")
             
             def maybe_later():
-                # Just dismiss - they can enable later in settings
+                # Mark that user has seen the prompt so it doesn't show again
+                if "backup" not in self.data_manager.data:
+                    self.data_manager.data["backup"] = {}
+                self.data_manager.data["backup"]["first_backup_prompt_shown"] = True
+                self.data_manager.save()
                 dialog.destroy()
             
             def dont_ask_again():
@@ -7758,17 +7762,17 @@ class SettingsWindow:
             # Validate position before applying
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
-                x, y = find_nearest_monitor_for_window(x, y, 450, 740)
-            self.window.geometry(f"450x850+{x}+{y}")
+                x, y = find_nearest_monitor_for_window(x, y, 450, 700)
+            self.window.geometry(f"450x810+{x}+{y}")
         else:
             # Center on primary monitor
             try:
                 primary = get_primary_monitor_bounds()
                 x = primary[0] + (primary[2] - primary[0] - 450) // 2
-                y = primary[1] + (primary[3] - primary[1] - 740) // 2
-                self.window.geometry(f"450x850+{x}+{y}")
+                y = primary[1] + (primary[3] - primary[1] - 700) // 2
+                self.window.geometry(f"450x810+{x}+{y}")
             except:
-                self.window.geometry("450x850")
+                self.window.geometry("450x810")
         
         self.window.transient(parent)
         self.window.grab_set()
