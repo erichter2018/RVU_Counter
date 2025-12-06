@@ -330,19 +330,20 @@ if InStr(PriorOriginal, ModalitySearch)
 	; Reorder: Insert "Ultrasound" before modifiers if present
 	ModifierFound := false
 	
-	if InStr(PriorDescript1, " With And Without")
+	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
+	if InStr(PriorDescript1, " with and without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With And Without)", " Ultrasound$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with and without)", " Ultrasound$2")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " Without")
+	else if InStr(PriorDescript1, " without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(Without)", " Ultrasound$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(without)", " Ultrasound$2")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " With")
+	else if InStr(PriorDescript1, " with")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(With)", " Ultrasound$2")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with)", " Ultrasound$2")
 		ModifierFound := true
 	}
 	
@@ -412,30 +413,32 @@ if InStr(PriorOriginal, ModalitySearch)
 	ModifierFound := false
 	
 	; First check for study type modifiers (angiography, venography)
-	if InStr(PriorDescript1, " Angiography")
+	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
+	if InStr(PriorDescript1, " angiography")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " Angiography", " MR Angiography")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " MR $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " Venography")
+	else if InStr(PriorDescript1, " venography")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " Venography", " MR Venography")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(venography)", " MR $1")
 		ModifierFound := true
 	}
 	; Then check for contrast modifiers (with proper spacing)
-	else if InStr(PriorDescript1, " With And Without")
+	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
+	else if InStr(PriorDescript1, " with and without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (With And Without)", " MR $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " MR $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " Without")
+	else if InStr(PriorDescript1, " without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (Without)", " MR $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " MR $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " With")
+	else if InStr(PriorDescript1, " with")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (With)", " MR $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " MR $1")
 		ModifierFound := true
 	}
 	
@@ -911,24 +914,26 @@ if InStr(PriorOriginal, ModalitySearch)
 	; First check for "Angiography" - it should come after CT
 	if InStr(PriorDescript1, " angiography")
 	{
-		; Insert CT before "Angiography"
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (angiography)", " CT $1")
+		; Insert CT before "Angiography" - use word boundary to ensure proper matching
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " CT $1")
 		ModifierFound := true
 	}
 	; Then check for contrast modifiers (with proper spacing)
 	else if InStr(PriorDescript1, " with and without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (with and without)", " CT $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " CT $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (without)", " CT $1")
+		; Use \s+ to match one or more spaces before "without" to handle any spacing
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " CT $1")
 		ModifierFound := true
 	}
 	else if InStr(PriorDescript1, " with")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (with)", " CT $1")
+		; Use \s+ to match one or more spaces before "with" to handle any spacing
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " CT $1")
 		ModifierFound := true
 	}
 	
