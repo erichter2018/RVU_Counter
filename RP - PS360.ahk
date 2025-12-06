@@ -909,26 +909,26 @@ if InStr(PriorOriginal, ModalitySearch)
 	ModifierFound := false
 	
 	; First check for "Angiography" - it should come after CT
-	if InStr(PriorDescript1, " Angiography")
+	if InStr(PriorDescript1, " angiography")
 	{
 		; Insert CT before "Angiography"
-		PriorDescript1 := RegExReplace(PriorDescript1, " Angiography", " CT Angiography")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (angiography)", " CT $1")
 		ModifierFound := true
 	}
 	; Then check for contrast modifiers (with proper spacing)
-	else if InStr(PriorDescript1, " With And Without")
+	else if InStr(PriorDescript1, " with and without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (With And Without)", " CT $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (with and without)", " CT $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " Without")
+	else if InStr(PriorDescript1, " without")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (Without)", " CT $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (without)", " CT $1")
 		ModifierFound := true
 	}
-	else if InStr(PriorDescript1, " With")
+	else if InStr(PriorDescript1, " with")
 	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (With)", " CT $1")
+		PriorDescript1 := RegExReplace(PriorDescript1, "i) (with)", " CT $1")
 		ModifierFound := true
 	}
 	
@@ -951,10 +951,6 @@ PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmri\b", "MRI")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bus\b", "US")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bxr\b", "XR")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcr\b", "CR")
-; Remove "CT" from comparison text (as a whole word)
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bCT\b", "")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+", " ")  ; Replace multiple spaces with single space
-PriorDescript1 := Trim(PriorDescript1)  ; Clean up any extra spaces
 ; Check if prior study was within the last 2 days - if so, include time
 IncludeTime := false
 if (PriorDate != "" and PriorTimeFormatted != "")
