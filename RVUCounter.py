@@ -5005,25 +5005,35 @@ class RVUCounterApp:
         try:
             backup_settings = self.data_manager.data.get("backup", {})
             
+            # Debug logging
+            logger.debug(f"Backup prompt check - cloud_backup_enabled: {backup_settings.get('cloud_backup_enabled', False)}, "
+                        f"setup_prompt_dismissed: {backup_settings.get('setup_prompt_dismissed', False)}, "
+                        f"first_backup_prompt_shown: {backup_settings.get('first_backup_prompt_shown', False)}")
+            
             # Don't prompt if:
             # - Backup is already enabled
             # - User has already dismissed the prompt
             # - User has already seen the prompt (first_backup_prompt_shown)
             # - OneDrive is not available
             if backup_settings.get("cloud_backup_enabled", False):
+                logger.debug("Skipping backup prompt - backup is already enabled")
                 return
             if backup_settings.get("setup_prompt_dismissed", False):
+                logger.debug("Skipping backup prompt - user dismissed it")
                 return
             if backup_settings.get("first_backup_prompt_shown", False):
+                logger.debug("Skipping backup prompt - user has already seen it")
                 return
             if not self.data_manager.backup_manager.is_onedrive_available():
+                logger.debug("Skipping backup prompt - OneDrive not available")
                 return
             
             # Schedule the prompt to appear shortly after app starts
+            logger.info("Scheduling backup setup prompt")
             self.root.after(2000, self._show_backup_setup_prompt)
             
         except Exception as e:
-            logger.debug(f"Error checking backup prompt: {e}")
+            logger.error(f"Error checking backup prompt: {e}")
     
     def _show_backup_setup_prompt(self):
         """Show the first-time backup setup prompt."""
@@ -5073,7 +5083,19 @@ class RVUCounterApp:
                 # Mark that user has seen and responded to the prompt
                 self.data_manager.data["backup"]["setup_prompt_dismissed"] = True
                 self.data_manager.data["backup"]["first_backup_prompt_shown"] = True
+                
+                # Also update BackupManager's settings reference
+                if "backup" not in self.data_manager.backup_manager.settings:
+                    self.data_manager.backup_manager.settings["backup"] = {}
+                self.data_manager.backup_manager.settings["backup"]["cloud_backup_enabled"] = True
+                self.data_manager.backup_manager.settings["backup"]["setup_prompt_dismissed"] = True
+                self.data_manager.backup_manager.settings["backup"]["first_backup_prompt_shown"] = True
+                
+                # Save to disk
                 self.data_manager.save()
+                
+                # Verify save
+                logger.info(f"Backup enabled - saved. cloud_backup_enabled: {self.data_manager.data.get('backup', {}).get('cloud_backup_enabled', False)}")
                 
                 # Update UI
                 self._update_backup_status_display()
@@ -8086,6 +8108,10 @@ class SettingsWindow:
                 self.data_manager.data["backup"] = {}
             self.data_manager.data["backup"]["cloud_backup_enabled"] = self.backup_enabled_var.get()
             self.data_manager.data["backup"]["backup_schedule"] = self.backup_schedule_var.get()
+            # If enabling backup, also set flags to prevent prompt from showing again
+            if self.backup_enabled_var.get():
+                self.data_manager.data["backup"]["setup_prompt_dismissed"] = True
+                self.data_manager.data["backup"]["first_backup_prompt_shown"] = True
             
             # Update tracker min_seconds
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
