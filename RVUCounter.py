@@ -1963,6 +1963,583 @@ def get_app_paths():
     return settings_dir, data_dir
 
 
+# =============================================================================
+# Cloud Backup Manager (OneDrive Integration)
+# =============================================================================
+
+class BackupManager:
+    """Manages automatic cloud backup of the database to OneDrive.
+    
+    Features:
+    - Auto-detects OneDrive folder location
+    - Creates safe backups using SQLite backup API
+    - Verifies backup integrity
+    - Cleans up old backups
+    - Tracks backup status for UI display
+    
+    Designed for novice users - minimal configuration, automatic operation.
+    """
+    
+    # Backup subfolder within OneDrive
+    BACKUP_SUBFOLDER = "Apps/RVU Counter/Backups"
+    
+    # Default settings
+    DEFAULT_SETTINGS = {
+        "cloud_backup_enabled": False,
+        "backup_schedule": "shift_end",  # "shift_end", "hourly", "daily", "manual"
+        "backup_retention_count": 10,
+        "last_backup_time": None,
+        "last_backup_status": None,  # "success", "failed", "pending"
+        "last_backup_error": None,
+        "onedrive_path": None,  # Auto-detected or manually set
+    }
+    
+    def __init__(self, db_path: str, settings: dict):
+        """Initialize BackupManager.
+        
+        Args:
+            db_path: Path to the SQLite database file
+            settings: App settings dictionary (will be modified to add backup settings)
+        """
+        self.db_path = db_path
+        self.settings = settings
+        self.backup_in_progress = False
+        self._last_check_time = 0
+        self._onedrive_path_cache = None
+        
+        # Initialize backup settings if not present
+        self._ensure_settings()
+        
+        # Detect OneDrive on init (cached)
+        self._detect_onedrive_folder()
+    
+    def _ensure_settings(self):
+        """Ensure backup settings exist in the settings dict."""
+        if "backup" not in self.settings:
+            self.settings["backup"] = {}
+        
+        for key, default in self.DEFAULT_SETTINGS.items():
+            if key not in self.settings["backup"]:
+                self.settings["backup"][key] = default
+    
+    def _detect_onedrive_folder(self) -> Optional[str]:
+        """Detect OneDrive folder location.
+        
+        Checks multiple sources in priority order:
+        1. Cached/saved path from settings
+        2. Environment variables
+        3. Windows Registry
+        4. Common default paths
+        
+        Returns:
+            Path to OneDrive folder, or None if not found
+        """
+        # Return cached value if available
+        if self._onedrive_path_cache:
+            return self._onedrive_path_cache
+        
+        # Check if manually set in settings
+        saved_path = self.settings["backup"].get("onedrive_path")
+        if saved_path and os.path.isdir(saved_path):
+            self._onedrive_path_cache = saved_path
+            return saved_path
+        
+        detected_path = None
+        
+        # Method 1: Environment variables
+        # Business OneDrive typically uses OneDriveCommercial
+        for env_var in ['OneDriveCommercial', 'OneDriveConsumer', 'ONEDRIVE']:
+            path = os.environ.get(env_var)
+            if path and os.path.isdir(path):
+                detected_path = path
+                logger.info(f"OneDrive detected via environment variable {env_var}: {path}")
+                break
+        
+        # Method 2: Windows Registry
+        if not detected_path:
+            try:
+                import winreg
+                
+                # Try Business account first (most common in healthcare)
+                for account in ['Business1', 'Personal']:
+                    try:
+                        key = winreg.OpenKey(
+                            winreg.HKEY_CURRENT_USER,
+                            rf"Software\Microsoft\OneDrive\Accounts\{account}"
+                        )
+                        path, _ = winreg.QueryValueEx(key, "UserFolder")
+                        winreg.CloseKey(key)
+                        
+                        if path and os.path.isdir(path):
+                            detected_path = path
+                            logger.info(f"OneDrive detected via registry ({account}): {path}")
+                            break
+                    except (FileNotFoundError, OSError):
+                        continue
+            except Exception as e:
+                logger.debug(f"Registry check failed: {e}")
+        
+        # Method 3: Common default paths
+        if not detected_path:
+            home = os.path.expanduser("~")
+            for item in os.listdir(home):
+                item_path = os.path.join(home, item)
+                if os.path.isdir(item_path) and item.lower().startswith("onedrive"):
+                    detected_path = item_path
+                    logger.info(f"OneDrive detected via default path: {item_path}")
+                    break
+        
+        if detected_path:
+            self._onedrive_path_cache = detected_path
+            self.settings["backup"]["onedrive_path"] = detected_path
+        
+        return detected_path
+    
+    def is_onedrive_available(self) -> bool:
+        """Check if OneDrive is available for backup."""
+        return self._detect_onedrive_folder() is not None
+    
+    def get_backup_folder(self) -> Optional[str]:
+        """Get the full path to the backup folder within OneDrive.
+        
+        Creates the folder if it doesn't exist.
+        
+        Returns:
+            Path to backup folder, or None if OneDrive not available
+        """
+        onedrive = self._detect_onedrive_folder()
+        if not onedrive:
+            return None
+        
+        backup_folder = os.path.join(onedrive, self.BACKUP_SUBFOLDER)
+        
+        # Create folder if it doesn't exist
+        try:
+            os.makedirs(backup_folder, exist_ok=True)
+            return backup_folder
+        except Exception as e:
+            logger.error(f"Failed to create backup folder: {e}")
+            return None
+    
+    def create_backup(self, force: bool = False) -> dict:
+        """Create a backup of the database.
+        
+        Uses SQLite's online backup API for a consistent copy even during writes.
+        
+        Args:
+            force: If True, bypass schedule check and create backup immediately
+            
+        Returns:
+            Dict with 'success', 'path', 'error' keys
+        """
+        result = {
+            "success": False,
+            "path": None,
+            "error": None,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Check if backup already in progress
+        if self.backup_in_progress:
+            result["error"] = "Backup already in progress"
+            return result
+        
+        # Check if backup is enabled
+        if not self.settings["backup"].get("cloud_backup_enabled", False) and not force:
+            result["error"] = "Cloud backup is disabled"
+            return result
+        
+        # Get backup folder
+        backup_folder = self.get_backup_folder()
+        if not backup_folder:
+            result["error"] = "OneDrive not available"
+            self._update_backup_status("failed", "OneDrive not available")
+            return result
+        
+        # Check if source database exists
+        if not os.path.exists(self.db_path):
+            result["error"] = "Database file not found"
+            self._update_backup_status("failed", "Database not found")
+            return result
+        
+        self.backup_in_progress = True
+        
+        try:
+            # Generate backup filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"rvu_records_{timestamp}.db"
+            backup_path = os.path.join(backup_folder, backup_name)
+            temp_path = os.path.join(backup_folder, f".{backup_name}.tmp")
+            
+            logger.info(f"Starting backup to: {backup_path}")
+            
+            # Step 1: Use SQLite backup API for consistent copy
+            source_conn = None
+            dest_conn = None
+            
+            try:
+                source_conn = sqlite3.connect(self.db_path)
+                dest_conn = sqlite3.connect(temp_path)
+                
+                # Perform the backup
+                source_conn.backup(dest_conn)
+                
+                dest_conn.close()
+                dest_conn = None
+                source_conn.close()
+                source_conn = None
+                
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e).lower():
+                    raise Exception("Database is locked - will retry later")
+                raise
+            finally:
+                if dest_conn:
+                    try:
+                        dest_conn.close()
+                    except:
+                        pass
+                if source_conn:
+                    try:
+                        source_conn.close()
+                    except:
+                        pass
+            
+            # Step 2: Verify backup integrity
+            verify_conn = sqlite3.connect(temp_path)
+            cursor = verify_conn.execute("PRAGMA integrity_check")
+            integrity_result = cursor.fetchone()[0]
+            
+            # Also get record count for verification
+            try:
+                cursor = verify_conn.execute("SELECT COUNT(*) FROM records")
+                record_count = cursor.fetchone()[0]
+            except:
+                record_count = 0
+            
+            verify_conn.close()
+            
+            if integrity_result.lower() != "ok":
+                os.remove(temp_path)
+                raise Exception(f"Backup integrity check failed: {integrity_result}")
+            
+            # Step 3: Atomic rename
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+            os.rename(temp_path, backup_path)
+            
+            # Step 4: Cleanup old backups
+            self._cleanup_old_backups(backup_folder)
+            
+            # Success!
+            result["success"] = True
+            result["path"] = backup_path
+            result["record_count"] = record_count
+            
+            self._update_backup_status("success", None)
+            logger.info(f"Backup completed successfully: {backup_path} ({record_count} records)")
+            
+        except Exception as e:
+            result["error"] = str(e)
+            self._update_backup_status("failed", str(e))
+            logger.error(f"Backup failed: {e}")
+            
+            # Cleanup temp file if it exists
+            if 'temp_path' in locals() and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
+        
+        finally:
+            self.backup_in_progress = False
+        
+        return result
+    
+    def _update_backup_status(self, status: str, error: Optional[str]):
+        """Update backup status in settings."""
+        self.settings["backup"]["last_backup_time"] = datetime.now().isoformat()
+        self.settings["backup"]["last_backup_status"] = status
+        self.settings["backup"]["last_backup_error"] = error
+    
+    def _cleanup_old_backups(self, backup_folder: str):
+        """Remove old backups beyond retention limit."""
+        retention = self.settings["backup"].get("backup_retention_count", 10)
+        
+        try:
+            # Get all backup files
+            backup_files = []
+            for f in os.listdir(backup_folder):
+                if f.startswith("rvu_records_") and f.endswith(".db"):
+                    full_path = os.path.join(backup_folder, f)
+                    backup_files.append((full_path, os.path.getmtime(full_path)))
+            
+            # Sort by modification time (newest first)
+            backup_files.sort(key=lambda x: x[1], reverse=True)
+            
+            # Remove files beyond retention limit
+            for old_file, _ in backup_files[retention:]:
+                try:
+                    os.remove(old_file)
+                    logger.info(f"Removed old backup: {old_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove old backup {old_file}: {e}")
+                    
+        except Exception as e:
+            logger.warning(f"Error during backup cleanup: {e}")
+    
+    def get_backup_history(self) -> List[dict]:
+        """Get list of available backups.
+        
+        Returns:
+            List of dicts with backup info (path, timestamp, size, record_count)
+        """
+        backup_folder = self.get_backup_folder()
+        if not backup_folder:
+            return []
+        
+        backups = []
+        
+        try:
+            for f in os.listdir(backup_folder):
+                if f.startswith("rvu_records_") and f.endswith(".db"):
+                    full_path = os.path.join(backup_folder, f)
+                    
+                    # Parse timestamp from filename
+                    try:
+                        timestamp_str = f.replace("rvu_records_", "").replace(".db", "")
+                        timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                    except:
+                        timestamp = datetime.fromtimestamp(os.path.getmtime(full_path))
+                    
+                    # Get file size
+                    size = os.path.getsize(full_path)
+                    
+                    # Get record count (quick query)
+                    record_count = 0
+                    try:
+                        conn = sqlite3.connect(full_path)
+                        cursor = conn.execute("SELECT COUNT(*) FROM records")
+                        record_count = cursor.fetchone()[0]
+                        conn.close()
+                    except:
+                        pass
+                    
+                    backups.append({
+                        "path": full_path,
+                        "filename": f,
+                        "timestamp": timestamp,
+                        "size": size,
+                        "size_formatted": self._format_size(size),
+                        "record_count": record_count
+                    })
+            
+            # Sort by timestamp (newest first)
+            backups.sort(key=lambda x: x["timestamp"], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"Error getting backup history: {e}")
+        
+        return backups
+    
+    def _format_size(self, size_bytes: int) -> str:
+        """Format file size in human-readable format."""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        else:
+            return f"{size_bytes / (1024 * 1024):.1f} MB"
+    
+    def restore_from_backup(self, backup_path: str) -> dict:
+        """Restore database from a backup.
+        
+        Creates a pre-restore backup of current database first.
+        
+        Args:
+            backup_path: Path to the backup file to restore
+            
+        Returns:
+            Dict with 'success', 'error', 'pre_restore_backup' keys
+        """
+        result = {
+            "success": False,
+            "error": None,
+            "pre_restore_backup": None
+        }
+        
+        # Verify backup exists
+        if not os.path.exists(backup_path):
+            result["error"] = "Backup file not found"
+            return result
+        
+        # Verify backup integrity
+        try:
+            conn = sqlite3.connect(backup_path)
+            cursor = conn.execute("PRAGMA integrity_check")
+            integrity_result = cursor.fetchone()[0]
+            conn.close()
+            
+            if integrity_result.lower() != "ok":
+                result["error"] = f"Backup file is corrupted: {integrity_result}"
+                return result
+        except Exception as e:
+            result["error"] = f"Cannot read backup file: {e}"
+            return result
+        
+        # Create pre-restore backup of current database
+        try:
+            backup_folder = self.get_backup_folder()
+            if backup_folder:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                pre_restore_name = f"rvu_records_pre_restore_{timestamp}.db"
+                pre_restore_path = os.path.join(backup_folder, pre_restore_name)
+                
+                # Copy current database
+                source_conn = sqlite3.connect(self.db_path)
+                dest_conn = sqlite3.connect(pre_restore_path)
+                source_conn.backup(dest_conn)
+                dest_conn.close()
+                source_conn.close()
+                
+                result["pre_restore_backup"] = pre_restore_path
+                logger.info(f"Created pre-restore backup: {pre_restore_path}")
+        except Exception as e:
+            logger.warning(f"Failed to create pre-restore backup: {e}")
+            # Continue with restore anyway
+        
+        # Perform restore
+        try:
+            # Use SQLite backup API for safe copy
+            source_conn = sqlite3.connect(backup_path)
+            
+            # Create a temporary file first
+            temp_restore = self.db_path + ".restoring"
+            dest_conn = sqlite3.connect(temp_restore)
+            
+            source_conn.backup(dest_conn)
+            
+            dest_conn.close()
+            source_conn.close()
+            
+            # Atomic replace
+            if os.path.exists(self.db_path):
+                os.remove(self.db_path)
+            os.rename(temp_restore, self.db_path)
+            
+            result["success"] = True
+            logger.info(f"Database restored from: {backup_path}")
+            
+        except Exception as e:
+            result["error"] = f"Restore failed: {e}"
+            logger.error(f"Restore failed: {e}")
+            
+            # Cleanup temp file
+            if os.path.exists(temp_restore):
+                try:
+                    os.remove(temp_restore)
+                except:
+                    pass
+        
+        return result
+    
+    def get_backup_status(self) -> dict:
+        """Get current backup status for UI display.
+        
+        Returns:
+            Dict with status info for display
+        """
+        enabled = self.settings["backup"].get("cloud_backup_enabled", False)
+        last_time = self.settings["backup"].get("last_backup_time")
+        last_status = self.settings["backup"].get("last_backup_status")
+        last_error = self.settings["backup"].get("last_backup_error")
+        
+        status = {
+            "enabled": enabled,
+            "available": self.is_onedrive_available(),
+            "onedrive_path": self._detect_onedrive_folder(),
+            "last_backup_time": last_time,
+            "last_backup_status": last_status,
+            "last_backup_error": last_error,
+            "time_since_backup": None,
+            "status_text": "",
+            "status_icon": ""
+        }
+        
+        if not enabled:
+            status["status_text"] = "Backup disabled"
+            status["status_icon"] = "⚪"
+        elif not status["available"]:
+            status["status_text"] = "OneDrive not found"
+            status["status_icon"] = "⚠️"
+        elif last_time:
+            try:
+                last_dt = datetime.fromisoformat(last_time)
+                delta = datetime.now() - last_dt
+                
+                if delta.total_seconds() < 3600:
+                    time_str = f"{int(delta.total_seconds() / 60)}m ago"
+                elif delta.total_seconds() < 86400:
+                    time_str = f"{int(delta.total_seconds() / 3600)}h ago"
+                else:
+                    time_str = f"{int(delta.days)}d ago"
+                
+                status["time_since_backup"] = time_str
+                
+                if last_status == "success":
+                    status["status_text"] = f"Backed up {time_str}"
+                    status["status_icon"] = "☁️"
+                else:
+                    status["status_text"] = f"Backup failed"
+                    status["status_icon"] = "⚠️"
+            except:
+                status["status_text"] = "Unknown"
+                status["status_icon"] = "⚪"
+        else:
+            status["status_text"] = "No backup yet"
+            status["status_icon"] = "⚪"
+        
+        return status
+    
+    def should_backup_now(self, schedule: str = None) -> bool:
+        """Check if a backup should be performed now based on schedule.
+        
+        Args:
+            schedule: Override schedule setting ("shift_end", "hourly", "daily", "manual")
+            
+        Returns:
+            True if backup should be performed
+        """
+        if not self.settings["backup"].get("cloud_backup_enabled", False):
+            return False
+        
+        schedule = schedule or self.settings["backup"].get("backup_schedule", "shift_end")
+        
+        if schedule == "manual":
+            return False
+        
+        last_time = self.settings["backup"].get("last_backup_time")
+        if not last_time:
+            return True  # Never backed up
+        
+        try:
+            last_dt = datetime.fromisoformat(last_time)
+            elapsed = (datetime.now() - last_dt).total_seconds()
+            
+            if schedule == "hourly":
+                return elapsed >= 3600
+            elif schedule == "daily":
+                return elapsed >= 86400
+            elif schedule == "shift_end":
+                # This is triggered manually at shift end
+                return False
+                
+        except:
+            return True
+        
+        return False
+
+
 class RVUData:
     """Manages data persistence with SQLite for records and JSON for settings."""
     
@@ -2020,6 +2597,9 @@ class RVUData:
             }),
             "shifts": self.records_data.get("shifts", [])
         }
+        
+        # Initialize cloud backup manager
+        self.backup_manager = BackupManager(self.db_file, self.data)
     
     def _migrate_json_to_sqlite(self):
         """Migrate data from JSON to SQLite if JSON exists and DB is empty."""
@@ -2159,7 +2739,7 @@ class RVUData:
             # Window size constraints (minimum visible area)
             window_sizes = {
                 "main": {"width": 240, "height": 500},
-                "settings": {"width": 450, "height": 580},
+                "settings": {"width": 450, "height": 700},
                 "statistics": {"width": 1350, "height": 800}
             }
             
@@ -2884,6 +3464,9 @@ class RVUCounterApp:
         self.setup_refresh()
         self.setup_time_sensitive_update()  # Start time-sensitive counter updates (5s interval)
         
+        # Check if we should prompt for cloud backup setup
+        self._check_first_time_backup_prompt()
+        
         logger.info("RVU Counter application started")
     
     def create_ui(self):
@@ -2923,10 +3506,23 @@ class RVUCounterApp:
         self.data_source_indicator.grid(row=1, column=0, sticky=tk.W, padx=(2, 0), pady=(0, 0))
         self.data_source_indicator.bind("<Button-1>", lambda e: self._toggle_data_source())
         
-        # Version info on the right
+        # Version info on the right with backup status
+        version_frame = ttk.Frame(top_section)
+        version_frame.grid(row=1, column=1, sticky=tk.E, padx=(0, 2), pady=(0, 0))
+        
+        # Backup status indicator (clickable to open settings)
+        self.backup_status_label = tk.Label(version_frame, text="", font=("Arial", 7), 
+                                            fg="gray", cursor="hand2",
+                                            bg=self.root.cget('bg'))
+        self.backup_status_label.pack(side=tk.LEFT, padx=(0, 5))
+        self.backup_status_label.bind("<Button-1>", lambda e: self.open_settings())
+        
+        # Update backup status display
+        self._update_backup_status_display()
+        
         version_text = f"v{VERSION} ({VERSION_DATE})"
-        self.version_label = ttk.Label(top_section, text=version_text, font=("Arial", 7), foreground="gray")
-        self.version_label.grid(row=1, column=1, sticky=tk.E, padx=(0, 2), pady=(0, 0))
+        self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
+        self.version_label.pack(side=tk.LEFT)
         
         # Counters frame - use tk.LabelFrame with explicit border control for tighter spacing
         self.counters_frame = tk.LabelFrame(main_frame, bd=1, relief=tk.GROOVE, padx=2, pady=2)
@@ -4290,6 +4886,155 @@ class RVUCounterApp:
         except:
             pass
     
+    def _update_backup_status_display(self):
+        """Update the backup status indicator in the UI."""
+        try:
+            if not hasattr(self, 'backup_status_label'):
+                return
+            
+            backup_mgr = self.data_manager.backup_manager
+            status = backup_mgr.get_backup_status()
+            
+            if status["enabled"]:
+                text = f"{status['status_icon']} {status['time_since_backup'] or 'Ready'}"
+                fg_color = "gray" if status["last_backup_status"] == "success" else "orange"
+            else:
+                text = ""  # Don't show anything if backup is disabled
+                fg_color = "gray"
+            
+            self.backup_status_label.config(text=text, fg=fg_color)
+        except Exception as e:
+            logger.debug(f"Error updating backup status display: {e}")
+    
+    def _perform_shift_end_backup(self):
+        """Perform backup at shift end if enabled and scheduled."""
+        try:
+            backup_mgr = self.data_manager.backup_manager
+            
+            # Check if backup is enabled and scheduled for shift end
+            if not self.data_manager.data.get("backup", {}).get("cloud_backup_enabled", False):
+                return
+            
+            schedule = self.data_manager.data.get("backup", {}).get("backup_schedule", "shift_end")
+            if schedule != "shift_end":
+                return
+            
+            logger.info("Performing automatic backup at shift end...")
+            
+            # Perform backup (runs synchronously - quick operation)
+            result = backup_mgr.create_backup(force=True)
+            
+            if result["success"]:
+                logger.info(f"Shift-end backup completed: {result['path']}")
+            else:
+                logger.warning(f"Shift-end backup failed: {result['error']}")
+            
+            # Save updated backup status
+            self.data_manager.save()
+            
+            # Update UI
+            self._update_backup_status_display()
+            
+        except Exception as e:
+            logger.error(f"Error performing shift-end backup: {e}")
+    
+    def _check_first_time_backup_prompt(self):
+        """Check if we should prompt user to enable cloud backup on first run."""
+        try:
+            backup_settings = self.data_manager.data.get("backup", {})
+            
+            # Don't prompt if:
+            # - Backup is already enabled
+            # - User has already dismissed the prompt
+            # - OneDrive is not available
+            if backup_settings.get("cloud_backup_enabled", False):
+                return
+            if backup_settings.get("setup_prompt_dismissed", False):
+                return
+            if not self.data_manager.backup_manager.is_onedrive_available():
+                return
+            
+            # Schedule the prompt to appear shortly after app starts
+            self.root.after(2000, self._show_backup_setup_prompt)
+            
+        except Exception as e:
+            logger.debug(f"Error checking backup prompt: {e}")
+    
+    def _show_backup_setup_prompt(self):
+        """Show the first-time backup setup prompt."""
+        try:
+            backup_mgr = self.data_manager.backup_manager
+            onedrive_path = backup_mgr._detect_onedrive_folder()
+            
+            # Create a simple, non-intrusive dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("☁️ Protect Your Work Data")
+            dialog.transient(self.root)
+            dialog.grab_set()
+            
+            # Position near main window
+            x = self.root.winfo_x() + 50
+            y = self.root.winfo_y() + 50
+            dialog.geometry(f"380x220+{x}+{y}")
+            dialog.resizable(False, False)
+            
+            # Content frame
+            frame = ttk.Frame(dialog, padding="15")
+            frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Icon and title
+            ttk.Label(frame, text="☁️ Enable Cloud Backup?", 
+                     font=("Arial", 12, "bold")).pack(anchor=tk.W, pady=(0, 10))
+            
+            # Description
+            ttk.Label(frame, text="OneDrive was detected on your computer.\n"
+                                  "Automatic backups protect your work data from loss.",
+                     font=("Arial", 9), wraplength=350, justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 10))
+            
+            # OneDrive path
+            ttk.Label(frame, text=f"📁 {onedrive_path}", 
+                     font=("Arial", 8), foreground="gray").pack(anchor=tk.W, pady=(0, 15))
+            
+            # Buttons frame
+            btn_frame = ttk.Frame(frame)
+            btn_frame.pack(fill=tk.X)
+            
+            def enable_backup():
+                # Enable backup with default settings
+                if "backup" not in self.data_manager.data:
+                    self.data_manager.data["backup"] = {}
+                self.data_manager.data["backup"]["cloud_backup_enabled"] = True
+                self.data_manager.data["backup"]["backup_schedule"] = "shift_end"
+                self.data_manager.save()
+                
+                # Update UI
+                self._update_backup_status_display()
+                
+                dialog.destroy()
+                messagebox.showinfo("Backup Enabled", 
+                                   "Cloud backup is now enabled!\n\n"
+                                   "Your data will be backed up automatically\n"
+                                   "after each shift ends.")
+            
+            def maybe_later():
+                # Just dismiss - they can enable later in settings
+                dialog.destroy()
+            
+            def dont_ask_again():
+                # Set flag to not ask again
+                if "backup" not in self.data_manager.data:
+                    self.data_manager.data["backup"] = {}
+                self.data_manager.data["backup"]["setup_prompt_dismissed"] = True
+                self.data_manager.save()
+                dialog.destroy()
+            
+            ttk.Button(btn_frame, text="Enable Backup", command=enable_backup).pack(side=tk.LEFT, padx=2)
+            ttk.Button(btn_frame, text="Maybe Later", command=maybe_later).pack(side=tk.LEFT, padx=2)
+            ttk.Button(btn_frame, text="Don't Ask Again", command=dont_ask_again).pack(side=tk.RIGHT, padx=2)
+            
+        except Exception as e:
+            logger.error(f"Error showing backup setup prompt: {e}")
+    
     def _powerscribe_worker(self):
         """Background thread: Continuously poll PowerScribe or Mosaic for data with auto-switching."""
         import time
@@ -5404,6 +6149,10 @@ class RVUCounterApp:
             self.study_widgets.clear()
             self.data_manager.save()
             logger.info("Shift stopped and archived")
+            
+            # Trigger cloud backup on shift end (if enabled)
+            self._perform_shift_end_backup()
+            
             # Recalculate typical shift times now that we have new data
             self._calculate_typical_shift_times()
             # Hide pace car when no shift is active
@@ -6899,16 +7648,16 @@ class SettingsWindow:
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
                 x, y = find_nearest_monitor_for_window(x, y, 450, 590)
-            self.window.geometry(f"450x590+{x}+{y}")
+            self.window.geometry(f"450x700+{x}+{y}")
         else:
             # Center on primary monitor
             try:
                 primary = get_primary_monitor_bounds()
                 x = primary[0] + (primary[2] - primary[0] - 450) // 2
                 y = primary[1] + (primary[3] - primary[1] - 590) // 2
-                self.window.geometry(f"450x590+{x}+{y}")
+                self.window.geometry(f"450x700+{x}+{y}")
             except:
-                self.window.geometry("450x590")
+                self.window.geometry("450x700")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -7101,6 +7850,71 @@ class SettingsWindow:
         self.ignore_duplicates_var = tk.BooleanVar(value=self.data_manager.data["settings"]["ignore_duplicate_accessions"])
         ttk.Checkbutton(main_frame, text="Ignore duplicate accessions", variable=self.ignore_duplicates_var).pack(anchor=tk.W, pady=2)
         
+        # Cloud Backup Section
+        backup_frame = ttk.LabelFrame(main_frame, text="☁️ Cloud Backup", padding="5")
+        backup_frame.pack(fill=tk.X, pady=(10, 5))
+        
+        # Check if OneDrive is available
+        backup_mgr = self.data_manager.backup_manager
+        backup_settings = self.data_manager.data.get("backup", {})
+        
+        if backup_mgr.is_onedrive_available():
+            # Enable checkbox
+            self.backup_enabled_var = tk.BooleanVar(value=backup_settings.get("cloud_backup_enabled", False))
+            enable_cb = ttk.Checkbutton(backup_frame, text="Enable automatic backup to OneDrive", 
+                                        variable=self.backup_enabled_var,
+                                        command=self._on_backup_toggle)
+            enable_cb.pack(anchor=tk.W, pady=2)
+            
+            # Show OneDrive path
+            onedrive_path = backup_mgr.get_backup_folder()
+            if onedrive_path:
+                path_label = ttk.Label(backup_frame, text=f"📁 {onedrive_path}", 
+                                       font=("Arial", 7), foreground="gray")
+                path_label.pack(anchor=tk.W, padx=(20, 0))
+            
+            # Backup schedule
+            schedule_frame = ttk.Frame(backup_frame)
+            schedule_frame.pack(anchor=tk.W, pady=(5, 2), padx=(20, 0))
+            
+            ttk.Label(schedule_frame, text="Backup:", font=("Arial", 8)).pack(side=tk.LEFT)
+            
+            self.backup_schedule_var = tk.StringVar(value=backup_settings.get("backup_schedule", "shift_end"))
+            schedule_options = [
+                ("After shift ends", "shift_end"),
+                ("Every hour", "hourly"),
+                ("Daily", "daily"),
+                ("Manual only", "manual")
+            ]
+            
+            for text, value in schedule_options:
+                rb = ttk.Radiobutton(schedule_frame, text=text, variable=self.backup_schedule_var, value=value)
+                rb.pack(side=tk.LEFT, padx=(10, 0))
+            
+            # Action buttons row
+            action_frame = ttk.Frame(backup_frame)
+            action_frame.pack(anchor=tk.W, pady=(5, 2))
+            
+            ttk.Button(action_frame, text="Backup Now", command=self._do_manual_backup).pack(side=tk.LEFT, padx=2)
+            ttk.Button(action_frame, text="View Backups", command=self._show_backup_history).pack(side=tk.LEFT, padx=2)
+            ttk.Button(action_frame, text="Restore", command=self._show_restore_dialog).pack(side=tk.LEFT, padx=2)
+            
+            # Status display
+            status = backup_mgr.get_backup_status()
+            self.backup_status_label = ttk.Label(backup_frame, 
+                                                  text=f"{status['status_icon']} {status['status_text']}", 
+                                                  font=("Arial", 8))
+            self.backup_status_label.pack(anchor=tk.W, pady=(5, 0))
+        else:
+            # OneDrive not found
+            self.backup_enabled_var = tk.BooleanVar(value=False)
+            ttk.Label(backup_frame, text="⚠️ OneDrive not detected", 
+                     font=("Arial", 9), foreground="orange").pack(anchor=tk.W)
+            ttk.Label(backup_frame, text="Install OneDrive to enable cloud backup", 
+                     font=("Arial", 8), foreground="gray").pack(anchor=tk.W)
+            self.backup_schedule_var = tk.StringVar(value="shift_end")
+            self.backup_status_label = None
+        
         # Buttons
         buttons_frame = ttk.Frame(main_frame)
         buttons_frame.pack(fill=tk.X, pady=10)
@@ -7151,6 +7965,12 @@ class SettingsWindow:
             self.data_manager.data["settings"]["show_time"] = self.show_time_var.get()
             self.data_manager.data["settings"]["stay_on_top"] = self.stay_on_top_var.get()
             self.data_manager.data["settings"]["show_pace_car"] = self.show_pace_car_var.get()
+            
+            # Save backup settings
+            if "backup" not in self.data_manager.data:
+                self.data_manager.data["backup"] = {}
+            self.data_manager.data["backup"]["cloud_backup_enabled"] = self.backup_enabled_var.get()
+            self.data_manager.data["backup"]["backup_schedule"] = self.backup_schedule_var.get()
             
             # Update tracker min_seconds
             self.app.tracker.min_seconds = self.data_manager.data["settings"]["min_study_seconds"]
@@ -7256,6 +8076,167 @@ class SettingsWindow:
                 pass
         self.save_settings_position()
         self.window.destroy()
+    
+    def _on_backup_toggle(self):
+        """Handle backup enable/disable toggle."""
+        enabled = self.backup_enabled_var.get()
+        if enabled:
+            # First time enabling - show confirmation
+            backup_folder = self.data_manager.backup_manager.get_backup_folder()
+            if backup_folder:
+                logger.info(f"Cloud backup enabled. Backups will be stored in: {backup_folder}")
+    
+    def _do_manual_backup(self):
+        """Perform a manual backup."""
+        backup_mgr = self.data_manager.backup_manager
+        
+        # Show progress
+        self.backup_status_label.config(text="⏳ Backing up...")
+        self.window.update()
+        
+        # Perform backup
+        result = backup_mgr.create_backup(force=True)
+        
+        if result["success"]:
+            self.backup_status_label.config(text=f"☁️ Backup complete ({result.get('record_count', 0)} records)")
+            messagebox.showinfo("Backup Complete", 
+                               f"Backup created successfully!\n\n"
+                               f"Location: {result['path']}\n"
+                               f"Records: {result.get('record_count', 0)}")
+        else:
+            self.backup_status_label.config(text=f"⚠️ Backup failed")
+            messagebox.showerror("Backup Failed", f"Backup failed: {result['error']}")
+        
+        # Save updated status
+        self.data_manager.save()
+    
+    def _show_backup_history(self):
+        """Show backup history dialog."""
+        backup_mgr = self.data_manager.backup_manager
+        backups = backup_mgr.get_backup_history()
+        
+        if not backups:
+            messagebox.showinfo("No Backups", "No backups found yet.\n\nClick 'Backup Now' to create your first backup.")
+            return
+        
+        # Create dialog
+        dialog = tk.Toplevel(self.window)
+        dialog.title("Backup History")
+        dialog.transient(self.window)
+        dialog.grab_set()
+        
+        # Size and position
+        dialog.geometry("500x350")
+        dialog.minsize(400, 250)
+        
+        # Main frame
+        main = ttk.Frame(dialog, padding="10")
+        main.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(main, text="Available Backups", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        
+        # Scrollable list
+        list_frame = ttk.Frame(main)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Treeview for backup list
+        columns = ("date", "size", "records")
+        tree = ttk.Treeview(list_frame, columns=columns, show="headings", height=10)
+        tree.heading("date", text="Date/Time")
+        tree.heading("size", text="Size")
+        tree.heading("records", text="Records")
+        tree.column("date", width=180)
+        tree.column("size", width=80)
+        tree.column("records", width=80)
+        
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        
+        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Populate list
+        for backup in backups:
+            date_str = backup["timestamp"].strftime("%Y-%m-%d %I:%M %p")
+            tree.insert("", tk.END, values=(date_str, backup["size_formatted"], backup["record_count"]),
+                       tags=(backup["path"],))
+        
+        # Store path in item for restore
+        self._backup_tree = tree
+        self._backups = backups
+        
+        # Buttons
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def restore_selected():
+            selection = tree.selection()
+            if selection:
+                idx = tree.index(selection[0])
+                backup = backups[idx]
+                dialog.destroy()
+                self._confirm_restore(backup)
+        
+        ttk.Button(btn_frame, text="Restore Selected", command=restore_selected).pack(side=tk.LEFT, padx=2)
+        
+        # Open folder button
+        def open_folder():
+            folder = backup_mgr.get_backup_folder()
+            if folder:
+                os.startfile(folder)
+        
+        ttk.Button(btn_frame, text="Open Folder", command=open_folder).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT, padx=2)
+    
+    def _show_restore_dialog(self):
+        """Show restore from backup dialog."""
+        backup_mgr = self.data_manager.backup_manager
+        backups = backup_mgr.get_backup_history()
+        
+        if not backups:
+            messagebox.showinfo("No Backups", "No backups available to restore from.")
+            return
+        
+        # Show backup history and let user select
+        self._show_backup_history()
+    
+    def _confirm_restore(self, backup: dict):
+        """Confirm and perform restore from backup."""
+        backup_mgr = self.data_manager.backup_manager
+        
+        # Get current database info for comparison
+        try:
+            current_count = len(self.data_manager.data.get("records", []))
+        except:
+            current_count = 0
+        
+        # Confirmation dialog
+        date_str = backup["timestamp"].strftime("%B %d, %Y at %I:%M %p")
+        msg = (f"Restore from backup?\n\n"
+               f"Backup: {date_str}\n"
+               f"Contains: {backup['record_count']} records\n"
+               f"Size: {backup['size_formatted']}\n\n"
+               f"Current database: {current_count} records\n\n"
+               f"⚠️ Your current data will be replaced.\n"
+               f"A backup of current data will be created first.")
+        
+        if not messagebox.askyesno("Confirm Restore", msg, icon="warning"):
+            return
+        
+        # Perform restore
+        result = backup_mgr.restore_from_backup(backup["path"])
+        
+        if result["success"]:
+            messagebox.showinfo("Restore Complete", 
+                               f"Database restored successfully!\n\n"
+                               f"The application will now close.\n"
+                               f"Please restart to use the restored data.")
+            
+            # Close settings window and main app
+            self.window.destroy()
+            self.app.root.quit()
+        else:
+            messagebox.showerror("Restore Failed", f"Restore failed: {result['error']}")
 
 
 class CanvasTable:
