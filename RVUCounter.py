@@ -10494,8 +10494,10 @@ class StatisticsWindow:
         
         # Draw headers with sorting
         x = 0
-        self._all_studies_sort_column = None
-        self._all_studies_sort_reverse = False
+        # Preserve existing sort state if it exists, otherwise reset
+        if not hasattr(self, '_all_studies_sort_column'):
+            self._all_studies_sort_column = None
+            self._all_studies_sort_reverse = False
         
         for col_name, width, header_text in self._all_studies_columns:
             # Skip delete column for sorting
@@ -10582,14 +10584,30 @@ class StatisticsWindow:
         
         # Set up delete handler
         self._setup_all_studies_delete_handler()
+        
+        # If there's a saved sort state, apply it after display
+        if hasattr(self, '_all_studies_sort_column') and self._all_studies_sort_column:
+            # Use after_idle to ensure display is complete before sorting
+            saved_reverse = getattr(self, '_all_studies_sort_reverse', False)
+            self._all_studies_frame.after_idle(
+                lambda: self._sort_all_studies(self._all_studies_sort_column, force_reverse=saved_reverse)
+            )
     
-    def _sort_all_studies(self, col_name: str):
-        """Sort all studies by column."""
+    def _sort_all_studies(self, col_name: str, force_reverse: bool = None):
+        """Sort all studies by column.
+        
+        Args:
+            col_name: Column name to sort by
+            force_reverse: If provided, use this reverse value instead of toggling
+        """
         if not hasattr(self, '_all_studies_records'):
             return
         
-        # Toggle sort direction if clicking same column
-        if hasattr(self, '_all_studies_sort_column') and self._all_studies_sort_column == col_name:
+        # Toggle sort direction if clicking same column (unless force_reverse is provided)
+        if force_reverse is not None:
+            self._all_studies_sort_column = col_name
+            self._all_studies_sort_reverse = force_reverse
+        elif hasattr(self, '_all_studies_sort_column') and self._all_studies_sort_column == col_name:
             self._all_studies_sort_reverse = not self._all_studies_sort_reverse
         else:
             self._all_studies_sort_column = col_name
@@ -10894,6 +10912,10 @@ class StatisticsWindow:
         record = self._all_studies_records[row_idx]
         accession = record.get("accession", "")
         
+        # Save current sort state before deletion
+        saved_sort_column = getattr(self, '_all_studies_sort_column', None)
+        saved_sort_reverse = getattr(self, '_all_studies_sort_reverse', False)
+        
         # Confirm deletion
         result = messagebox.askyesno(
             "Delete Study?",
@@ -10914,7 +10936,13 @@ class StatisticsWindow:
                     current_records.pop(i)
                     self.data_manager.save()
                     logger.info(f"Deleted study from current shift: {accession}")
+                    # Restore sort state after refresh
                     self.refresh_data()
+                    if saved_sort_column:
+                        # Use after_idle to ensure display is complete before restoring sort
+                        self.window.after_idle(
+                            lambda: self._sort_all_studies(saved_sort_column, force_reverse=saved_sort_reverse)
+                        )
                     return
             
             # Check historical shifts
@@ -10925,7 +10953,13 @@ class StatisticsWindow:
                         shift_records.pop(i)
                         self.data_manager.save()
                         logger.info(f"Deleted study from historical shift: {accession}")
+                        # Restore sort state after refresh
                         self.refresh_data()
+                        if saved_sort_column:
+                            # Use after_idle to ensure display is complete before restoring sort
+                            self.window.after_idle(
+                                lambda: self._sort_all_studies(saved_sort_column, force_reverse=saved_sort_reverse)
+                            )
                         return
             
             logger.warning(f"Could not find record to delete: {accession}")
