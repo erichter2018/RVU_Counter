@@ -7752,17 +7752,17 @@ class SettingsWindow:
             # Validate position before applying
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
-                x, y = find_nearest_monitor_for_window(x, y, 450, 590)
-            self.window.geometry(f"450x700+{x}+{y}")
+                x, y = find_nearest_monitor_for_window(x, y, 450, 640)
+            self.window.geometry(f"450x750+{x}+{y}")
         else:
             # Center on primary monitor
             try:
                 primary = get_primary_monitor_bounds()
                 x = primary[0] + (primary[2] - primary[0] - 450) // 2
-                y = primary[1] + (primary[3] - primary[1] - 590) // 2
-                self.window.geometry(f"450x700+{x}+{y}")
+                y = primary[1] + (primary[3] - primary[1] - 640) // 2
+                self.window.geometry(f"450x750+{x}+{y}")
             except:
-                self.window.geometry("450x700")
+                self.window.geometry("450x750")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -8230,9 +8230,93 @@ class SettingsWindow:
         dialog.transient(self.window)
         dialog.grab_set()
         
-        # Size and position
-        dialog.geometry("500x350")
+        # Load saved window position or use default
+        window_pos = self.data_manager.data.get("window_positions", {}).get("backup_history", None)
+        if window_pos:
+            x, y = window_pos['x'], window_pos['y']
+            # Validate position before applying
+            if not is_point_on_any_monitor(x + 30, y + 30):
+                logger.warning(f"Backup history dialog position ({x}, {y}) is off-screen, finding nearest monitor")
+                x, y = find_nearest_monitor_for_window(x, y, 500, 350)
+            dialog.geometry(f"500x350+{x}+{y}")
+        else:
+            # Center on primary monitor
+            try:
+                primary = get_primary_monitor_bounds()
+                x = primary[0] + (primary[2] - primary[0] - 500) // 2
+                y = primary[1] + (primary[3] - primary[1] - 350) // 2
+                dialog.geometry(f"500x350+{x}+{y}")
+            except:
+                dialog.geometry("500x350")
+        
         dialog.minsize(400, 250)
+        
+        # Track last saved position to avoid excessive saves
+        last_saved_x = None
+        last_saved_y = None
+        
+        def save_backup_history_position(x=None, y=None):
+            """Save backup history dialog position."""
+            nonlocal last_saved_x, last_saved_y
+            try:
+                if x is None:
+                    x = dialog.winfo_x()
+                if y is None:
+                    y = dialog.winfo_y()
+                
+                if "window_positions" not in self.data_manager.data:
+                    self.data_manager.data["window_positions"] = {}
+                self.data_manager.data["window_positions"]["backup_history"] = {
+                    "x": x,
+                    "y": y
+                }
+                last_saved_x = x
+                last_saved_y = y
+                self.data_manager.save()
+            except Exception as e:
+                logger.error(f"Error saving backup history dialog position: {e}")
+        
+        def on_backup_history_move(event):
+            """Save backup history dialog position when moved."""
+            if event.widget == dialog:
+                try:
+                    x = dialog.winfo_x()
+                    y = dialog.winfo_y()
+                    # Only save if position actually changed
+                    if last_saved_x != x or last_saved_y != y:
+                        # Debounce: save after 100ms of no movement
+                        if hasattr(dialog, '_save_timer'):
+                            dialog.after_cancel(dialog._save_timer)
+                        dialog._save_timer = dialog.after(100, lambda: save_backup_history_position(x, y))
+                except Exception as e:
+                    logger.error(f"Error saving backup history dialog position: {e}")
+        
+        def on_backup_history_drag_end(event):
+            """Handle end of backup history dialog dragging - save position immediately."""
+            # Cancel any pending debounced save
+            if hasattr(dialog, '_save_timer'):
+                try:
+                    dialog.after_cancel(dialog._save_timer)
+                except:
+                    pass
+            # Save immediately on mouse release
+            save_backup_history_position()
+        
+        def on_backup_history_closing():
+            """Handle backup history dialog closing."""
+            # Cancel any pending save timer
+            if hasattr(dialog, '_save_timer'):
+                try:
+                    dialog.after_cancel(dialog._save_timer)
+                except:
+                    pass
+            save_backup_history_position()
+            dialog.destroy()
+        
+        # Bind to window movement to save position (debounced)
+        dialog.bind("<Configure>", on_backup_history_move)
+        dialog.bind("<ButtonRelease-1>", on_backup_history_drag_end)
+        dialog.protocol("WM_DELETE_WINDOW", on_backup_history_closing)
         
         # Main frame
         main = ttk.Frame(dialog, padding="10")
@@ -8279,7 +8363,7 @@ class SettingsWindow:
             if selection:
                 idx = tree.index(selection[0])
                 backup = backups[idx]
-                dialog.destroy()
+                on_backup_history_closing()
                 self._confirm_restore(backup)
         
         ttk.Button(btn_frame, text="Restore Selected", command=restore_selected).pack(side=tk.LEFT, padx=2)
@@ -8291,7 +8375,7 @@ class SettingsWindow:
                 os.startfile(folder)
         
         ttk.Button(btn_frame, text="Open Folder", command=open_folder).pack(side=tk.LEFT, padx=2)
-        ttk.Button(btn_frame, text="Close", command=dialog.destroy).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(btn_frame, text="Close", command=on_backup_history_closing).pack(side=tk.RIGHT, padx=2)
     
     def _show_restore_dialog(self):
         """Show restore from backup dialog."""
