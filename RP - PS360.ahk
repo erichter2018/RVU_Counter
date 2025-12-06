@@ -252,6 +252,9 @@ if InStr(PriorOriginal, ModalitySearch)
     PriorDescript := Trim(PriorDescript)
     StringLower, PriorDescript1, PriorDescript
     
+    ; Reorder laterality before processing ultrasound modifiers
+    Gosub, ReorderLaterality
+    
     ; Insert "ultrasound" before contrast modifiers or at end
     if InStr(PriorDescript1, " with and without")
         PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with and without)", " ultrasound$2")
@@ -292,6 +295,9 @@ if InStr(PriorOriginal, ModalitySearch)
     
     PriorDescript := Trim(PriorDescript)
     StringLower, PriorDescript1, PriorDescript
+    
+    ; Reorder laterality before processing MR modifiers
+    Gosub, ReorderLaterality
     
     ; Reorder: Insert "MR" before study type and contrast modifiers
     ModifierFound := false
@@ -354,6 +360,9 @@ if InStr(PriorOriginal, ModalitySearch)
     
     PriorDescript := Trim(PriorDescript)
     StringLower, PriorDescript1, PriorDescript
+    
+    ; Reorder laterality if present
+    Gosub, ReorderLaterality
     
     Goto, ComparisonFill
 }
@@ -465,6 +474,9 @@ if InStr(PriorOriginal, ModalitySearch)
     PriorDescript := Trim(PriorDescript)
     StringLower, PriorDescript1, PriorDescript
     
+    ; Reorder laterality before processing CT/CTA modifiers
+    Gosub, ReorderLaterality
+    
     ; Reorder: Position CT/CTA correctly
     ModifierFound := false
     HasCTA := false
@@ -505,9 +517,22 @@ if InStr(PriorOriginal, ModalitySearch)
         ModifierFound := true
     }
     
-    ; If CTA was at the start, insert it after the first word
+    ; If CTA was at the start, insert it after the body part
+    ; If laterality is present, body part is the second word; otherwise it's the first
     if (CTAMovedFromStart)
-        PriorDescript1 := RegExReplace(PriorDescript1, "i)^(\w+)\s+", "$1 CTA ")
+    {
+        ; Check if first word is laterality (right/left/bilateral)
+        if RegExMatch(PriorDescript1, "i)^(right|left|bilateral)\s+")
+        {
+            ; Laterality is first, so body part is second - insert CTA after second word
+            PriorDescript1 := RegExReplace(PriorDescript1, "i)^((right|left|bilateral)\s+\w+)\s+", "$1 CTA ")
+        }
+        else
+        {
+            ; No laterality, body part is first word
+            PriorDescript1 := RegExReplace(PriorDescript1, "i)^(\w+)\s+", "$1 CTA ")
+        }
+    }
     
     ; If no modifier found and no CTA, add CT at the end
     if (!ModifierFound && !HasCTA)
@@ -595,6 +620,29 @@ Return
 ; SUBROUTINES
 ; =============================================================================
 
+; --- Reorder Laterality (right/left/bilateral) to come before body part ---
+ReorderLaterality:
+    ; Check for laterality terms and move them to the beginning
+    ; Pattern: "shoulder right" -> "right shoulder"
+    ; Pattern: "knee left" -> "left knee"
+    ; Pattern: "hand bilateral" -> "bilateral hand"
+    
+    ; Check if laterality is already at the start (optimization)
+    if RegExMatch(PriorDescript1, "i)^(right|left|bilateral)\s+")
+        Return  ; Already in correct position
+    
+    ; Use word boundaries to match whole words only
+    if RegExMatch(PriorDescript1, "i)\b(right|left|bilateral)\b", LateralityMatch)
+    {
+        LateralityTerm := LateralityMatch1
+        ; Remove the laterality term from its current position
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s*\b" . LateralityTerm . "\b\s*", " ", , 1)
+        PriorDescript1 := Trim(PriorDescript1)
+        ; Insert laterality at the beginning
+        PriorDescript1 := LateralityTerm . " " . PriorDescript1
+    }
+Return
+
 ; --- Process Radiograph Descriptions ---
 ProcessRadiograph:
     ; Expand abbreviations
@@ -605,6 +653,9 @@ ProcessRadiograph:
     
     PriorDescript := Trim(PriorDescript)
     StringLower, PriorDescript1, PriorDescript
+    
+    ; Reorder laterality before processing view modifiers
+    Gosub, ReorderLaterality
     
     ; Insert "radiograph" before view modifiers
     ModifierFound := false
