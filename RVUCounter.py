@@ -4592,6 +4592,46 @@ class RVUCounterApp:
         - Duration split evenly among studies
         - Reference to the multi-accession group for duplicate detection
         """
+        # FIRST: Check for any accessions in current_multiple_accessions that weren't collected
+        # This handles the case where user didn't click on every accession in the listbox
+        if self.current_multiple_accessions:
+            classification_rules = self.data_manager.data.get("classification_rules", {})
+            direct_lookups = self.data_manager.data.get("direct_lookups", {})
+            
+            # Get set of accession numbers already in multi_accession_data
+            collected_acc_nums = set()
+            for entry, data in self.multi_accession_data.items():
+                acc_num = data.get("accession_number") or _extract_accession_number(entry)
+                collected_acc_nums.add(acc_num)
+            
+            for acc_entry in self.current_multiple_accessions:
+                acc_num = _extract_accession_number(acc_entry)
+                
+                # Skip if already collected
+                if acc_num in collected_acc_nums:
+                    continue
+                
+                # Try to extract procedure from listbox entry format "ACC (PROC)"
+                procedure = "Unknown"
+                study_type = "Unknown"
+                rvu = 0.0
+                
+                if '(' in acc_entry and ')' in acc_entry:
+                    entry_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', acc_entry)
+                    if entry_match:
+                        procedure = entry_match.group(2).strip()
+                        study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
+                
+                # Add to multi_accession_data
+                self.multi_accession_data[acc_entry] = {
+                    "procedure": procedure,
+                    "study_type": study_type,
+                    "rvu": rvu,
+                    "patient_class": self.current_patient_class or "",
+                    "accession_number": acc_num,
+                }
+                logger.info(f"Auto-collected uncollected accession {acc_num}: {procedure} ({rvu} RVU)")
+        
         if not self.multi_accession_data:
             return
         
@@ -5535,21 +5575,63 @@ class RVUCounterApp:
                             accession_numbers.append(acc_entry.strip())
                     
                     ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                    # Check if ALL accessions are already seen (order doesn't matter - using set membership)
-                    all_seen = ignore_duplicates and all(acc in self.tracker.seen_accessions for acc in accession_numbers)
                     
-                    if all_seen:
-                        # All accessions already completed - don't track again, but still display normally
-                        # Don't show "(done)" - just display it as a normal multi-accession study
-                        logger.info(f"Duplicate multi-accession study detected (all {len(accession_numbers)} accessions already seen): {accession_numbers}")
-                        # Continue to enter multi-accession mode for display, but duplicate detection will prevent re-recording
-                        # Fall through to start multi-accession mode below
+                    # Check ALL accessions against both seen_accessions AND database
+                    # This is important because seen_accessions is session-based
+                    all_recorded = False
+                    recorded_count = 0
                     
-                    # Starting multi-accession mode (whether duplicate or not - display it normally)
-                    self.multi_accession_mode = True
-                    self.multi_accession_start_time = datetime.now()
-                    self.multi_accession_data = {}
-                    self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
+                    if ignore_duplicates and accession_numbers:
+                        current_shift = None
+                        try:
+                            current_shift = self.data_manager.db.get_current_shift()
+                        except:
+                            pass
+                        
+                        for acc in accession_numbers:
+                            is_recorded = False
+                            
+                            # Check memory cache first
+                            if acc in self.tracker.seen_accessions:
+                                is_recorded = True
+                            # Check database
+                            elif current_shift:
+                                try:
+                                    db_record = self.data_manager.db.find_record_by_accession(
+                                        current_shift['id'], acc
+                                    )
+                                    if db_record:
+                                        is_recorded = True
+                                        self.tracker.seen_accessions.add(acc)  # Cache for future
+                                except:
+                                    pass
+                            # Check multi-accession history
+                            if not is_recorded:
+                                if self.tracker._was_part_of_multi_accession(acc, self.data_manager):
+                                    is_recorded = True
+                            
+                            if is_recorded:
+                                recorded_count += 1
+                        
+                        all_recorded = recorded_count == len(accession_numbers)
+                    
+                    if all_recorded:
+                        # All accessions already recorded - DON'T enter multi_accession_mode
+                        # Just display as duplicate study
+                        logger.info(f"Duplicate multi-accession study detected (all {len(accession_numbers)} accessions already recorded): {accession_numbers}")
+                        # Don't enter multi_accession_mode - this prevents re-recording
+                        # The display will show "already recorded" via update_debug_display
+                    else:
+                        # Starting multi-accession mode (some or all are new)
+                        self.multi_accession_mode = True
+                        self.multi_accession_start_time = datetime.now()
+                        self.multi_accession_data = {}
+                        self.multi_accession_last_procedure = ""  # Reset so first procedure gets collected
+                        
+                        if recorded_count > 0:
+                            logger.info(f"Starting multi-accession mode with {len(accession_numbers)} accessions ({recorded_count} already recorded)")
+                        else:
+                            logger.info(f"Starting multi-accession mode with {len(accession_numbers)} accessions")
                     
                     # Clear element cache to ensure fresh listbox data on next poll
                     # This is important for single-to-multi transition where the UI changes
@@ -6943,8 +7025,9 @@ class RVUCounterApp:
                 duplicate_count = 0
                 total_count = len(all_accession_numbers)
                 ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-                if ignore_duplicates and all_accession_numbers and not self.multi_accession_mode:
-                    # Only check if not actively tracking (multi_accession_mode)
+                if ignore_duplicates and all_accession_numbers:
+                    # Check duplicates regardless of multi_accession_mode - we need to show
+                    # "already recorded" even when returning to a previously-recorded study
                     current_shift = None
                     try:
                         current_shift = self.data_manager.db.get_current_shift()
