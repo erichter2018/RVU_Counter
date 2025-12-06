@@ -2589,6 +2589,7 @@ class RVUData:
             "classification_rules": self.settings_data.get("classification_rules", {}),
             "compensation_rates": self.settings_data.get("compensation_rates", {}),
             "window_positions": merged_window_positions,
+            "backup": self.settings_data.get("backup", {}),  # Load backup settings
             "records": self.records_data.get("records", []),
             "current_shift": self.records_data.get("current_shift", {
                 "shift_start": None,
@@ -2885,6 +2886,8 @@ class RVUData:
             self.settings_data["classification_rules"] = self.data["classification_rules"]
         if "window_positions" in self.data:
             self.settings_data["window_positions"] = self.data["window_positions"]
+        if "backup" in self.data:
+            self.settings_data["backup"] = self.data["backup"]
         
         if save_records:
             if "records" in self.data:
@@ -2894,7 +2897,7 @@ class RVUData:
             if "shifts" in self.data:
                 self.records_data["shifts"] = self.data["shifts"]
         
-        # Save settings file (everything - settings, RVU tables, rules, window positions)
+        # Save settings file (everything - settings, RVU tables, rules, window positions, backup)
         try:
             settings_to_save = {
                 "settings": self.settings_data.get("settings", {}),
@@ -2902,7 +2905,8 @@ class RVUData:
                 "rvu_table": self.settings_data.get("rvu_table", {}),
                 "classification_rules": self.settings_data.get("classification_rules", {}),
                 "compensation_rates": self.settings_data.get("compensation_rates", {}),
-                "window_positions": self.settings_data.get("window_positions", {})
+                "window_positions": self.settings_data.get("window_positions", {}),
+                "backup": self.settings_data.get("backup", {})
             }
             with open(self.settings_file, 'w') as f:
                 json.dump(settings_to_save, f, indent=2, default=str)
