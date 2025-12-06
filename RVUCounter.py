@@ -5008,10 +5008,13 @@ class RVUCounterApp:
             # Don't prompt if:
             # - Backup is already enabled
             # - User has already dismissed the prompt
+            # - User has already seen the prompt (first_backup_prompt_shown)
             # - OneDrive is not available
             if backup_settings.get("cloud_backup_enabled", False):
                 return
             if backup_settings.get("setup_prompt_dismissed", False):
+                return
+            if backup_settings.get("first_backup_prompt_shown", False):
                 return
             if not self.data_manager.backup_manager.is_onedrive_available():
                 return
@@ -5067,6 +5070,9 @@ class RVUCounterApp:
                     self.data_manager.data["backup"] = {}
                 self.data_manager.data["backup"]["cloud_backup_enabled"] = True
                 self.data_manager.data["backup"]["backup_schedule"] = "shift_end"
+                # Mark that user has seen and responded to the prompt
+                self.data_manager.data["backup"]["setup_prompt_dismissed"] = True
+                self.data_manager.data["backup"]["first_backup_prompt_shown"] = True
                 self.data_manager.save()
                 
                 # Update UI
@@ -7752,17 +7758,17 @@ class SettingsWindow:
             # Validate position before applying
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
-                x, y = find_nearest_monitor_for_window(x, y, 450, 640)
-            self.window.geometry(f"450x750+{x}+{y}")
+                x, y = find_nearest_monitor_for_window(x, y, 450, 690)
+            self.window.geometry(f"450x800+{x}+{y}")
         else:
             # Center on primary monitor
             try:
                 primary = get_primary_monitor_bounds()
                 x = primary[0] + (primary[2] - primary[0] - 450) // 2
-                y = primary[1] + (primary[3] - primary[1] - 640) // 2
-                self.window.geometry(f"450x750+{x}+{y}")
+                y = primary[1] + (primary[3] - primary[1] - 690) // 2
+                self.window.geometry(f"450x800+{x}+{y}")
             except:
-                self.window.geometry("450x750")
+                self.window.geometry("450x800")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -8190,6 +8196,12 @@ class SettingsWindow:
             backup_folder = self.data_manager.backup_manager.get_backup_folder()
             if backup_folder:
                 logger.info(f"Cloud backup enabled. Backups will be stored in: {backup_folder}")
+                # Mark that user has seen and responded to the prompt (if it was shown)
+                if "backup" not in self.data_manager.data:
+                    self.data_manager.data["backup"] = {}
+                self.data_manager.data["backup"]["setup_prompt_dismissed"] = True
+                self.data_manager.data["backup"]["first_backup_prompt_shown"] = True
+                self.data_manager.save()
     
     def _do_manual_backup(self):
         """Perform a manual backup."""
