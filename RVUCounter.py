@@ -41,6 +41,202 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Multi-Monitor Support (Windows Native)
+# =============================================================================
+
+def get_all_monitor_bounds() -> Tuple[int, int, int, int, List[Tuple[int, int, int, int]]]:
+    """Get virtual screen bounds encompassing all monitors using Windows API.
+    
+    Returns:
+        (virtual_left, virtual_top, virtual_right, virtual_bottom, list_of_monitor_rects)
+        
+    Uses ctypes to call Windows EnumDisplayMonitors for accurate multi-monitor detection.
+    This handles:
+    - Monitors with negative coordinates (left/above primary)
+    - Different resolutions per monitor
+    - Non-standard monitor arrangements (vertical stacking, etc.)
+    - DPI scaling
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        # Windows API constants
+        user32 = ctypes.windll.user32
+        
+        monitors = []
+        
+        # Callback function for EnumDisplayMonitors
+        MONITORENUMPROC = ctypes.WINFUNCTYPE(
+            ctypes.c_bool,
+            ctypes.c_void_p,  # hMonitor
+            ctypes.c_void_p,  # hdcMonitor
+            ctypes.POINTER(wintypes.RECT),  # lprcMonitor
+            ctypes.c_void_p   # dwData
+        )
+        
+        def monitor_enum_callback(hMonitor, hdcMonitor, lprcMonitor, dwData):
+            rect = lprcMonitor.contents
+            monitors.append((rect.left, rect.top, rect.right, rect.bottom))
+            return True
+        
+        # Enumerate all monitors
+        callback = MONITORENUMPROC(monitor_enum_callback)
+        user32.EnumDisplayMonitors(None, None, callback, 0)
+        
+        if not monitors:
+            # Fallback if enumeration fails
+            logger.warning("EnumDisplayMonitors returned no monitors, using fallback")
+            return (0, 0, 1920, 1080, [(0, 0, 1920, 1080)])
+        
+        # Calculate virtual screen bounds (bounding box of all monitors)
+        virtual_left = min(m[0] for m in monitors)
+        virtual_top = min(m[1] for m in monitors)
+        virtual_right = max(m[2] for m in monitors)
+        virtual_bottom = max(m[3] for m in monitors)
+        
+        logger.debug(f"Detected {len(monitors)} monitors: {monitors}")
+        logger.debug(f"Virtual screen bounds: ({virtual_left}, {virtual_top}) to ({virtual_right}, {virtual_bottom})")
+        
+        return (virtual_left, virtual_top, virtual_right, virtual_bottom, monitors)
+        
+    except Exception as e:
+        logger.error(f"Error enumerating monitors: {e}")
+        # Fallback to reasonable defaults
+        return (0, 0, 1920, 1080, [(0, 0, 1920, 1080)])
+
+
+def get_primary_monitor_bounds() -> Tuple[int, int, int, int]:
+    """Get the bounds of the primary monitor using Windows API.
+    
+    Returns: (left, top, right, bottom) of the primary monitor.
+    The primary monitor always contains the origin point (0, 0).
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        user32 = ctypes.windll.user32
+        
+        # MONITOR_DEFAULTTOPRIMARY = 1
+        # Get the monitor that contains point (0, 0) which is always on primary
+        hMonitor = user32.MonitorFromPoint(wintypes.POINT(0, 0), 1)
+        
+        if hMonitor:
+            # MONITORINFO structure
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT),
+                    ("dwFlags", wintypes.DWORD)
+                ]
+            
+            mi = MONITORINFO()
+            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            
+            if user32.GetMonitorInfoW(hMonitor, ctypes.byref(mi)):
+                rect = mi.rcMonitor
+                return (rect.left, rect.top, rect.right, rect.bottom)
+        
+        # Fallback
+        return (0, 0, 1920, 1080)
+        
+    except Exception as e:
+        logger.error(f"Error getting primary monitor: {e}")
+        return (0, 0, 1920, 1080)
+
+
+def is_point_on_any_monitor(x: int, y: int) -> bool:
+    """Check if a point is visible on any monitor.
+    
+    This is more accurate than just checking virtual screen bounds because
+    monitors may not form a contiguous rectangle.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        user32 = ctypes.windll.user32
+        
+        # MONITOR_DEFAULTTONULL = 0 - returns NULL if point not on any monitor
+        point = wintypes.POINT(int(x), int(y))
+        hMonitor = user32.MonitorFromPoint(point, 0)
+        
+        return hMonitor is not None and hMonitor != 0
+        
+    except Exception as e:
+        logger.debug(f"Error checking point on monitor: {e}")
+        # Fallback: assume point is visible if within virtual bounds
+        vl, vt, vr, vb, _ = get_all_monitor_bounds()
+        return vl <= x < vr and vt <= y < vb
+
+
+def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> Tuple[int, int]:
+    """Find the best position for a window that may be off-screen.
+    
+    Returns adjusted (x, y) coordinates that ensure the window is visible.
+    Prefers keeping the window on its current monitor if partially visible,
+    otherwise moves to the nearest monitor.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+        
+        user32 = ctypes.windll.user32
+        
+        # Check if the window center is on any monitor
+        center_x = x + width // 2
+        center_y = y + height // 2
+        
+        # MONITOR_DEFAULTTONEAREST = 2 - returns nearest monitor if not on any
+        point = wintypes.POINT(int(center_x), int(center_y))
+        hMonitor = user32.MonitorFromPoint(point, 2)
+        
+        if hMonitor:
+            # Get monitor info
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [
+                    ("cbSize", wintypes.DWORD),
+                    ("rcMonitor", wintypes.RECT),
+                    ("rcWork", wintypes.RECT),  # Work area (excludes taskbar)
+                    ("dwFlags", wintypes.DWORD)
+                ]
+            
+            mi = MONITORINFO()
+            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            
+            if user32.GetMonitorInfoW(hMonitor, ctypes.byref(mi)):
+                work = mi.rcWork  # Use work area to avoid taskbar
+                mon_left, mon_top = work.left, work.top
+                mon_right, mon_bottom = work.right, work.bottom
+                mon_width = mon_right - mon_left
+                mon_height = mon_bottom - mon_top
+                
+                # Clamp window to this monitor's work area
+                new_x = max(mon_left, min(x, mon_right - width))
+                new_y = max(mon_top, min(y, mon_bottom - height))
+                
+                # If window is larger than monitor, at least show top-left
+                if width > mon_width:
+                    new_x = mon_left
+                if height > mon_height:
+                    new_y = mon_top
+                
+                return (int(new_x), int(new_y))
+        
+        # Fallback: use primary monitor
+        pm = get_primary_monitor_bounds()
+        new_x = max(pm[0], min(x, pm[2] - width))
+        new_y = max(pm[1], min(y, pm[3] - height))
+        return (int(new_x), int(new_y))
+        
+    except Exception as e:
+        logger.error(f"Error finding nearest monitor: {e}")
+        return (50, 50)  # Safe fallback
+
+
 # Version information
 VERSION = "1.3"
 VERSION_DATE = "2025-12-05"
@@ -1941,36 +2137,23 @@ class RVUData:
         """Validate window positions and reset invalid ones to safe defaults.
         
         Returns data dict with validated/reset window positions.
-        Handles multi-monitor setups by using virtual screen dimensions.
+        Handles multi-monitor setups using Windows API for accurate detection.
         """
         try:
-            # Try to get virtual screen dimensions (includes all monitors)
-            temp_root = None
-            try:
-                temp_root = tk.Tk()
-                temp_root.withdraw()  # Hide the window
-                # Use virtual screen dimensions for multi-monitor support
-                # Virtual screen includes all monitors, so coordinates can be negative or beyond primary monitor
-                virtual_width = temp_root.winfo_vrootwidth()
-                virtual_height = temp_root.winfo_vrootheight()
-                # Get virtual screen origin (usually negative if monitors extend left/up)
-                virtual_x = temp_root.winfo_vrootx()
-                virtual_y = temp_root.winfo_vrooty()
-            except:
-                # Fallback: use reasonable defaults if tkinter not available yet
-                virtual_width = 3840  # Assume dual 1920x1080 monitors
-                virtual_height = 1080
-                virtual_x = 0
-                virtual_y = 0
-            finally:
-                if temp_root:
-                    temp_root.destroy()
+            # Get actual monitor bounds using Windows API (handles all monitor configurations)
+            virtual_left, virtual_top, virtual_right, virtual_bottom, monitors = get_all_monitor_bounds()
             
-            # Default safe positions (low x, y with small offsets) - on primary monitor
+            logger.debug(f"Monitor validation: virtual bounds ({virtual_left}, {virtual_top}) to ({virtual_right}, {virtual_bottom}), {len(monitors)} monitors")
+            
+            # Get primary monitor for default positioning
+            primary_bounds = get_primary_monitor_bounds()
+            primary_left, primary_top, primary_right, primary_bottom = primary_bounds
+            
+            # Default safe positions on primary monitor
             default_positions = {
-                "main": {"x": 50, "y": 50, "width": 240, "height": 500},
-                "settings": {"x": 100, "y": 100},
-                "statistics": {"x": 150, "y": 150}
+                "main": {"x": primary_left + 50, "y": primary_top + 50, "width": 240, "height": 500},
+                "settings": {"x": primary_left + 100, "y": primary_top + 100},
+                "statistics": {"x": primary_left + 150, "y": primary_top + 150}
             }
             
             # Window size constraints (minimum visible area)
@@ -1987,12 +2170,6 @@ class RVUData:
             positions = data["window_positions"]
             positions_updated = False
             
-            # Calculate virtual screen bounds
-            virtual_left = virtual_x
-            virtual_right = virtual_x + virtual_width
-            virtual_top = virtual_y
-            virtual_bottom = virtual_y + virtual_height
-            
             for window_type in ["main", "settings", "statistics"]:
                 if window_type not in positions:
                     positions[window_type] = default_positions[window_type].copy()
@@ -2005,37 +2182,27 @@ class RVUData:
                 
                 # Get window dimensions
                 window_size = window_sizes.get(window_type, {"width": 400, "height": 400})
-                min_width = window_size["width"]
-                min_height = window_size["height"]
+                win_width = window_size["width"]
+                win_height = window_size["height"]
                 
-                # Validate position against virtual screen (all monitors)
-                # Window must be at least partially within the virtual screen bounds
-                # Allow windows that extend slightly beyond (up to 50% can be off-screen)
-                window_right = x + min_width
-                window_bottom = y + min_height
+                # Use Windows API to check if window top-left is on ANY monitor
+                # This is more accurate than virtual bounds for non-rectangular monitor arrangements
+                top_left_visible = is_point_on_any_monitor(x + 50, y + 50)  # Check slightly inward
                 
-                # Check if window is completely off-screen
-                if window_right < virtual_left or x > virtual_right or window_bottom < virtual_top or y > virtual_bottom:
-                    logger.warning(f"{window_type} window completely off virtual screen (x={x}, y={y}), resetting to default")
-                    positions[window_type] = default_positions[window_type].copy()
-                    positions_updated = True
-                    continue
-                
-                # Check if window is mostly off-screen (less than 50% visible)
-                # Calculate visible portion
-                visible_left = max(x, virtual_left)
-                visible_right = min(window_right, virtual_right)
-                visible_top = max(y, virtual_top)
-                visible_bottom = min(window_bottom, virtual_bottom)
-                
-                visible_width = max(0, visible_right - visible_left)
-                visible_height = max(0, visible_bottom - visible_top)
-                
-                if visible_width < min_width * 0.5 or visible_height < min_height * 0.5:
-                    logger.warning(f"{window_type} window mostly off-screen (only {visible_width}x{visible_height} visible), resetting to default")
-                    positions[window_type] = default_positions[window_type].copy()
-                    positions_updated = True
-                    continue
+                if not top_left_visible:
+                    # Window is not visible on any monitor - find nearest valid position
+                    new_x, new_y = find_nearest_monitor_for_window(x, y, win_width, win_height)
+                    
+                    if new_x != x or new_y != y:
+                        logger.warning(f"{window_type} window off-screen (x={x}, y={y}), moving to ({new_x}, {new_y})")
+                        positions[window_type]["x"] = new_x
+                        positions[window_type]["y"] = new_y
+                        positions_updated = True
+                    else:
+                        # Couldn't find a good position, use default
+                        logger.warning(f"{window_type} window off-screen (x={x}, y={y}), resetting to default")
+                        positions[window_type] = default_positions[window_type].copy()
+                        positions_updated = True
             
             # If positions were updated, save the corrected data
             if positions_updated:
@@ -2558,7 +2725,25 @@ class RVUCounterApp:
         if window_pos:
             width = window_pos.get('width', 240)
             height = window_pos.get('height', 500)
-            self.root.geometry(f"{width}x{height}+{window_pos['x']}+{window_pos['y']}")
+            x = window_pos['x']
+            y = window_pos['y']
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
+        else:
+            # First run: center on primary monitor
+            try:
+                primary = get_primary_monitor_bounds()
+                primary_width = primary[2] - primary[0]
+                primary_height = primary[3] - primary[1]
+                x = primary[0] + (primary_width - 240) // 2
+                y = primary[1] + (primary_height - 500) // 2
+                self.root.geometry(f"240x500+{x}+{y}")
+                logger.info(f"First run: positioning window at ({x}, {y}) on primary monitor")
+            except Exception as e:
+                logger.error(f"Error positioning window on first run: {e}")
+        
+        # Schedule post-mapping validation to ensure window is visible
+        self.root.after(100, self._ensure_window_visible)
+        
         # Initialize last saved position tracking
         self._last_saved_main_x = self.root.winfo_x()
         self._last_saved_main_y = self.root.winfo_y()
@@ -6532,6 +6717,50 @@ class RVUCounterApp:
             # Use shorter debounce during drag (100ms) to be more responsive
             self._position_save_timer = self.root.after(100, self.save_window_position)
     
+    def _ensure_window_visible(self):
+        """Post-mapping validation: ensure window is visible on a monitor.
+        
+        Called shortly after window is mapped to handle edge cases where:
+        - Monitor configuration changed since last run
+        - Window was dragged off-screen in a previous session
+        - First run on a multi-monitor setup with unusual arrangement
+        """
+        try:
+            self.root.update_idletasks()  # Ensure geometry is updated
+            
+            x = self.root.winfo_x()
+            y = self.root.winfo_y()
+            width = self.root.winfo_width()
+            height = self.root.winfo_height()
+            
+            # Check if window top-left area is on any monitor
+            # Check slightly inward to ensure the window is actually usable
+            if not is_point_on_any_monitor(x + 30, y + 30):
+                logger.warning(f"Window not visible at ({x}, {y}), repositioning...")
+                
+                # Find the nearest valid position
+                new_x, new_y = find_nearest_monitor_for_window(x, y, width, height)
+                
+                if new_x != x or new_y != y:
+                    self.root.geometry(f"{width}x{height}+{new_x}+{new_y}")
+                    logger.info(f"Window moved from ({x}, {y}) to ({new_x}, {new_y})")
+                    
+                    # Save the corrected position
+                    self.root.after(100, self.save_window_position)
+                else:
+                    # Fallback: center on primary monitor
+                    primary = get_primary_monitor_bounds()
+                    new_x = primary[0] + (primary[2] - primary[0] - width) // 2
+                    new_y = primary[1] + (primary[3] - primary[1] - height) // 2
+                    self.root.geometry(f"{width}x{height}+{new_x}+{new_y}")
+                    logger.info(f"Window centered on primary monitor at ({new_x}, {new_y})")
+                    self.root.after(100, self.save_window_position)
+            else:
+                logger.debug(f"Window visible at ({x}, {y})")
+                
+        except Exception as e:
+            logger.error(f"Error ensuring window visibility: {e}")
+    
     def on_drag_end(self, event):
         """Handle end of window dragging - save position immediately."""
         # Cancel any pending debounced save
@@ -6665,9 +6894,21 @@ class SettingsWindow:
         # Load saved window position or use default
         window_pos = self.data_manager.data.get("window_positions", {}).get("settings", None)
         if window_pos:
-            self.window.geometry(f"450x590+{window_pos['x']}+{window_pos['y']}")
+            x, y = window_pos['x'], window_pos['y']
+            # Validate position before applying
+            if not is_point_on_any_monitor(x + 30, y + 30):
+                logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
+                x, y = find_nearest_monitor_for_window(x, y, 450, 590)
+            self.window.geometry(f"450x590+{x}+{y}")
         else:
-            self.window.geometry("450x590")
+            # Center on primary monitor
+            try:
+                primary = get_primary_monitor_bounds()
+                x = primary[0] + (primary[2] - primary[0] - 450) // 2
+                y = primary[1] + (primary[3] - primary[1] - 590) // 2
+                self.window.geometry(f"450x590+{x}+{y}")
+            except:
+                self.window.geometry("450x590")
         
         self.window.transient(parent)
         self.window.grab_set()
@@ -7468,15 +7709,27 @@ class StatisticsWindow:
         positions = self.data_manager.data.get("window_positions", {})
         if "statistics" in positions:
             pos = positions["statistics"]
-            self.window.geometry(f"1350x800+{pos['x']}+{pos['y']}")
-        else:
-            # Center on screen
-            parent.update_idletasks()
-            screen_width = parent.winfo_screenwidth()
-            screen_height = parent.winfo_screenheight()
-            x = (screen_width - 1350) // 2
-            y = (screen_height - 800) // 2
+            x, y = pos['x'], pos['y']
+            # Validate position before applying
+            if not is_point_on_any_monitor(x + 30, y + 30):
+                logger.warning(f"Statistics window position ({x}, {y}) is off-screen, finding nearest monitor")
+                x, y = find_nearest_monitor_for_window(x, y, 1350, 800)
             self.window.geometry(f"1350x800+{x}+{y}")
+        else:
+            # Center on primary monitor using Windows API
+            try:
+                primary = get_primary_monitor_bounds()
+                x = primary[0] + (primary[2] - primary[0] - 1350) // 2
+                y = primary[1] + (primary[3] - primary[1] - 800) // 2
+                self.window.geometry(f"1350x800+{x}+{y}")
+            except:
+                # Fallback: use parent's screen (old behavior)
+                parent.update_idletasks()
+                screen_width = parent.winfo_screenwidth()
+                screen_height = parent.winfo_screenheight()
+                x = (screen_width - 1350) // 2
+                y = (screen_height - 800) // 2
+                self.window.geometry(f"1350x800+{x}+{y}")
         
         # Track position for saving
         self.last_saved_x = self.window.winfo_x()
