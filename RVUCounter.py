@@ -6198,8 +6198,8 @@ class RVUCounterApp:
     def update_shift_start_label(self):
         """Update the shift start time label."""
         if self.shift_start:
-            # Format: "Started: HH:MM AM/PM"
-            time_str = self.shift_start.strftime("%I:%M %p")
+            # Format: "Started: HH:MM am/pm"
+            time_str = self.shift_start.strftime("%I:%M %p").lower()
             self.shift_start_label.config(text=f"Started: {time_str}")
         else:
             self.shift_start_label.config(text="")
@@ -8358,7 +8358,7 @@ class SettingsWindow:
         
         # Populate list
         for backup in backups:
-            date_str = backup["timestamp"].strftime("%Y-%m-%d %I:%M %p")
+            date_str = backup["timestamp"].strftime("%Y-%m-%d %I:%M %p").lower()
             tree.insert("", tk.END, values=(date_str, backup["size_formatted"], backup["record_count"]),
                        tags=(backup["path"],))
         
@@ -8412,7 +8412,7 @@ class SettingsWindow:
             current_count = 0
         
         # Confirmation dialog
-        date_str = backup["timestamp"].strftime("%B %d, %Y at %I:%M %p")
+        date_str = backup["timestamp"].strftime("%B %d, %Y at %I:%M %p").lower()
         msg = (f"Restore from backup?\n\n"
                f"Backup: {date_str}\n"
                f"Contains: {backup['record_count']} records\n"
@@ -12059,7 +12059,7 @@ class StatisticsWindow:
             if h is None:
                 return "N/A"
             hour_12 = h % 12 or 12
-            am_pm = "AM" if h < 12 else "PM"
+            am_pm = "am" if h < 12 else "pm"
             return f"{hour_12}{am_pm}"
         
         # Add summary rows to Canvas table
@@ -12136,10 +12136,16 @@ class StatisticsWindow:
                 'metric': '  XR RVU per Minute',
                 'value': f"{xr_rvu_per_minute:.3f}"
             })
-            if xr_studies_for_100 > 0:
+            # Always show the "to $100" row if we have XR records
+            if xr_studies_for_100 > 0 and xr_time_for_100_formatted != "N/A":
                 self._summary_table.add_row({
                     'metric': '  XR to $100',
                     'value': f"{xr_studies_for_100:.1f} studies, {xr_time_for_100_formatted}"
+                })
+            else:
+                self._summary_table.add_row({
+                    'metric': '  XR to $100',
+                    'value': 'N/A (compensation rate not set)'
                 })
         else:
             self._summary_table.add_row({'metric': '  XR RVU per Minute', 'value': 'N/A (no XR studies)'})
@@ -12149,10 +12155,16 @@ class StatisticsWindow:
                 'metric': '  CT RVU per Minute',
                 'value': f"{ct_rvu_per_minute:.3f}"
             })
-            if ct_studies_for_100 > 0:
+            # Always show the "to $100" row if we have CT records
+            if ct_studies_for_100 > 0 and ct_time_for_100_formatted != "N/A":
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
                     'value': f"{ct_studies_for_100:.1f} studies, {ct_time_for_100_formatted}"
+                })
+            else:
+                self._summary_table.add_row({
+                    'metric': '  CT to $100',
+                    'value': 'N/A (compensation rate not set)'
                 })
         else:
             self._summary_table.add_row({'metric': '  CT RVU per Minute', 'value': 'N/A (no CT studies)'})
