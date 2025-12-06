@@ -4135,13 +4135,15 @@ class RVUCounterApp:
                 # If only one source is available, use it
                 if ps_available and not mosaic_available:
                     data = self._extract_powerscribe_data()
+                    # Always set source when window is available (even if no study is open)
+                    self._active_source = "PowerScribe"
                     if data.get('accession'):
-                        self._active_source = "PowerScribe"
                         self._primary_source = "PowerScribe"
                 elif mosaic_available and not ps_available:
                     data = self._extract_mosaic_data()
+                    # Always set source when window is available (even if no study is open)
+                    self._active_source = "Mosaic"
                     if data.get('accession'):
-                        self._active_source = "Mosaic"
                         self._primary_source = "Mosaic"
                 elif ps_available and mosaic_available:
                     # Both available - use tiered polling
