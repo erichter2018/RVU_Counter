@@ -9178,9 +9178,22 @@ class StatisticsWindow:
         self.period_label = ttk.Label(period_frame, text="", font=("Arial", 12, "bold"))
         self.period_label.pack(side=tk.LEFT, anchor=tk.W)
         
+        # Frame for efficiency view controls (study count mode and color coding)
+        efficiency_controls_frame = ttk.Frame(period_frame)
+        efficiency_controls_frame.pack(side=tk.RIGHT, anchor=tk.E)
+        
+        # Study count display mode (average vs total) - to the left of color coding
+        self.study_count_mode_frame = ttk.Frame(efficiency_controls_frame)
+        self.study_count_mode_frame.pack(side=tk.LEFT, padx=(0, 15))
+        
+        # Load saved value or default to "average"
+        saved_study_count_mode = self.data_manager.data.get("settings", {}).get("efficiency_study_count_mode", "average")
+        self.study_count_mode = tk.StringVar(value=saved_study_count_mode)  # Options: "average", "total"
+        self.study_count_radio_buttons = []  # Store references to radio buttons
+        
         # Checkboxes for efficiency color coding (will be shown/hidden based on view mode)
-        self.efficiency_checkboxes_frame = ttk.Frame(period_frame)
-        self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
+        self.efficiency_checkboxes_frame = ttk.Frame(efficiency_controls_frame)
+        self.efficiency_checkboxes_frame.pack(side=tk.LEFT, anchor=tk.E)
         
         # Efficiency color coding options (created when efficiency view is shown)
         # Load saved value or default to "duration"
@@ -9874,6 +9887,38 @@ class StatisticsWindow:
         
         # Show/hide efficiency checkboxes based on view mode
         if view_mode == "efficiency":
+            # Show study count mode frame
+            self.study_count_mode_frame.pack(side=tk.LEFT, padx=(0, 15))
+            
+            # Make sure study count mode frame is visible and create radio buttons if needed
+            if not self.study_count_radio_buttons:
+                # Helper function to save study count mode and refresh
+                def save_study_count_mode():
+                    self.data_manager.data.setdefault("settings", {})["efficiency_study_count_mode"] = self.study_count_mode.get()
+                    self.data_manager.save(save_records=False)
+                    self.refresh_data()
+                
+                # Create radio buttons for study count display mode
+                ttk.Label(self.study_count_mode_frame, text="Study Count:", font=('Arial', 9)).pack(side=tk.LEFT, padx=(0, 5))
+                
+                self.study_count_radio_buttons.append(ttk.Radiobutton(
+                    self.study_count_mode_frame,
+                    text="Average",
+                    variable=self.study_count_mode,
+                    value="average",
+                    command=save_study_count_mode
+                ))
+                self.study_count_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
+                
+                self.study_count_radio_buttons.append(ttk.Radiobutton(
+                    self.study_count_mode_frame,
+                    text="Total",
+                    variable=self.study_count_mode,
+                    value="total",
+                    command=save_study_count_mode
+                ))
+                self.study_count_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
+            
             # Make sure radio buttons frame is visible and create radio buttons if needed
             if not self.heatmap_radio_buttons:
                 # Helper function to save heatmap mode and refresh
@@ -9913,10 +9958,12 @@ class StatisticsWindow:
                     command=save_heatmap_mode
                 ))
                 self.heatmap_radio_buttons[-1].pack(side=tk.LEFT, padx=2)
-            self.efficiency_checkboxes_frame.pack(side=tk.RIGHT, anchor=tk.E)
+            self.efficiency_checkboxes_frame.pack(side=tk.LEFT, anchor=tk.E)
         else:
             if self.efficiency_checkboxes_frame:
                 self.efficiency_checkboxes_frame.pack_forget()
+            if hasattr(self, 'study_count_mode_frame'):
+                self.study_count_mode_frame.pack_forget()
         
         if view_mode == "by_hour":
             self._display_by_hour(records)
@@ -11279,8 +11326,10 @@ class StatisticsWindow:
                     x = 0
                     rows_canvas.create_rectangle(x, y, x + modality_col_width, y + row_height,
                                                fill=total_bg, outline=border_color, width=1)
+                    # Show label based on study count mode
+                    total_label = study_count_mode if study_count_mode in ["average", "total"] else "average"
                     rows_canvas.create_text(x + modality_col_width//2, y + row_height//2,
-                                           text="average", font=('Arial', 9, 'bold'), anchor='center',
+                                           text=total_label, font=('Arial', 9, 'bold'), anchor='center',
                                            fill=text_fg)
                     x += modality_col_width
                     
@@ -11338,6 +11387,9 @@ class StatisticsWindow:
             # Draw initial headers
             draw_headers()
             
+            # Get study count mode (average vs total)
+            study_count_mode = self.study_count_mode.get() if hasattr(self, 'study_count_mode') else "average"
+            
             # Build row data for all modalities
             for modality in all_modalities:
                 modality_durations = []
@@ -11357,12 +11409,21 @@ class StatisticsWindow:
                     study_count = study_count_data.get(modality, {}).get(hour, 0) if modality in study_count_data else 0
                     modality_counts_row.append(study_count)
                     
-                    # Build cell text
+                    # Build cell text based on study count mode
                     if avg_duration is not None:
                         duration_str = self._format_duration(avg_duration)
-                        cell_text = f"{duration_str} ({duration_count})"
+                        if study_count_mode == "average":
+                            # Show average: divide total count by number of hours in period (approximate)
+                            # For now, just show the count as-is since we don't have shift count
+                            cell_text = f"{duration_str} ({duration_count})"
+                        else:
+                            # Show total: use the total study count
+                            cell_text = f"{duration_str} ({study_count})"
                     elif study_count > 0:
-                        cell_text = f"({study_count})"
+                        if study_count_mode == "average":
+                            cell_text = f"({duration_count})" if duration_count > 0 else f"({study_count})"
+                        else:
+                            cell_text = f"({study_count})"
                     else:
                         cell_text = "-"
                     
@@ -11409,21 +11470,30 @@ class StatisticsWindow:
                 for hour in hours_list:
                     hour_durations = []
                     hour_count = 0
+                    hour_duration_count = 0
                     for mod in efficiency_data.keys():
                         if hour in efficiency_data[mod]:
                             hour_durations.extend(efficiency_data[mod][hour])
+                            hour_duration_count += len(efficiency_data[mod][hour])
                         # Count all studies for this hour across all modalities
                         if mod in study_count_data and hour in study_count_data[mod]:
                             hour_count += study_count_data[mod][hour]
                     
                     if hour_durations:
                         avg_duration = sum(hour_durations) / len(hour_durations)
-                        count = len(hour_durations)
                         duration_str = self._format_duration(avg_duration)
-                        cell_text = f"{duration_str} ({count})"
+                        if study_count_mode == "average":
+                            # Show count of studies with duration data
+                            cell_text = f"{duration_str} ({hour_duration_count})"
+                        else:
+                            # Show total study count
+                            cell_text = f"{duration_str} ({hour_count})"
                         total_hour_durations.append(avg_duration)
                     else:
-                        cell_text = "-"
+                        if study_count_mode == "total" and hour_count > 0:
+                            cell_text = f"({hour_count})"
+                        else:
+                            cell_text = "-"
                         total_hour_durations.append(None)
                     
                     total_hour_counts.append(hour_count if hour_count > 0 else None)
@@ -11490,7 +11560,7 @@ class StatisticsWindow:
         if not hasattr(self, '_summary_table'):
             columns = [
                 {'name': 'metric', 'width': 300, 'text': 'Metric', 'sortable': True},
-                {'name': 'value', 'width': 200, 'text': 'Value', 'sortable': True}
+                {'name': 'value', 'width': 300, 'text': 'Value', 'sortable': True}  # Increased by 50% (200 -> 300)
             ]
             self._summary_table = CanvasTable(self.table_frame, columns, app=self.app)
         
@@ -11984,6 +12054,97 @@ class StatisticsWindow:
         self._summary_table.add_row({'metric': 'Total Studies', 'value': str(total_studies)})
         self._summary_table.add_row({'metric': 'Total RVU', 'value': f"{total_rvu:.1f}"})
         self._summary_table.add_row({'metric': 'Average RVU per Study', 'value': f"{avg_rvu:.2f}"})
+        
+        # Calculate XR vs CT efficiency metrics
+        xr_records = []
+        ct_records = []
+        
+        for r in records:
+            study_type = r.get("study_type", "").upper()
+            # Check if it's XR (including CR, X-ray, Radiograph)
+            if study_type.startswith("XR") or study_type.startswith("CR") or "X-RAY" in study_type or "RADIOGRAPH" in study_type:
+                xr_records.append(r)
+            # Check if it's CT (including CTA)
+            elif study_type.startswith("CT"):
+                ct_records.append(r)
+        
+        # Calculate XR efficiency
+        if xr_records:
+            xr_total_rvu = sum(r.get("rvu", 0) for r in xr_records)
+            xr_total_minutes = sum(r.get("duration_seconds", 0) for r in xr_records) / 60.0
+            xr_rvu_per_minute = xr_total_rvu / xr_total_minutes if xr_total_minutes > 0 else 0
+            
+            # Calculate studies and time to reach $100 compensation
+            # Need to get compensation rate from settings
+            compensation_rate = self.data_manager.data.get("settings", {}).get("compensation_rate", 0)
+            if compensation_rate > 0:
+                target_rvu = 100.0 / compensation_rate  # RVU needed for $100
+                xr_avg_rvu_per_study = xr_total_rvu / len(xr_records) if xr_records else 0
+                xr_studies_for_100 = target_rvu / xr_avg_rvu_per_study if xr_avg_rvu_per_study > 0 else 0
+                xr_avg_minutes_per_study = xr_total_minutes / len(xr_records) if xr_records else 0
+                xr_time_for_100_minutes = xr_studies_for_100 * xr_avg_minutes_per_study
+                xr_time_for_100_formatted = self._format_duration(xr_time_for_100_minutes * 60) if xr_time_for_100_minutes > 0 else "N/A"
+            else:
+                xr_studies_for_100 = 0
+                xr_time_for_100_formatted = "N/A"
+        else:
+            xr_rvu_per_minute = 0
+            xr_studies_for_100 = 0
+            xr_time_for_100_formatted = "N/A"
+        
+        # Calculate CT efficiency
+        if ct_records:
+            ct_total_rvu = sum(r.get("rvu", 0) for r in ct_records)
+            ct_total_minutes = sum(r.get("duration_seconds", 0) for r in ct_records) / 60.0
+            ct_rvu_per_minute = ct_total_rvu / ct_total_minutes if ct_total_minutes > 0 else 0
+            
+            # Calculate studies and time to reach $100 compensation
+            compensation_rate = self.data_manager.data.get("settings", {}).get("compensation_rate", 0)
+            if compensation_rate > 0:
+                target_rvu = 100.0 / compensation_rate  # RVU needed for $100
+                ct_avg_rvu_per_study = ct_total_rvu / len(ct_records) if ct_records else 0
+                ct_studies_for_100 = target_rvu / ct_avg_rvu_per_study if ct_avg_rvu_per_study > 0 else 0
+                ct_avg_minutes_per_study = ct_total_minutes / len(ct_records) if ct_records else 0
+                ct_time_for_100_minutes = ct_studies_for_100 * ct_avg_minutes_per_study
+                ct_time_for_100_formatted = self._format_duration(ct_time_for_100_minutes * 60) if ct_time_for_100_minutes > 0 else "N/A"
+            else:
+                ct_studies_for_100 = 0
+                ct_time_for_100_formatted = "N/A"
+        else:
+            ct_rvu_per_minute = 0
+            ct_studies_for_100 = 0
+            ct_time_for_100_formatted = "N/A"
+        
+        # Add XR vs CT efficiency metrics
+        self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
+        self._summary_table.add_row({'metric': 'XR vs CT Efficiency:', 'value': ''})
+        
+        if xr_records:
+            self._summary_table.add_row({
+                'metric': '  XR RVU per Minute',
+                'value': f"{xr_rvu_per_minute:.3f}"
+            })
+            if xr_studies_for_100 > 0:
+                self._summary_table.add_row({
+                    'metric': '  XR to $100',
+                    'value': f"{xr_studies_for_100:.1f} studies, {xr_time_for_100_formatted}"
+                })
+        else:
+            self._summary_table.add_row({'metric': '  XR RVU per Minute', 'value': 'N/A (no XR studies)'})
+        
+        if ct_records:
+            self._summary_table.add_row({
+                'metric': '  CT RVU per Minute',
+                'value': f"{ct_rvu_per_minute:.3f}"
+            })
+            if ct_studies_for_100 > 0:
+                self._summary_table.add_row({
+                    'metric': '  CT to $100',
+                    'value': f"{ct_studies_for_100:.1f} studies, {ct_time_for_100_formatted}"
+                })
+        else:
+            self._summary_table.add_row({'metric': '  CT RVU per Minute', 'value': 'N/A (no CT studies)'})
+        
         self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
         
         # Shift-level metrics section
@@ -12412,7 +12573,8 @@ class StatisticsWindow:
         sorted_study_types = sorted(study_type_distribution.items(), 
                                    key=lambda x: x[0])  # Sort by study type name
         
-        for st, stats in sorted_study_types[:10]:  # Top 10 study types
+        # Show ALL study types, not just top 10
+        for st, stats in sorted_study_types:
             projected_count = stats['percentage'] * projected_studies if historical_studies > 0 else 0
             projected_rvu_type = stats['percentage'] * projected_rvu if historical_studies > 0 else 0
             projected_comp_type = stats['percentage'] * projected_compensation if historical_studies > 0 else 0
