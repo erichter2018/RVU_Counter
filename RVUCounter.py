@@ -238,8 +238,8 @@ def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> 
 
 
 # Version information
-VERSION = "1.3"
-VERSION_DATE = "2025-12-05"
+VERSION = "1.4"
+VERSION_DATE = "2025-12-06"
 
 
 # =============================================================================
@@ -7758,17 +7758,17 @@ class SettingsWindow:
             # Validate position before applying
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Settings window position ({x}, {y}) is off-screen, finding nearest monitor")
-                x, y = find_nearest_monitor_for_window(x, y, 450, 690)
-            self.window.geometry(f"450x800+{x}+{y}")
+                x, y = find_nearest_monitor_for_window(x, y, 450, 740)
+            self.window.geometry(f"450x850+{x}+{y}")
         else:
             # Center on primary monitor
             try:
                 primary = get_primary_monitor_bounds()
                 x = primary[0] + (primary[2] - primary[0] - 450) // 2
-                y = primary[1] + (primary[3] - primary[1] - 690) // 2
-                self.window.geometry(f"450x800+{x}+{y}")
+                y = primary[1] + (primary[3] - primary[1] - 740) // 2
+                self.window.geometry(f"450x850+{x}+{y}")
             except:
-                self.window.geometry("450x800")
+                self.window.geometry("450x850")
         
         self.window.transient(parent)
         self.window.grab_set()
