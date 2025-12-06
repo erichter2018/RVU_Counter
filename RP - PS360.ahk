@@ -644,7 +644,7 @@ DateFill:
     
     ; Extract day (1 or 2 digits followed by space or time)
     RegExMatch(PriorDate, "i)([0-9]{1,2})\s+[0-9:]", DayMatch)
-    ExtractedDay := DayMatch1
+    ExtractedDay := DayMatch1 + 0  ; Convert to number to strip leading zero
     
     ; Convert month abbreviations to numbers
     MonthNum := ""
