@@ -160,855 +160,377 @@ Return
 GetPrior:
 SetTitleMatchMode, 2
 
+; Get window info and copy selected text
 MouseGetPos, , , window, control
 WinActivate, %window%
-backup := Clipboard				;copy the clipboard to a temp variable
+ClipboardBackup := Clipboard    ; Backup clipboard
 Clipboard := ""
-Send ^c 					;copy selected text
-ClipWait 0.5, 1
+Send ^c                         ; Copy selected text
+ClipWait, 0.5, 1
+
+; Validate clipboard has content
+if (Clipboard = "")
+{
+    Clipboard := ClipboardBackup  ; Restore clipboard
+    MsgBox, No text selected. Please select a prior study row and try again.
+    Return
+}
 
 PriorOriginal := Clipboard
+
+; Initialize all variables
 PriorDate := ""
-PriorComplete := ""
-PriorDescript1 := ""
 PriorDescript := ""
+PriorDescript1 := ""
 PriorTime := ""
+PriorTimeFormatted := ""
 PriorImages := ""
 PriorReport := ""
 ModalitySearch := ""
 
-PhraseSearch := "i)(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*19[0-9][0-9]"
+; =============================================================================
+; PARSE DATE AND TIME
+; =============================================================================
+
+; Extract date containing month abbreviation and year (supports 1900s and 2000s)
+PhraseSearch := "i)(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*?(19[0-9][0-9]|20[0-9][0-9])"
 FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDate)
 
-PhraseSearch := "i)(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec).*20[0-9][0-9]"
-FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDate)
-
-if InStr(PriorOriginal, " PDT")
+; Extract time with timezone - single unified pattern for all US timezones
+; Covers: EST, EDT, CST, CDT, MST, MDT, PST, PDT, AST, ADT, AKST, AKDT, HST
+TimezonePattern := "i)(\d{1,2}:\d{2}:\d{2}\s+(?:E|C|M|P|AK?|H)[SD]T)"
+if RegExMatch(PriorOriginal, TimezonePattern, PriorTime)
 {
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+PDT)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
+    Gosub, DateFill
 }
 
-if InStr(PriorOriginal, " PST")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+PST)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-
-if InStr(PriorOriginal, " CDT")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+CDT)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-	
-if InStr(PriorOriginal, " CST")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+CST)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-
-if InStr(PriorOriginal, " MDT")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+MDT)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-		
-if InStr(PriorOriginal, " MST")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+MST)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-	
-	Gosub, DateFill
-}
-
-
-if InStr(PriorOriginal, " EDT")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+EDT)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-
-if InStr(PriorOriginal, " EST")
-{
-	PhraseSearch := "i)(\d{1,2}:\d{2}:\d{2}\s+EST)"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorTime)
-
-	Gosub, DateFill
-}
-
+; =============================================================================
+; HANDLE STUDY STATUS FLAGS
+; =============================================================================
 
 StringCaseSense, ON
 
-ModalitySearch := A_Tab . "IN_PROGRESS"
-if InStr(PriorOriginal, ModalitySearch)
+; Handle various status flags - normalize to SIGNXED for processing
+StatusFlags := ["IN_PROGRESS", "NO_HL7_ORDER", "UNKNOWN", "SIGNED"]
+for index, flag in StatusFlags
 {
-	PriorReport := ""
-	SearchText := ModalitySearch
-	ReplaceText := " SIGNXED"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
+    ModalitySearch := A_Tab . flag
+    if InStr(PriorOriginal, ModalitySearch)
+    {
+        if (flag = "NO_HL7_ORDER" or flag = "UNKNOWN")
+            PriorReport := "No Prior Report. "
+        
+        PriorOriginal := StrReplace(PriorOriginal, ModalitySearch, " SIGNXED")
+    }
 }
 
-ModalitySearch := A_Tab . "NO_HL7_ORDER"
-if InStr(PriorOriginal, ModalitySearch)
-{
-	PriorReport := "No Prior Report. "
-	SearchText := ModalitySearch
-	ReplaceText := " SIGNXED"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-}
-
-ModalitySearch := A_Tab . "UNKNOWN"
-if InStr(PriorOriginal, ModalitySearch)
-{
-	PriorReport := "No Prior Report. "
-	SearchText := ModalitySearch
-	ReplaceText := " SIGNXED"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-}
-
-ModalitySearch := A_Tab . "NO_IMAGES"
-if InStr(PriorOriginal, ModalitySearch)
-{
-	PriorImages := "No Prior Images. "
-}
-
-ModalitySearch := A_Tab . "SIGNED"
-if InStr(PriorOriginal, ModalitySearch)
-{
-	SearchText := ModalitySearch
-	ReplaceText := " SIGNXED"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-}
+; Check for NO_IMAGES flag
+if InStr(PriorOriginal, A_Tab . "NO_IMAGES")
+    PriorImages := "No Prior Images. "
 
 StringCaseSense, Off
 
+; =============================================================================
+; MODALITY-SPECIFIC PROCESSING
+; =============================================================================
+
+; --- ULTRASOUND (US) ---
 ModalitySearch := A_Tab . "US"
 if InStr(PriorOriginal, ModalitySearch)
 {
-	SearchText := "U)US.*US"
-	ReplaceText := "US"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)US.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "US" from beginning
-	SearchText := "US"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText,,1)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " abd."
-	ReplaceText := " abdomen."
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-	
-	; Reorder: Insert "Ultrasound" before modifiers if present
-	ModifierFound := false
-	
-	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
-	if InStr(PriorDescript1, " with and without")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with and without)", " Ultrasound$2")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " without")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(without)", " Ultrasound$2")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " with")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with)", " Ultrasound$2")
-		ModifierFound := true
-	}
-	
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " Ultrasound"
-	}
-
-	Goto, ComparisonFill
+    ; Remove duplicate US markers
+    PriorOriginal := RegExReplace(PriorOriginal, "U)US.*US", "US")
+    
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)US.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "US", "", , 1)  ; Remove first "US"
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    ; Expand abbreviations
+    PriorDescript := StrReplace(PriorDescript, " abd.", " abdomen.")
+    
+    PriorDescript := Trim(PriorDescript)
+    StringLower, PriorDescript1, PriorDescript
+    
+    ; Insert "ultrasound" before contrast modifiers or at end
+    if InStr(PriorDescript1, " with and without")
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with and without)", " ultrasound$2")
+    else if InStr(PriorDescript1, " without")
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(without)", " ultrasound$2")
+    else if InStr(PriorDescript1, " with")
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)(\s+)(with)", " ultrasound$2")
+    else
+        PriorDescript1 := PriorDescript1 . " ultrasound"
+    
+    Goto, ComparisonFill
 }
 
+; --- MAGNETIC RESONANCE (MR/MRI) ---
 ModalitySearch := A_Tab . "MR"
 if InStr(PriorOriginal, ModalitySearch)
 {
-	SearchText := "U)MR.*MR"
-	ReplaceText := "MR"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)MR.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "MR" from beginning
-	SearchText := "MR"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText,,1)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " + "
-	ReplaceText := " and "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/O"
-	ReplaceText := " without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/"
-	ReplaceText := " with"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W WO"
-	ReplaceText := " with and without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " WO"
-	ReplaceText := " without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " IV "
-	ReplaceText := " "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-
-	; MR will be uppercased in ComparisonFill section
-	
-	; Reorder: Insert "MR" before study type and contrast modifiers
-	ModifierFound := false
-	
-	; First check for study type modifiers (angiography, venography)
-	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
-	if InStr(PriorDescript1, " angiography")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " MR $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " venography")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(venography)", " MR $1")
-		ModifierFound := true
-	}
-	; Then check for contrast modifiers (with proper spacing)
-	; Note: PriorDescript1 is lowercase after StringLower, so check for lowercase
-	else if InStr(PriorDescript1, " with and without")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " MR $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " without")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " MR $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " with")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " MR $1")
-		ModifierFound := true
-	}
-	
-	; If no modifier found, add MR at the end
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " MR"
-	}
-
-	Goto, ComparisonFill
+    ; Remove duplicate MR markers
+    PriorOriginal := RegExReplace(PriorOriginal, "U)MR.*MR", "MR")
+    
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)MR.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "MR", "", , 1)  ; Remove first "MR"
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    ; Handle MRA/MRV abbreviations (similar to CTA)
+    ; Preserve MRA/MRV before removing MR
+    HasMRA := InStr(PriorDescript, "MRA")
+    HasMRV := InStr(PriorDescript, "MRV")
+    
+    ; Expand abbreviations
+    PriorDescript := StrReplace(PriorDescript, " + ", " and ")
+    PriorDescript := StrReplace(PriorDescript, " W/O", " without")
+    PriorDescript := StrReplace(PriorDescript, " W/", " with")
+    PriorDescript := StrReplace(PriorDescript, " W WO", " with and without")
+    PriorDescript := StrReplace(PriorDescript, " WO", " without")
+    PriorDescript := StrReplace(PriorDescript, " IV ", " ")
+    
+    PriorDescript := Trim(PriorDescript)
+    StringLower, PriorDescript1, PriorDescript
+    
+    ; Reorder: Insert "MR" before study type and contrast modifiers
+    ModifierFound := false
+    
+    ; Handle MRA (angiography) - already in correct form
+    if InStr(PriorDescript1, " mra")
+    {
+        ModifierFound := true
+    }
+    ; Handle MRV (venography) - already in correct form
+    else if InStr(PriorDescript1, " mrv")
+    {
+        ModifierFound := true
+    }
+    ; Check for angiography/venography text
+    else if InStr(PriorDescript1, " angiography")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " MR $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " venography")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(venography)", " MR $1")
+        ModifierFound := true
+    }
+    ; Contrast modifiers
+    else if InStr(PriorDescript1, " with and without")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " MR $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " without")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " MR $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " with")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " MR $1")
+        ModifierFound := true
+    }
+    
+    if (!ModifierFound)
+        PriorDescript1 := PriorDescript1 . " MR"
+    
+    Goto, ComparisonFill
 }
 
+; --- NUCLEAR MEDICINE (NM) ---
 ModalitySearch := A_Tab . "NM"
 if InStr(PriorOriginal, ModalitySearch)
 {
-
-	SearchText := "U)NM.*NM"
-	ReplaceText := "NM"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)NM.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	SearchText := "NM"
-	ReplaceText := "Nuclear Medicine"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringLower PriorDescript1, PriorDescript
-
-	PriorComplete := PriorDate . " " . PriorDescript1 . ". " . PriorReport . PriorImages
-
-	;MsgBox, %PriorDescript1%
-
-	Goto, ComparisonFill
+    ; Remove duplicate NM markers
+    PriorOriginal := RegExReplace(PriorOriginal, "U)NM.*NM", "NM")
+    
+    ; Extract and process description
+    RegExMatch(PriorOriginal, "i)NM.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "NM", "nuclear medicine")
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    PriorDescript := Trim(PriorDescript)
+    StringLower, PriorDescript1, PriorDescript
+    
+    Goto, ComparisonFill
 }
 
+; --- X-RAY / RADIOGRAPH (XR, CR, X-ray) ---
+; Handle XR modality
 ModalitySearch := A_Tab . "XR"
 if InStr(PriorOriginal, ModalitySearch)
 {
-
-	SearchText := "U)CR.*XR"
-	ReplaceText := "XR"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)XR.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "XR" from beginning
-	SearchText := "XR"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText,,1)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-	
-	; Reorder: Insert "Radiograph" before view modifiers if present
-	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
-	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
-	ModifierFound := false
-	
-	; First, check if "Radiograph" is already present but in wrong position
-	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
-	{
-		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
-		ModifierFound := true
-	}
-	; Check for numeric view pattern (e.g., "1 view", "2 view")
-	else if RegExMatch(PriorDescript1, " \d+\s*view")
-	{
-		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " pa and lateral")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " view")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
-		ModifierFound := true
-	}
-	
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " radiograph"
-	}
-
-	Goto, ComparisonFill
+    ; Remove CR->XR duplicate markers
+    PriorOriginal := RegExReplace(PriorOriginal, "U)CR.*XR", "XR")
+    
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)XR.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "XR", "", , 1)
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    Gosub, ProcessRadiograph
+    Goto, ComparisonFill
 }
 
-ModalitySearch := A_Tab . "XR"
-if InStr(PriorOriginal, ModalitySearch)
-{
-
-	SearchText := "U)CR.*RAD"
-	ReplaceText := "XR"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)XR.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "XR" from beginning
-	SearchText := "XR"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText,,1)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " vw"
-	ReplaceText := " view(s)"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " 2v"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " pa lat"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " (kub)"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-
-	SearchText := " Pa and lateral"
-	ReplaceText := " PA and lateral"
-	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
-	
-	; Reorder: Insert "Radiograph" before view modifiers if present
-	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
-	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
-	ModifierFound := false
-	
-	; First, check if "Radiograph" is already present but in wrong position
-	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
-	{
-		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
-		ModifierFound := true
-	}
-	; Check for numeric view pattern (e.g., "1 view", "2 view")
-	else if RegExMatch(PriorDescript1, " \d+\s*view")
-	{
-		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " pa and lateral")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " view")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
-		ModifierFound := true
-	}
-	
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " radiograph"
-	}
-
-	Goto, ComparisonFill
-}
-
+; Handle CR modality
 ModalitySearch := A_Tab . "CR"
 if InStr(PriorOriginal, ModalitySearch)
 {
-
-	PhraseSearch := "i)CR.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "CR" and tab from beginning
-	SearchText := "CR" . A_Tab
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " vw"
-	ReplaceText := " view(s)"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " 2v"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " pa lat"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " (kub)"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-
-	SearchText := " Pa and lateral"
-	ReplaceText := " PA and lateral"
-	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
-	
-	; Reorder: Insert "Radiograph" before view modifiers if present
-	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
-	ModifierFound := false
-	
-	; First, check if "Radiograph" is already present but in wrong position
-	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
-	{
-		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " pa and lateral")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(pa and lateral)", " radiograph$2")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " view")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "(\s+)(view)", " radiograph$2")
-		ModifierFound := true
-	}
-	
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " radiograph"
-	}
-
-	Goto, ComparisonFill
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)CR.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "CR" . A_Tab, "")
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    Gosub, ProcessRadiograph
+    Goto, ComparisonFill
 }
 
+; Handle X-ray modality
 ModalitySearch := A_Tab . "X-ray"
 if InStr(PriorOriginal, ModalitySearch)
 {
-
-	PhraseSearch := "i)X-ray.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Remove "X-ray" variants from beginning
-	SearchText := "X-ray, OT" . A_Tab
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "X-ray" . A_Tab
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "Ch-c"
-	ReplaceText := "C"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " DR "
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " vw"
-	ReplaceText := " view(s)"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " 2v"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " pa lat"
-	ReplaceText := " PA and lateral"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " (kub)"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-
-	SearchText := " Pa and lateral"
-	ReplaceText := " PA and lateral"
-	PriorDescript1 := StrReplace(PriorDescript1, SearchText, ReplaceText)
-	
-	; Reorder: Insert "Radiograph" before view modifiers if present
-	; Handle patterns like "Chest 1 View" -> "Chest Radiograph 1 View"
-	; Also handle "3 Or More Radiograph Views" -> "Radiograph 3 Or More Views"
-	ModifierFound := false
-	
-	; First, check if "Radiograph" is already present but in wrong position
-	; Pattern: "Body Part 3 Or More Radiograph Views" -> "Body Part Radiograph 3 Or More Views"
-	if RegExMatch(PriorDescript1, "i) \d+\s+or\s+more\s+radiograph\s+views?")
-	{
-		; Move Radiograph before the numeric pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, "i) (\d+\s+or\s+more)\s+radiograph\s+(views?)", " radiograph $1 $2")
-		ModifierFound := true
-	}
-	; Check for numeric view pattern (e.g., "1 view", "2 view")
-	else if RegExMatch(PriorDescript1, " \d+\s*view")
-	{
-		; Insert Radiograph before the number+view pattern
-		PriorDescript1 := RegExReplace(PriorDescript1, " (\d+\s*view)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " pa and lateral")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (pa and lateral)", " radiograph $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " view")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, " (view)", " radiograph $1")
-		ModifierFound := true
-	}
-	
-	if (!ModifierFound)
-	{
-		PriorDescript1 := PriorDescript1 . " radiograph"
-	}
-
-	Goto, ComparisonFill
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)X-ray.*SIGNXED", PriorDescript)
+    PriorDescript := StrReplace(PriorDescript, "X-ray, OT" . A_Tab, "")
+    PriorDescript := StrReplace(PriorDescript, "X-ray" . A_Tab, "")
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    ; X-ray specific cleanups
+    PriorDescript := StrReplace(PriorDescript, "Ch-c", "C")
+    PriorDescript := StrReplace(PriorDescript, " DR ", "")
+    
+    Gosub, ProcessRadiograph
+    Goto, ComparisonFill
 }
 
+; --- COMPUTED TOMOGRAPHY (CT) ---
 ModalitySearch := A_Tab . "CT"
 if InStr(PriorOriginal, ModalitySearch)
 {
-	SearchText := "i)Oct"
-	ReplaceText := "OcX"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	SearchText := "U)CT.*CT"
-	ReplaceText := "CT"
-	PriorOriginal := RegExReplace(PriorOriginal, SearchText, ReplaceText)
-
-	PhraseSearch := "i)CT.*SIGNXED"
-	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
-
-	; Handle "CTA - " pattern: remove dash and keep CTA
-	; Pattern like "CTA - Thorax P.E protocol" should become "CTA Thorax P.E protocol"
-	SearchText := "CTA - "
-	ReplaceText := "CTA "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	; Handle "CTA" specially before removing "CT" (to avoid "CTA" becoming "A")
-	; Replace "CTA" with a placeholder that we'll restore later
-	SearchText := "CTA"
-	ReplaceText := "CTAPLACEHOLDER"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	; Remove "CT" from beginning only (check if it starts with "CT" followed by space or end)
-	; Use RegEx to match "CT" at start of string followed by space or end
-	PriorDescript := RegExReplace(PriorDescript, "i)^CT(\s|$)", "$1")
-
-	; Restore CTA
-	SearchText := "CTAPLACEHOLDER"
-	ReplaceText := "CTA"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " SIGNXED"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, Off
-
-	SearchText := " + "
-	ReplaceText := " and "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "+"
-	ReplaceText := " and "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " imags"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "Head Or Brain"
-	ReplaceText := "brain"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/CONTRST INCL W/O"
-	ReplaceText := " with and without contrast"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/O"
-	ReplaceText := " without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/ "
-	ReplaceText := " with "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W "
-	ReplaceText := " with "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W/"
-	ReplaceText := " with "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " W WO"
-	ReplaceText := " with and without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " WO"
-	ReplaceText := " without"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " IV "
-	ReplaceText := " "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "ab pe"
-	ReplaceText := "abdomen and pelvis"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "abd/pelvis"
-	ReplaceText := "abdomen and pelvis"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := " abd pel "
-	ReplaceText := " abdomen and pelvis "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "abdomen/pelvis"
-	ReplaceText := "abdomen and pelvis"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	SearchText := "chest/abdomen/pelvis"
-	ReplaceText := "chest, abdomen, and pelvis"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	; Convert "Thorax" to "chest"
-	SearchText := "Thorax"
-	ReplaceText := "chest"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	; Handle "P.E" -> "PE" (remove periods from abbreviations)
-	SearchText := "P.E"
-	ReplaceText := "PE"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-
-	StringCaseSense, ON
-	
-	; Trim whitespace
-	PriorDescript := Trim(PriorDescript)
-
-	StringLower PriorDescript1, PriorDescript
-
-	; CT will be uppercased in ComparisonFill section
-	
-	; Reorder: Insert "CT" before study type and contrast modifiers
-	; Desired order: Body Part + CT/CTA + Study Type (angiography) + Contrast Modifier
-	; Handle "CTA" and "Angiography" as study types that come after body part
-	
-	ModifierFound := false
-	HasCTA := false
-	CTAMovedFromStart := false
-	
-	; First check if CTA is at the start - move it after the body part
-	; Pattern: "cta chest pe protocol" -> "chest cta pe protocol"
-	if RegExMatch(PriorDescript1, "i)^cta\s+")
-	{
-		; Remove CTA from start and we'll add it after body part
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)^cta\s+", "")
-		HasCTA := true
-		CTAMovedFromStart := true
-		ModifierFound := true
-	}
-	; Check for "CTA" in the middle - it's already positioned correctly
-	else if InStr(PriorDescript1, " cta")
-	{
-		; CTA is already present in correct position, don't add "CT" at the end
-		HasCTA := true
-		ModifierFound := true
-	}
-	; Check for "Angiography" - it should come after CT
-	else if InStr(PriorDescript1, " angiography")
-	{
-		; Insert CT before "Angiography" - use word boundary to ensure proper matching
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " CT $1")
-		ModifierFound := true
-	}
-	; Then check for contrast modifiers (with proper spacing)
-	else if InStr(PriorDescript1, " with and without")
-	{
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " CT $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " without")
-	{
-		; Use \s+ to match one or more spaces before "without" to handle any spacing
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " CT $1")
-		ModifierFound := true
-	}
-	else if InStr(PriorDescript1, " with")
-	{
-		; Use \s+ to match one or more spaces before "with" to handle any spacing
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " CT $1")
-		ModifierFound := true
-	}
-	
-	; If CTA was at the start, insert it after the first word (body part)
-	if (CTAMovedFromStart)
-	{
-		; Insert CTA after the first word (body part like "chest", "abdomen", etc.)
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)^(\w+)\s+", "$1 CTA ")
-	}
-	
-	; If no modifier found and no CTA, add CT at the end
-	if (!ModifierFound && !HasCTA)
-	{
-		PriorDescript1 := PriorDescript1 . " CT"
-	}
-
-	Goto, ComparisonFill
-
+    ; Protect "October" from CT removal
+    PriorOriginal := RegExReplace(PriorOriginal, "i)Oct", "OcX")
+    
+    ; Remove duplicate CT markers
+    PriorOriginal := RegExReplace(PriorOriginal, "U)CT.*CT", "CT")
+    
+    ; Extract description
+    RegExMatch(PriorOriginal, "i)CT.*SIGNXED", PriorDescript)
+    
+    ; Handle "CTA - " pattern (remove dash)
+    PriorDescript := StrReplace(PriorDescript, "CTA - ", "CTA ")
+    
+    ; Protect CTA before removing CT
+    PriorDescript := StrReplace(PriorDescript, "CTA", "CTAPLACEHOLDER")
+    
+    ; Remove CT from beginning only
+    PriorDescript := RegExReplace(PriorDescript, "i)^CT(\s|$)", "$1")
+    
+    ; Restore CTA
+    PriorDescript := StrReplace(PriorDescript, "CTAPLACEHOLDER", "CTA")
+    
+    PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
+    
+    ; Expand abbreviations
+    PriorDescript := StrReplace(PriorDescript, " + ", " and ")
+    PriorDescript := StrReplace(PriorDescript, "+", " and ")
+    PriorDescript := StrReplace(PriorDescript, " imags", "")
+    PriorDescript := StrReplace(PriorDescript, "Head Or Brain", "brain")
+    PriorDescript := StrReplace(PriorDescript, " W/CONTRST INCL W/O", " with and without contrast")
+    PriorDescript := StrReplace(PriorDescript, " W/O", " without")
+    PriorDescript := StrReplace(PriorDescript, " W/ ", " with ")
+    PriorDescript := StrReplace(PriorDescript, " W/", " with ")
+    ; Handle " W " carefully - must be surrounded by spaces to avoid matching words containing W
+    PriorDescript := RegExReplace(PriorDescript, "i)\s+W\s+", " with ")
+    PriorDescript := StrReplace(PriorDescript, " W WO", " with and without")
+    PriorDescript := StrReplace(PriorDescript, " WO", " without")
+    PriorDescript := StrReplace(PriorDescript, " IV ", " ")
+    
+    ; Body part abbreviations
+    PriorDescript := StrReplace(PriorDescript, "ab pe", "abdomen and pelvis")
+    PriorDescript := StrReplace(PriorDescript, "abd/pelvis", "abdomen and pelvis")
+    PriorDescript := StrReplace(PriorDescript, " abd pel ", " abdomen and pelvis ")
+    PriorDescript := StrReplace(PriorDescript, "abdomen/pelvis", "abdomen and pelvis")
+    PriorDescript := StrReplace(PriorDescript, "chest/abdomen/pelvis", "chest, abdomen, and pelvis")
+    PriorDescript := StrReplace(PriorDescript, "Thorax", "chest")
+    PriorDescript := StrReplace(PriorDescript, "thorax", "chest")
+    
+    ; Clean up protocol notation
+    PriorDescript := StrReplace(PriorDescript, "P.E", "PE")
+    PriorDescript := StrReplace(PriorDescript, "p.e", "PE")
+    PriorDescript := RegExReplace(PriorDescript, "i)\s+protocol\s*$", "")  ; Remove trailing "protocol"
+    
+    PriorDescript := Trim(PriorDescript)
+    StringLower, PriorDescript1, PriorDescript
+    
+    ; Reorder: Position CT/CTA correctly
+    ModifierFound := false
+    HasCTA := false
+    CTAMovedFromStart := false
+    
+    ; Check if CTA is at the start - move it after the body part
+    if RegExMatch(PriorDescript1, "i)^cta\s+")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)^cta\s+", "")
+        HasCTA := true
+        CTAMovedFromStart := true
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " cta")
+    {
+        ; CTA is already in correct position
+        HasCTA := true
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " angiography")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(angiography)", " CT $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " with and without")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with and without)", " CT $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " without")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " CT $1")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " with")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(with)", " CT $1")
+        ModifierFound := true
+    }
+    
+    ; If CTA was at the start, insert it after the first word
+    if (CTAMovedFromStart)
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)^(\w+)\s+", "$1 CTA ")
+    
+    ; If no modifier found and no CTA, add CT at the end
+    if (!ModifierFound && !HasCTA)
+        PriorDescript1 := PriorDescript1 . " CT"
+    
+    Goto, ComparisonFill
 }
 
+; =============================================================================
+; FINAL OUTPUT - ComparisonFill
+; =============================================================================
+
 ComparisonFill:
-; Uppercase modality indicators (CT, CTA, MR, MRI, US, XR, CR) when they appear as whole words
-; This must happen after all StringLower operations
+; Uppercase modality indicators when they appear as whole words
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcta\b", "CTA")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bct\b", "CT")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmr\b", "MR")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmra\b", "MRA")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmrv\b", "MRV")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmri\b", "MRI")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bus\b", "US")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bxr\b", "XR")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcr\b", "CR")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmr\b", "MR")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bpa\b", "PA")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bpe\b", "PE")
+
 ; Check if prior study was within the last 2 days - if so, include time
 IncludeTime := false
 if (PriorDate != "" and PriorTimeFormatted != "")
@@ -1019,123 +541,134 @@ if (PriorDate != "" and PriorTimeFormatted != "")
     PriorDay := DateParts2
     PriorYear := DateParts3
     
-    ; Build prior date as YYYYMMDD timestamp for comparison
     if (PriorMonth and PriorDay and PriorYear)
     {
-        ; Ensure components are treated as numbers and padded correctly
-        PriorMonth += 0  ; Convert to pure number
-        PriorDay += 0    ; Convert to pure number
+        PriorMonth += 0
+        PriorDay += 0
         
         ; Build YYYYMMDD with proper padding
         PriorDateStamp := PriorYear
-        PriorDateStamp .= SubStr("0" . PriorMonth, -1)  ; Last 2 chars of "0" + month
-        PriorDateStamp .= SubStr("0" . PriorDay, -1)    ; Last 2 chars of "0" + day
+        PriorDateStamp .= SubStr("0" . PriorMonth, -1)
+        PriorDateStamp .= SubStr("0" . PriorDay, -1)
         
-        ; Get current date as YYYYMMDD
         FormatTime, CurrentDateStamp, , yyyyMMdd
         
-        ; Calculate difference using EnvSub with proper format
         DaysDiff := CurrentDateStamp
         EnvSub, DaysDiff, %PriorDateStamp%, Days
         
-        ; If within last 2 days (0, 1, or 2), include time
         if (DaysDiff >= 0 and DaysDiff <= 2)
-        {
             IncludeTime := true
-        }
     }
 }
 
-; Build the final comparison text with time if within 36 hours (single space after COMPARISON:)
+; Build the final comparison text
 if (IncludeTime)
-{
     FinalText := " COMPARISON: " . PriorDate . " " . PriorTimeFormatted . " " . PriorDescript1 . ". " . PriorReport . PriorImages
-}
 else
-{
     FinalText := " COMPARISON: " . PriorDate . " " . PriorDescript1 . ". " . PriorReport . PriorImages
-}
 
-; Activate PowerScribe 360 window
-SetTitleMatchMode, 2  ; Partial match
+; Activate PowerScribe 360 window and paste
+SetTitleMatchMode, 2
 WinActivate, PowerScribe 360
-
-; Wait for window to be active
 WinWaitActive, PowerScribe 360, , 1
 
-; Get window ID and ensure focus
 pswinID := WinExist("PowerScribe 360")
 if (pswinID)
 {
-	WinActivate, ahk_id %pswinID%
-	WinWaitActive, ahk_id %pswinID%, , 1
- 
-	; Paste the comparison text
-	Clipboard := FinalText
-	
-	Send ^v						;Send Paste
-	Sleep, 100					;Pause
+    WinActivate, ahk_id %pswinID%
+    WinWaitActive, ahk_id %pswinID%, , 1
+    
+    Clipboard := FinalText
+    Send ^v
+    Sleep, 100
 }
 else
 {
-	MsgBox, PowerScribe 360 window not found!
+    MsgBox, PowerScribe 360 window not found!
 }
+
+; Restore original clipboard
+Clipboard := ClipboardBackup
 Return
 
+; =============================================================================
+; SUBROUTINES
+; =============================================================================
+
+; --- Process Radiograph Descriptions ---
+ProcessRadiograph:
+    ; Expand abbreviations
+    PriorDescript := StrReplace(PriorDescript, " vw", " view(s)")
+    PriorDescript := StrReplace(PriorDescript, " 2v", " PA and lateral")
+    PriorDescript := StrReplace(PriorDescript, " pa lat", " PA and lateral")
+    PriorDescript := StrReplace(PriorDescript, " (kub)", "")
+    
+    PriorDescript := Trim(PriorDescript)
+    StringLower, PriorDescript1, PriorDescript
+    
+    ; Insert "radiograph" before view modifiers
+    ModifierFound := false
+    
+    ; Handle "3 or more radiograph views" -> "radiograph 3 or more views"
+    if RegExMatch(PriorDescript1, "i)\d+\s+or\s+more\s+radiograph\s+views?")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "i)(\d+\s+or\s+more)\s+radiograph\s+(views?)", "radiograph $1 $2")
+        ModifierFound := true
+    }
+    ; Handle numeric view patterns "1 view", "2 view", etc.
+    else if RegExMatch(PriorDescript1, "\s\d+\s*view")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "(\s)(\d+\s*view)", "$1radiograph $2")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " pa and lateral")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "(\s)(pa and lateral)", "$1radiograph $2")
+        ModifierFound := true
+    }
+    else if InStr(PriorDescript1, " view")
+    {
+        PriorDescript1 := RegExReplace(PriorDescript1, "(\s)(view)", "$1radiograph $2")
+        ModifierFound := true
+    }
+    
+    if (!ModifierFound)
+        PriorDescript1 := PriorDescript1 . " radiograph"
+Return
+
+; --- Parse Date and Time ---
 DateFill:
-; Parse the full date string to extract month, day, year, and time
-; Expected format: "Dec 03 00:29:00 EST 2025" or similar
-; PriorDate contains the full matched string, PriorTime contains just the time portion
-
-; Extract year from PriorDate
-RegExMatch(PriorDate, "i)(19[0-9][0-9]|20[0-9][0-9])", YearMatch)
-ExtractedYear := YearMatch1
-
-; Extract day (1 or 2 digits followed by space or time)
-RegExMatch(PriorDate, "i)([0-9]{1,2})\s+[0-9:]", DayMatch)
-ExtractedDay := DayMatch1
-
-; Convert month abbreviations to numbers
-MonthNum := ""
-if InStr(PriorDate, "Jan")
-    MonthNum := "1"
-else if InStr(PriorDate, "Feb")
-    MonthNum := "2"
-else if InStr(PriorDate, "Mar")
-    MonthNum := "3"
-else if InStr(PriorDate, "Apr")
-    MonthNum := "4"
-else if InStr(PriorDate, "May")
-    MonthNum := "5"
-else if InStr(PriorDate, "Jun")
-    MonthNum := "6"
-else if InStr(PriorDate, "Jul")
-    MonthNum := "7"
-else if InStr(PriorDate, "Aug")
-    MonthNum := "8"
-else if InStr(PriorDate, "Sep")
-    MonthNum := "9"
-else if InStr(PriorDate, "Oct")
-    MonthNum := "10"
-else if InStr(PriorDate, "Nov")
-    MonthNum := "11"
-else if InStr(PriorDate, "Dec")
-    MonthNum := "12"
-
-; Build formatted date as M/D/YYYY
-PriorDate := MonthNum . "/" . ExtractedDay . "/" . ExtractedYear
-
-; Format time with timezone (e.g., "14:30 EST")
-if (PriorTime != "")
-{
-    ; PriorTime contains something like "00:29:00 EST"
-    ; Keep the time and timezone, just remove seconds
-    PriorTimeFormatted := PriorTime
-    ; Remove seconds (e.g., "00:29:00 EST" -> "00:29 EST")
-    PriorTimeFormatted := RegExReplace(PriorTimeFormatted, "i)(\d{1,2}:\d{2}):\d{2}", "$1")
-}
-else
-{
-    PriorTimeFormatted := ""
-}
+    ; Extract year from PriorDate
+    RegExMatch(PriorDate, "i)(19[0-9][0-9]|20[0-9][0-9])", YearMatch)
+    ExtractedYear := YearMatch1
+    
+    ; Extract day (1 or 2 digits followed by space or time)
+    RegExMatch(PriorDate, "i)([0-9]{1,2})\s+[0-9:]", DayMatch)
+    ExtractedDay := DayMatch1
+    
+    ; Convert month abbreviations to numbers
+    MonthNum := ""
+    MonthNames := "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec"
+    Loop, Parse, MonthNames, `,
+    {
+        if InStr(PriorDate, A_LoopField)
+        {
+            MonthNum := A_Index
+            break
+        }
+    }
+    
+    ; Build formatted date as M/D/YYYY
+    if (MonthNum != "" and ExtractedDay != "" and ExtractedYear != "")
+        PriorDate := MonthNum . "/" . ExtractedDay . "/" . ExtractedYear
+    
+    ; Format time (remove seconds, keep timezone)
+    if (PriorTime != "")
+    {
+        PriorTimeFormatted := RegExReplace(PriorTime, "i)(\d{1,2}:\d{2}):\d{2}", "$1")
+    }
+    else
+    {
+        PriorTimeFormatted := ""
+    }
 Return
