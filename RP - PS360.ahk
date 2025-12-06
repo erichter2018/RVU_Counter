@@ -817,10 +817,26 @@ if InStr(PriorOriginal, ModalitySearch)
 	PhraseSearch := "i)CT.*SIGNXED"
 	FoundPos := RegExMatch(PriorOriginal, PhraseSearch, PriorDescript)
 
-	; Remove "CT" from beginning
-	SearchText := "CT"
-	ReplaceText := ""
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText,,1)
+	; Handle "CTA - " pattern: remove dash and keep CTA
+	; Pattern like "CTA - Thorax P.E protocol" should become "CTA Thorax P.E protocol"
+	SearchText := "CTA - "
+	ReplaceText := "CTA "
+	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
+
+	; Handle "CTA" specially before removing "CT" (to avoid "CTA" becoming "A")
+	; Replace "CTA" with a placeholder that we'll restore later
+	SearchText := "CTA"
+	ReplaceText := "CTAPLACEHOLDER"
+	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
+
+	; Remove "CT" from beginning only (check if it starts with "CT" followed by space or end)
+	; Use RegEx to match "CT" at start of string followed by space or end
+	PriorDescript := RegExReplace(PriorDescript, "i)^CT(\s|$)", "$1")
+
+	; Restore CTA
+	SearchText := "CTAPLACEHOLDER"
+	ReplaceText := "CTA"
+	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
 
 	SearchText := " SIGNXED"
 	ReplaceText := ""
@@ -895,24 +911,15 @@ if InStr(PriorOriginal, ModalitySearch)
 	SearchText := "chest/abdomen/pelvis"
 	ReplaceText := "chest, abdomen, and pelvis"
 	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-	
-	; Handle body part conversions
+
+	; Convert "Thorax" to "chest"
 	SearchText := "Thorax"
-	ReplaceText := "Chest"
+	ReplaceText := "chest"
 	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-	
-	; Handle abbreviations and protocol names
-	SearchText := " P.E "
-	ReplaceText := " PE "
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-	
-	SearchText := " P.E"
-	ReplaceText := " PE"
-	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
-	
-	; Remove " - " separators (common in study descriptions)
-	SearchText := " - "
-	ReplaceText := " "
+
+	; Handle "P.E" -> "PE" (remove periods from abbreviations)
+	SearchText := "P.E"
+	ReplaceText := "PE"
 	PriorDescript := StrReplace(PriorDescript, SearchText, ReplaceText)
 
 	StringCaseSense, ON
@@ -925,23 +932,28 @@ if InStr(PriorOriginal, ModalitySearch)
 	; CT will be uppercased in ComparisonFill section
 	
 	; Reorder: Insert "CT" before study type and contrast modifiers
-	; Desired order: Body Part + CT + Study Type (angiography, CTA) + Contrast Modifier
-	; Handle "Angiography" and "CTA" as study types that come after CT
+	; Desired order: Body Part + CT/CTA + Study Type (angiography) + Contrast Modifier
+	; Handle "CTA" and "Angiography" as study types that come after body part
 	
 	ModifierFound := false
+	HasCTA := false
+	CTAMovedFromStart := false
 	
-	; First check for "CTA" - it's already a complete study type, don't add "CT"
-	; But we need to reorder: "cta body part protocol" -> "body part cta protocol"
+	; First check if CTA is at the start - move it after the body part
+	; Pattern: "cta chest pe protocol" -> "chest cta pe protocol"
 	if RegExMatch(PriorDescript1, "i)^cta\s+")
 	{
-		; Pattern starts with "cta" - reorder to put body part first
-		; "cta chest pe protocol" -> "chest cta pe protocol"
-		PriorDescript1 := RegExReplace(PriorDescript1, "i)^cta\s+(\w+)\s+(.+)", "$1 cta $2")
+		; Remove CTA from start and we'll add it after body part
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)^cta\s+", "")
+		HasCTA := true
+		CTAMovedFromStart := true
 		ModifierFound := true
 	}
+	; Check for "CTA" in the middle - it's already positioned correctly
 	else if InStr(PriorDescript1, " cta")
 	{
-		; CTA appears in the middle or end - it's already in the right place
+		; CTA is already present in correct position, don't add "CT" at the end
+		HasCTA := true
 		ModifierFound := true
 	}
 	; Check for "Angiography" - it should come after CT
@@ -970,8 +982,15 @@ if InStr(PriorOriginal, ModalitySearch)
 		ModifierFound := true
 	}
 	
-	; If no modifier found, add CT at the end
-	if (!ModifierFound)
+	; If CTA was at the start, insert it after the first word (body part)
+	if (CTAMovedFromStart)
+	{
+		; Insert CTA after the first word (body part like "chest", "abdomen", etc.)
+		PriorDescript1 := RegExReplace(PriorDescript1, "i)^(\w+)\s+", "$1 CTA ")
+	}
+	
+	; If no modifier found and no CTA, add CT at the end
+	if (!ModifierFound && !HasCTA)
 	{
 		PriorDescript1 := PriorDescript1 . " CT"
 	}
@@ -981,7 +1000,7 @@ if InStr(PriorOriginal, ModalitySearch)
 }
 
 ComparisonFill:
-; Uppercase modality indicators (CT, MR, MRI, US, XR, CR, CTA) when they appear as whole words
+; Uppercase modality indicators (CT, CTA, MR, MRI, US, XR, CR) when they appear as whole words
 ; This must happen after all StringLower operations
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcta\b", "CTA")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bct\b", "CT")
@@ -990,15 +1009,6 @@ PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmri\b", "MRI")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bus\b", "US")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bxr\b", "XR")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcr\b", "CR")
-; Capitalize common body parts (at start of string or after space)
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)chest\b", "$1Chest")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)abdomen\b", "$1Abdomen")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)pelvis\b", "$1Pelvis")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)head\b", "$1Head")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)brain\b", "$1Brain")
-PriorDescript1 := RegExReplace(PriorDescript1, "i)(^|\s)neck\b", "$1Neck")
-; Capitalize PE (pulmonary embolism) when it appears as a protocol
-PriorDescript1 := RegExReplace(PriorDescript1, "i)\bpe\b", "PE")
 ; Check if prior study was within the last 2 days - if so, include time
 IncludeTime := false
 if (PriorDate != "" and PriorTimeFormatted != "")
