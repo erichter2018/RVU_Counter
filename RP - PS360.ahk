@@ -951,6 +951,10 @@ PriorDescript1 := RegExReplace(PriorDescript1, "i)\bmri\b", "MRI")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bus\b", "US")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bxr\b", "XR")
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\bcr\b", "CR")
+; Remove "CT" from comparison text (as a whole word)
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\bCT\b", "")
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+", " ")  ; Replace multiple spaces with single space
+PriorDescript1 := Trim(PriorDescript1)  ; Clean up any extra spaces
 ; Check if prior study was within the last 2 days - if so, include time
 IncludeTime := false
 if (PriorDate != "" and PriorTimeFormatted != "")
