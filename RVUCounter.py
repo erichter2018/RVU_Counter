@@ -3178,7 +3178,11 @@ class StudyTracker:
         return completed
     
     def should_ignore(self, accession: str, ignore_duplicates: bool, data_manager=None) -> bool:
-        """Check if study should be ignored (only if already completed, not if currently active).
+        """Check if study should be ignored for TRACKING purposes.
+        
+        IMPORTANT: This now only blocks studies that were part of multi-accession groups.
+        Single studies are ALWAYS tracked (even if already recorded) to allow duration updates.
+        The _record_or_update_study function handles updating duration if higher.
         
         Checks both memory (seen_accessions) and database (current shift records) for duplicates.
         Also checks if accession was part of a previously recorded multi-accession study.
@@ -3194,15 +3198,35 @@ class StudyTracker:
         if not ignore_duplicates:
             return False
         
+        # CHANGED: We no longer block tracking for single studies that were already recorded
+        # This allows us to track duration and update it if the user spends more time
+        # The _record_or_update_study function will update duration if higher
+        
+        # ONLY block if this accession was part of a multi-accession study
+        # Multi-accession studies should not be re-tracked individually
+        if data_manager:
+            if self._was_part_of_multi_accession(accession, data_manager):
+                logger.debug(f"Ignoring accession {accession} - it was already recorded as part of a multi-accession study")
+                return True
+        
+        return False
+    
+    def is_already_recorded(self, accession: str, data_manager=None) -> bool:
+        """Check if study has already been recorded (for display purposes only).
+        
+        This is separate from should_ignore - a study can be already recorded but still
+        tracked for duration updates.
+        """
+        if not accession:
+            return False
+        
         # Check in-memory cache first (faster)
         if accession in self.seen_accessions:
-            logger.debug(f"Ignoring duplicate completed accession (in memory): {accession}")
             return True
         
         # Check database for duplicates in current shift
         if data_manager:
             try:
-                # Check if this exact accession exists in the current shift's database records
                 if hasattr(data_manager, 'db') and data_manager.db:
                     current_shift = data_manager.db.get_current_shift()
                     if current_shift:
@@ -3210,16 +3234,14 @@ class StudyTracker:
                             current_shift['id'], accession
                         )
                         if db_record:
-                            logger.info(f"Ignoring duplicate accession (found in database): {accession}")
                             # Add to memory cache so we don't need to query DB again
                             self.seen_accessions.add(accession)
                             return True
             except Exception as e:
                 logger.debug(f"Error checking database for duplicate: {e}")
             
-            # Also check if this accession was part of a multi-accession study that was already recorded
+            # Also check if this accession was part of a multi-accession study
             if self._was_part_of_multi_accession(accession, data_manager):
-                logger.debug(f"Ignoring accession {accession} - it was already recorded as part of a multi-accession study")
                 return True
         
         return False
