@@ -22,18 +22,13 @@
     "show_time": true,
     "stay_on_top": true,
     "efficiency_heatmap_mode": "duration",
-    "show_pace_car": true
+    "show_pace_car": true,
+    "pace_goal_rvu_per_hour": 15.0,
+    "pace_goal_shift_hours": 9.0,
+    "pace_goal_total_rvu": 135.0,
+    "pace_comparison_mode": "prior"
   },
-  "direct_lookups": {
-    "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
-    "CT BRAIN PERFUSION CTA HEAD NECK WITH IV CONTRAST": 4.5,
-    "CT BRAIN PERFUSION CTA HEAD NECK WITHOUT THEN WITH IV CONTRAST": 4.5,
-    "CT EXAM UNLISTED": 1.0,
-    "CT INTERNAL AUDITORY CANAL WITHOUT IV CONTRAST": 1.0,
-    "CT MAXILLOFACIAL WITHOUT IV CONTRAST": 1.0,
-    "CT ORBITS WITH IV CONTRAST": 1.0,
-    "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)": 0.6
-  },
+  "direct_lookups": {},
   "rvu_table": {
     "MRI Brain": 2.3,
     "MRI Other": 1.75,
@@ -46,10 +41,8 @@
     "Ultrasound transvaginal complete": 1.38,
     "US Arterial Lower Extremity": 1.2,
     "US Other": 0.68,
-    "XR Other": 0.3,
-    "XR Chest": 0.3,
+    "XR": 0.3,
     "CT Brain": 0.9,
-    "CT Chest": 1.0,
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
@@ -57,380 +50,12 @@
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
     "CT Brain and Cervical": 1.9,
-    "CT Spine": 1.0,
     "CT TL Spine": 2.0,
     "CT Face": 1.0,
     "XR Abdomen": 0.3,
     "XR MSK": 0.3
   },
-  "classification_rules": {
-    "CT AP": [
-      {
-        "required_keywords": [
-          "CT",
-          "abd",
-          "pel"
-        ],
-        "excluded_keywords": [
-          "chest"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "stone"
-        ]
-      }
-    ],
-    "CT Brain": [
-      {
-        "required_keywords": [
-          "CT",
-          "brain"
-        ],
-        "excluded_keywords": [
-          "CTA",
-          "neck"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head"
-        ],
-        "excluded_keywords": [
-          "CTA",
-          "neck",
-          "angiography",
-          "angio",
-          "perf"
-        ]
-      }
-    ],
-    "MRI Brain": [
-      {
-        "required_keywords": [
-          "MRI",
-          "brain"
-        ]
-      },
-      {
-        "required_keywords": [
-          "MRI",
-          "head"
-        ]
-      }
-    ],
-    "CT CAP": [
-      {
-        "required_keywords": [
-          "CT",
-          "abd",
-          "pel",
-          "ch"
-        ]
-      }
-    ],
-    "CTA Brain": [
-      {
-        "required_keywords": [
-          "CTA",
-          "brain"
-        ],
-        "excluded_keywords": [
-          "neck"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CTA",
-          "head"
-        ],
-        "excluded_keywords": [
-          "neck"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head",
-          "angiography"
-        ],
-        "excluded_keywords": [
-          "neck"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head",
-          "angio"
-        ],
-        "excluded_keywords": [
-          "neck"
-        ]
-      }
-    ],
-    "CTA Neck": [
-      {
-        "required_keywords": [
-          "CT",
-          "neck",
-          "angiography"
-        ],
-        "excluded_keywords": [
-          "head",
-          "brain"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CTA",
-          "neck"
-        ],
-        "excluded_keywords": [
-          "head",
-          "brain"
-        ]
-      }
-    ],
-    "CT Neck": [
-      {
-        "required_keywords": [
-          "CT",
-          "neck"
-        ],
-        "excluded_keywords": [
-          "head",
-          "brain",
-          "angiography",
-          "angio",
-          "CTA"
-        ]
-      }
-    ],
-    "CTA Brain and Neck": [
-      {
-        "required_keywords": [
-          "CTA",
-          "brain",
-          "neck"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head",
-          "neck",
-          "angiography"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head",
-          "neck",
-          "angio"
-        ]
-      }
-    ],
-    "CT TL Spine": [
-      {
-        "required_keywords": [
-          "CT",
-          "thor",
-          "lumb"
-        ]
-      }
-    ],
-    "CT Face": [
-      {
-        "required_keywords": [
-          "CT"
-        ],
-        "any_of_keywords": [
-          "facial",
-          "face",
-          "orbit",
-          "maxil",
-          "sinus"
-        ]
-      }
-    ],
-    "XR Abdomen": [
-      {
-        "required_keywords": [
-          "XR",
-          "abd"
-        ]
-      }
-    ],
-    "XR MSK": [
-      {
-        "required_keywords": [
-          "XR"
-        ],
-        "any_of_keywords": [
-          "knee",
-          "wrist",
-          "hand",
-          "thumb",
-          "index finger",
-          "middle finger",
-          "ring finger",
-          "small finger",
-          "fingers",
-          "pelvis",
-          "hip",
-          "hips",
-          "si joints",
-          "ankle",
-          "foot",
-          "humerus",
-          "forearm",
-          "tibia-fibula",
-          "tibia/fibula",
-          "tib/fib",
-          "tibia",
-          "fibula",
-          "elbow",
-          "shoulder",
-          "cervical spine",
-          "c-spine",
-          "thoracic spine",
-          "t-spine",
-          "lumbar spine",
-          "l-spine",
-          "lumbosacral spine",
-          "ls-spine",
-          "spine",
-          "scoliosis",
-          "leg length",
-          "lower extremity leg length",
-          "bone survey",
-          "ribs",
-          "rib",
-          "clavicle",
-          "scapula",
-          "calcaneus",
-          "femur",
-          "skull",
-          "mandible",
-          "facial bones",
-          "nasal bones",
-          "orbits",
-          "tmj",
-          "sternum",
-          "sacrum",
-          "coccyx",
-          "sacrum and coccyx"
-        ]
-      }
-    ],
-    "CT Chest": [
-      {
-        "required_keywords": [
-          "CT",
-          "Chest"
-        ],
-        "excluded_keywords": [
-          "neck",
-          "abd",
-          "pel"
-        ]
-      }
-    ],
-    "CT Spine": [
-      {
-        "required_keywords": [
-          "CT",
-          "Spine"
-        ],
-        "excluded_keywords": [
-          "thor",
-          "lumb"
-        ]
-      }
-    ],
-    "XR Chest": [
-      {
-        "required_keywords": [
-          "XR",
-          "Chest"
-        ]
-      }
-    ],
-    "CTA Runoff with Abdo/Pelvis": [
-      {
-        "required_keywords": [
-          "ct",
-          "abd",
-          "ang",
-          "runoff"
-        ]
-      }
-    ],
-    "US Arterial Lower Extremity": [
-      {
-        "required_keywords": [
-          "US",
-          "art",
-          "low",
-          "ext"
-        ]
-      }
-    ],
-    "CT Other": [
-      {
-        "required_keywords": [
-          "CT"
-        ]
-      }
-    ],
-    "MRI Other": [
-      {
-        "required_keywords": [
-          "MRI"
-        ]
-      },
-      {
-        "required_keywords": [
-          "MR "
-        ]
-      }
-    ],
-    "NM Other": [
-      {
-        "required_keywords": [
-          "NM"
-        ]
-      },
-      {
-        "required_keywords": [
-          "nuclear"
-        ]
-      }
-    ],
-    "US Other": [
-      {
-        "required_keywords": [
-          "US"
-        ]
-      },
-      {
-        "required_keywords": [
-          "ultrasound"
-        ]
-      }
-    ],
-    "XR Other": [
-      {
-        "required_keywords": [
-          "XR"
-        ]
-      }
-    ]
-  },
+  "classification_rules": {},
   "compensation_rates": {
     "weekday": {
       "assoc": {
@@ -549,12 +174,27 @@
       "height": 496
     },
     "settings": {
-      "x": 5244,
-      "y": -72
+      "x": 5254,
+      "y": -310
     },
     "statistics": {
       "x": 5095,
       "y": -278
+    },
+    "backup_history": {
+      "x": 5762,
+      "y": 2
     }
+  },
+  "backup": {
+    "cloud_backup_enabled": true,
+    "backup_schedule": "shift_end",
+    "backup_retention_count": 10,
+    "last_backup_time": "2025-12-07T19:20:15.237015",
+    "last_backup_status": "success",
+    "last_backup_error": null,
+    "onedrive_path": "C:\\Users\\erik.richter\\OneDrive - Radiology Partners Inc",
+    "setup_prompt_dismissed": true,
+    "first_backup_prompt_shown": true
   }
 }

@@ -17,6 +17,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
+import time
 import re
 
 # Try to import tkcalendar for date picker
@@ -2267,15 +2268,17 @@ class BackupManager:
         "onedrive_path": None,  # Auto-detected or manually set
     }
     
-    def __init__(self, db_path: str, settings: dict):
+    def __init__(self, db_path: str, settings: dict, data_manager=None):
         """Initialize BackupManager.
         
         Args:
             db_path: Path to the SQLite database file
             settings: App settings dictionary (will be modified to add backup settings)
+            data_manager: Optional reference to RVUData for closing/reconnecting database during restore
         """
         self.db_path = db_path
         self.settings = settings
+        self.data_manager = data_manager
         self.backup_in_progress = False
         self._last_check_time = 0
         self._onedrive_path_cache = None
@@ -2682,7 +2685,20 @@ class BackupManager:
             # Continue with restore anyway
         
         # Perform restore
+        temp_restore = None
+        db_closed = False
         try:
+            # Close database connection if available (needed to replace the file)
+            if self.data_manager and hasattr(self.data_manager, 'db') and self.data_manager.db:
+                try:
+                    if self.data_manager.db.conn:
+                        self.data_manager.db.conn.close()
+                        self.data_manager.db.conn = None
+                        db_closed = True
+                        logger.info("Closed database connection for restore")
+                except Exception as e:
+                    logger.warning(f"Error closing database connection: {e}")
+            
             # Use SQLite backup API for safe copy
             source_conn = sqlite3.connect(backup_path)
             
@@ -2697,8 +2713,29 @@ class BackupManager:
             
             # Atomic replace
             if os.path.exists(self.db_path):
-                os.remove(self.db_path)
+                # Try to remove with retry logic in case file is still locked
+                max_retries = 5
+                retry_delay = 0.2
+                for attempt in range(max_retries):
+                    try:
+                        os.remove(self.db_path)
+                        break
+                    except PermissionError as e:
+                        if attempt < max_retries - 1:
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Exponential backoff
+                        else:
+                            raise
+            
             os.rename(temp_restore, self.db_path)
+            
+            # Reconnect database if we closed it
+            if db_closed and self.data_manager and hasattr(self.data_manager, 'db'):
+                try:
+                    self.data_manager.db._connect()
+                    logger.info("Reconnected to database after restore")
+                except Exception as e:
+                    logger.warning(f"Error reconnecting to database: {e}")
             
             result["success"] = True
             logger.info(f"Database restored from: {backup_path}")
@@ -2707,8 +2744,16 @@ class BackupManager:
             result["error"] = f"Restore failed: {e}"
             logger.error(f"Restore failed: {e}")
             
+            # Try to reconnect if we closed the connection
+            if db_closed and self.data_manager and hasattr(self.data_manager, 'db'):
+                try:
+                    self.data_manager.db._connect()
+                    logger.info("Reconnected to database after failed restore")
+                except Exception as e:
+                    logger.error(f"Error reconnecting to database after failed restore: {e}")
+            
             # Cleanup temp file
-            if os.path.exists(temp_restore):
+            if temp_restore and os.path.exists(temp_restore):
                 try:
                     os.remove(temp_restore)
                 except:
@@ -2873,7 +2918,7 @@ class RVUData:
         }
         
         # Initialize cloud backup manager
-        self.backup_manager = BackupManager(self.db_file, self.data)
+        self.backup_manager = BackupManager(self.db_file, self.data, self)
     
     def _migrate_json_to_sqlite(self):
         """Migrate data from JSON to SQLite if JSON exists and DB is empty."""
@@ -2929,63 +2974,139 @@ class RVUData:
             }
     
     def load_settings(self) -> dict:
-        """Load settings, RVU table, classification rules, and window positions."""
-        try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r') as f:
-                    data = json.load(f)
-                    logger.info(f"Loaded settings from {self.settings_file}")
-                    return data
-        except Exception as e:
-            logger.error(f"Error loading settings: {e}")
+        """Load settings, RVU table, classification rules, and window positions.
         
-        # If settings file doesn't exist, try to copy from bundled version (for frozen apps)
+        Intelligently merges user settings with new defaults:
+        - Preserves: settings, window_positions, backup, compensation_rates
+        - Updates: rvu_table, classification_rules, direct_lookups (to get bug fixes)
+        - Adds: any new settings keys from the new version
+        """
+        # Get bundled/default settings first (from new version)
+        default_data = None
+        bundled_settings_file = None
+        
         if self.is_frozen:
             try:
                 bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
                 if os.path.exists(bundled_settings_file):
-                    logger.info(f"Copying bundled settings from {bundled_settings_file} to {self.settings_file}")
-                    shutil.copy2(bundled_settings_file, self.settings_file)
-                    # Now load the copied file
-                    with open(self.settings_file, 'r') as f:
-                        data = json.load(f)
-                        logger.info(f"Loaded settings from bundled file (copied to {self.settings_file})")
-                        return data
+                    with open(bundled_settings_file, 'r') as f:
+                        default_data = json.load(f)
+                        logger.info(f"Loaded bundled settings from {bundled_settings_file}")
             except Exception as e:
-                logger.error(f"Error copying bundled settings file: {e}")
+                logger.error(f"Error loading bundled settings file: {e}")
         
-        # Default settings structure (fallback if bundled file also doesn't exist)
-        return {
-            "settings": {
-                "auto_start": False,
-                "show_total": True,
-                "show_avg": True,
-                "show_last_hour": True,
-                "show_last_full_hour": True,
-                "show_projected": True,
-                "show_projected_shift": True,
-                "show_comp_projected_shift": True,
-                "show_pace_car": False,  # Show pace comparison bar vs prior shift
-                "pace_goal_rvu_per_hour": 15.0,  # Goal RVU/hour for theoretical pace
-                "pace_goal_shift_hours": 9.0,  # Goal shift length in hours
-                "pace_goal_total_rvu": 135.0,  # Goal total RVU (calculated: rvu_per_hour × hours)
-                "pace_comparison_mode": "prior",  # Last selected pace comparison: 'prior', 'goal', 'best_week', 'best_ever', 'week_N'
-                "shift_length_hours": 9,
-                "min_study_seconds": 5,
-                "ignore_duplicate_accessions": True,
-                "data_source": "PowerScribe",  # "PowerScribe" or "Mosaic"
-                "show_time": False,  # Show time information in recent studies
-                "stay_on_top": True,  # Keep window on top of other windows
-            },
-            "direct_lookups": {},
-            "rvu_table": RVU_TABLE.copy(),
-            "classification_rules": {},
-            "window_positions": {
-                "main": {"x": 50, "y": 50},
-                "settings": {"x": 100, "y": 100},
-                "statistics": {"x": 150, "y": 150}
+        # If no bundled file, use hardcoded defaults
+        if default_data is None:
+            default_data = {
+                "settings": {
+                    "auto_start": False,
+                    "show_total": True,
+                    "show_avg": True,
+                    "show_last_hour": True,
+                    "show_last_full_hour": True,
+                    "show_projected": True,
+                    "show_projected_shift": True,
+                    "show_comp_projected_shift": True,
+                    "show_pace_car": False,
+                    "pace_goal_rvu_per_hour": 15.0,
+                    "pace_goal_shift_hours": 9.0,
+                    "pace_goal_total_rvu": 135.0,
+                    "pace_comparison_mode": "prior",
+                    "shift_length_hours": 9,
+                    "min_study_seconds": 5,
+                    "ignore_duplicate_accessions": True,
+                    "data_source": "PowerScribe",
+                    "show_time": False,
+                    "stay_on_top": True,
+                },
+                "direct_lookups": {},
+                "rvu_table": RVU_TABLE.copy(),
+                "classification_rules": {},
+                "window_positions": {
+                    "main": {"x": 50, "y": 50},
+                    "settings": {"x": 100, "y": 100},
+                    "statistics": {"x": 150, "y": 150}
+                }
             }
-        }
+        
+        # Try to load user's existing settings file
+        user_data = None
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    user_data = json.load(f)
+                    logger.info(f"Loaded user settings from {self.settings_file}")
+            except Exception as e:
+                logger.error(f"Error loading user settings file: {e}")
+        
+        # If no user settings exist, use defaults and save them
+        if user_data is None:
+            logger.info("No existing user settings found, using defaults")
+            # Save the default settings for future use
+            try:
+                with open(self.settings_file, 'w') as f:
+                    json.dump(default_data, f, indent=2, default=str)
+                logger.info(f"Created new settings file at {self.settings_file}")
+            except Exception as e:
+                logger.error(f"Error saving default settings: {e}")
+            return default_data
+        
+        # Merge user settings with defaults intelligently
+        merged_data = {}
+        
+        # Preserve user's settings (user preferences)
+        merged_data["settings"] = user_data.get("settings", {})
+        # Add any new settings keys from default that user doesn't have
+        for key, value in default_data.get("settings", {}).items():
+            if key not in merged_data["settings"]:
+                merged_data["settings"][key] = value
+                logger.debug(f"Added new settings key '{key}' from default")
+        
+        # Preserve user's window positions
+        merged_data["window_positions"] = user_data.get("window_positions", {})
+        # Add any new window position keys from default
+        for key, value in default_data.get("window_positions", {}).items():
+            if key not in merged_data["window_positions"]:
+                merged_data["window_positions"][key] = value
+                logger.debug(f"Added new window position '{key}' from default")
+        
+        # Preserve user's backup settings
+        merged_data["backup"] = user_data.get("backup", {})
+        # Add any new backup settings keys from default
+        for key, value in default_data.get("backup", {}).items():
+            if key not in merged_data["backup"]:
+                merged_data["backup"][key] = value
+                logger.debug(f"Added new backup setting '{key}' from default")
+        
+        # Preserve user's compensation rates
+        merged_data["compensation_rates"] = user_data.get("compensation_rates", {})
+        # Add any new compensation rate keys from default (nested merge)
+        default_comp = default_data.get("compensation_rates", {})
+        if default_comp:
+            for day_type in ["weekday", "weekend"]:
+                if day_type not in merged_data["compensation_rates"]:
+                    merged_data["compensation_rates"][day_type] = default_comp.get(day_type, {})
+                else:
+                    for role in ["assoc", "partner"]:
+                        if role not in merged_data["compensation_rates"][day_type]:
+                            if day_type in default_comp and role in default_comp[day_type]:
+                                merged_data["compensation_rates"][day_type][role] = default_comp[day_type][role]
+        
+        # Update RVU-related settings (replace with new versions to get bug fixes)
+        merged_data["rvu_table"] = default_data.get("rvu_table", RVU_TABLE.copy())
+        merged_data["classification_rules"] = default_data.get("classification_rules", {})
+        merged_data["direct_lookups"] = default_data.get("direct_lookups", {})
+        logger.info("Updated RVU table, classification rules, and direct lookups from new version")
+        
+        # Save merged settings back to file
+        try:
+            with open(self.settings_file, 'w') as f:
+                json.dump(merged_data, f, indent=2, default=str)
+            logger.info(f"Saved merged settings to {self.settings_file}")
+        except Exception as e:
+            logger.error(f"Error saving merged settings: {e}")
+        
+        return merged_data
     
     def _validate_window_positions(self, data: dict) -> dict:
         """Validate window positions and reset invalid ones to safe defaults.
@@ -8540,7 +8661,7 @@ class SettingsWindow:
         
         # Create dialog
         dialog = tk.Toplevel(self.window)
-        dialog.title("Backup History")
+        dialog.title("OneDrive Cloud")
         dialog.transient(self.window)
         dialog.grab_set()
         
@@ -8551,17 +8672,14 @@ class SettingsWindow:
             # Validate position before applying
             if not is_point_on_any_monitor(x + 30, y + 30):
                 logger.warning(f"Backup history dialog position ({x}, {y}) is off-screen, finding nearest monitor")
-                x, y = find_nearest_monitor_for_window(x, y, 500, 350)
-            dialog.geometry(f"500x350+{x}+{y}")
+                x, y = find_nearest_monitor_for_window(x, y, 500, 400)
+            dialog.geometry(f"500x400+{x}+{y}")
         else:
-            # Center on primary monitor
-            try:
-                primary = get_primary_monitor_bounds()
-                x = primary[0] + (primary[2] - primary[0] - 500) // 2
-                y = primary[1] + (primary[3] - primary[1] - 350) // 2
-                dialog.geometry(f"500x350+{x}+{y}")
-            except:
-                dialog.geometry("500x350")
+            # Center on parent window
+            dialog.update_idletasks()
+            x = self.window.winfo_x() + (self.window.winfo_width() // 2) - 250
+            y = self.window.winfo_y() + (self.window.winfo_height() // 2) - 200
+            dialog.geometry(f"500x400+{x}+{y}")
         
         dialog.minsize(400, 250)
         
@@ -8632,55 +8750,202 @@ class SettingsWindow:
         dialog.bind("<ButtonRelease-1>", on_backup_history_drag_end)
         dialog.protocol("WM_DELETE_WINDOW", on_backup_history_closing)
         
-        # Main frame
-        main = ttk.Frame(dialog, padding="10")
-        main.pack(fill=tk.BOTH, expand=True)
+        # Main container frame
+        main_frame = ttk.Frame(dialog, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(main, text="Available Backups", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 10))
+        # Label
+        label = ttk.Label(main_frame, text="Select a backup to restore:", font=("Arial", 10))
+        label.pack(anchor=tk.W, pady=(0, 5))
         
-        # Scrollable list
-        list_frame = ttk.Frame(main)
-        list_frame.pack(fill=tk.BOTH, expand=True)
+        # Frame for scrollable backup list
+        list_container = ttk.Frame(main_frame)
+        list_container.pack(fill=tk.BOTH, expand=True)
         
-        # Treeview for backup list
-        columns = ("date", "size", "records")
-        tree = ttk.Treeview(list_frame, columns=columns, show="headings", height=10)
-        tree.heading("date", text="Date/Time")
-        tree.heading("size", text="Size")
-        tree.heading("records", text="Records")
-        tree.column("date", width=180)
-        tree.column("size", width=80)
-        tree.column("records", width=80)
+        # Create canvas with scrollbar for scrollable list
+        canvas_frame = ttk.Frame(list_container)
+        canvas_frame.pack(fill=tk.BOTH, expand=True)
         
-        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scrollbar.set)
+        canvas = tk.Canvas(canvas_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
         
-        tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Update canvas window width when canvas is resized
+        def update_canvas_window_width(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+        
+        canvas.bind('<Configure>', update_canvas_window_width)
+        
+        # Update scroll region when scrollable frame changes
+        def update_scroll_region(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        
+        scrollable_frame.bind('<Configure>', update_scroll_region)
+        
+        # Mouse wheel scrolling (bind to canvas and scrollable_frame)
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", on_mousewheel)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Populate list
-        for backup in backups:
-            date_str = backup["timestamp"].strftime("%Y-%m-%d %I:%M %p").lower()
-            tree.insert("", tk.END, values=(date_str, backup["size_formatted"], backup["record_count"]),
-                       tags=(backup["path"],))
+        # Store references
+        dialog.backup_files = backups
+        dialog.scrollable_frame = scrollable_frame
+        dialog.canvas = canvas
+        dialog.selected_backup = None
         
-        # Store path in item for restore
-        self._backup_tree = tree
-        self._backups = backups
+        def refresh_backup_list():
+            """Refresh the backup list display."""
+            # Clear existing widgets
+            for widget in scrollable_frame.winfo_children():
+                widget.destroy()
+            
+            # Re-fetch backup files
+            backups = backup_mgr.get_backup_history()
+            dialog.backup_files = backups
+            
+            # Get theme colors
+            colors = self.app.get_theme_colors()
+            
+            # Populate scrollable frame with backup entries
+            for backup in backups:
+                backup_frame = ttk.Frame(scrollable_frame)
+                backup_frame.pack(fill=tk.X, pady=1, padx=2)
+                
+                # X button to delete
+                delete_btn = tk.Label(
+                    backup_frame,
+                    text="×",
+                    font=("Arial", 8),
+                    bg=colors["delete_btn_bg"],
+                    fg=colors["delete_btn_fg"],
+                    cursor="hand2",
+                    padx=2,
+                    pady=2,
+                    width=2,
+                    anchor=tk.CENTER
+                )
+                delete_btn.backup_path = backup["path"]
+                delete_btn.backup_display = backup["timestamp"].strftime("%B %d, %Y at %I:%M %p")
+                delete_btn.bind("<Button-1>", lambda e, btn=delete_btn: delete_backup(btn))
+                delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_hover"]))
+                delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
+                delete_btn.pack(side=tk.LEFT, padx=(0, 5))
+                
+                # Backup label (clickable) - format same as local backups
+                backup_display = backup["timestamp"].strftime("%B %d, %Y at %I:%M %p")
+                # Add record count to display
+                if backup.get("record_count", 0) > 0:
+                    backup_display += f" ({backup['record_count']} records)"
+                backup_label = ttk.Label(
+                    backup_frame,
+                    text=backup_display,
+                    font=("Consolas", 9),
+                    cursor="hand2"
+                )
+                backup_label.backup = backup
+                backup_label.bind("<Button-1>", lambda e, lbl=backup_label: select_backup(lbl))
+                backup_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                
+                # Highlight selected backup
+                if dialog.selected_backup and dialog.selected_backup["path"] == backup["path"]:
+                    backup_label.config(background=colors.get("button_bg", "#e1e1e1"))
+            
+            # Update canvas scroll region
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # If no backups left, close dialog
+            if not backups:
+                messagebox.showinfo("No Backups", "No backup files found.")
+                dialog.destroy()
+        
+        def select_backup(label):
+            """Select a backup file."""
+            # Clear previous selection
+            for widget in scrollable_frame.winfo_children():
+                if isinstance(widget, ttk.Frame):
+                    for child in widget.winfo_children():
+                        if isinstance(child, ttk.Label) and hasattr(child, 'backup'):
+                            child.config(background="")
+            
+            # Highlight selected
+            label.config(background=self.app.get_theme_colors().get("button_bg", "#e1e1e1"))
+            dialog.selected_backup = label.backup
+        
+        def delete_backup(btn):
+            """Delete a backup file."""
+            backup_path = btn.backup_path
+            backup_display = btn.backup_display
+            
+            # Confirm deletion
+            response = messagebox.askyesno(
+                "Delete Backup?",
+                f"Are you sure you want to delete this backup?\n\n"
+                f"Backup: {backup_display}\n\n"
+                f"This action cannot be undone.",
+                parent=dialog
+            )
+            
+            if response:
+                try:
+                    if os.path.exists(backup_path):
+                        os.remove(backup_path)
+                        logger.info(f"Backup deleted: {backup_path}")
+                        
+                        # Clear selection if deleted backup was selected
+                        if dialog.selected_backup and dialog.selected_backup["path"] == backup_path:
+                            dialog.selected_backup = None
+                        
+                        # Refresh the list
+                        refresh_backup_list()
+                    else:
+                        messagebox.showwarning("File Not Found", f"Backup file not found:\n{backup_path}")
+                        refresh_backup_list()
+                except Exception as e:
+                    error_msg = f"Error deleting backup: {str(e)}"
+                    messagebox.showerror("Delete Failed", error_msg)
+                    logger.error(error_msg)
+        
+        def on_load():
+            """Restore selected backup."""
+            if not dialog.selected_backup:
+                messagebox.showwarning("No Selection", "Please select a backup file.")
+                return
+            
+            selected_backup = dialog.selected_backup
+            
+            # Confirm overwrite
+            date_str = selected_backup["timestamp"].strftime("%B %d, %Y at %I:%M %p").lower()
+            response = messagebox.askyesno(
+                "Confirm Overwrite",
+                f"Are you sure you want to restore this backup?\n\n"
+                f"Backup: {date_str}\n\n"
+                f"This will REPLACE your current study data. This action cannot be undone.\n\n"
+                f"Consider creating a backup of your current data first.",
+                icon="warning",
+                parent=dialog
+            )
+            
+            if response:
+                dialog.destroy()
+                self._confirm_restore(selected_backup)
+        
+        # Initial population
+        refresh_backup_list()
         
         # Buttons
-        btn_frame = ttk.Frame(main)
+        btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X, pady=(10, 0))
         
-        def restore_selected():
-            selection = tree.selection()
-            if selection:
-                idx = tree.index(selection[0])
-                backup = backups[idx]
-                on_backup_history_closing()
-                self._confirm_restore(backup)
-        
-        ttk.Button(btn_frame, text="Restore Selected", command=restore_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(btn_frame, text="Restore", command=on_load).pack(side=tk.LEFT, padx=2)
         
         # Open folder button
         def open_folder():
@@ -8707,9 +8972,11 @@ class SettingsWindow:
         """Confirm and perform restore from backup."""
         backup_mgr = self.data_manager.backup_manager
         
-        # Get current database info for comparison
+        # Get current database info for comparison - count from database directly
         try:
-            current_count = len(self.data_manager.data.get("records", []))
+            cursor = self.data_manager.db.conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM records")
+            current_count = cursor.fetchone()[0]
         except:
             current_count = 0
         
@@ -8730,14 +8997,32 @@ class SettingsWindow:
         result = backup_mgr.restore_from_backup(backup["path"])
         
         if result["success"]:
-            messagebox.showinfo("Restore Complete", 
-                               f"Database restored successfully!\n\n"
-                               f"The application will now close.\n"
-                               f"Please restart to use the restored data.")
-            
-            # Close settings window and main app
-            self.window.destroy()
-            self.app.root.quit()
+            # Reload data from the restored database
+            try:
+                # Reload records from database
+                self.data_manager.records_data = self.data_manager._load_records_from_db()
+                # Update data structures
+                self.data_manager.data["records"] = self.data_manager.records_data.get("records", [])
+                self.data_manager.data["current_shift"] = self.data_manager.records_data.get("current_shift", {
+                    "shift_start": None,
+                    "shift_end": None,
+                    "records": []
+                })
+                self.data_manager.data["shifts"] = self.data_manager.records_data.get("shifts", [])
+                
+                # Refresh the app display
+                self.app.update_display()
+                
+                messagebox.showinfo("Restore Complete", 
+                                   f"Database restored successfully!\n\n"
+                                   f"Data has been reloaded from the backup.")
+                logger.info(f"Database restored and reloaded: {backup['path']}")
+            except Exception as e:
+                logger.error(f"Error reloading data after restore: {e}", exc_info=True)
+                messagebox.showwarning("Restore Complete", 
+                                      f"Database restored successfully!\n\n"
+                                      f"However, there was an error reloading the data.\n"
+                                      f"Please restart the application to see the restored data.")
         else:
             messagebox.showerror("Restore Failed", f"Restore failed: {result['error']}")
 
@@ -13574,7 +13859,7 @@ class StatisticsWindow:
         """Show a dialog with list of backups to select from."""
         # Create dialog window
         dialog = tk.Toplevel(self.window)
-        dialog.title("Select Backup to Load")
+        dialog.title("Local")
         dialog.transient(self.window)
         dialog.grab_set()
         dialog.geometry("500x400")
@@ -13827,7 +14112,7 @@ class StatisticsWindow:
         buttons_frame = ttk.Frame(dialog, padding="10")
         buttons_frame.pack(fill=tk.X)
         
-        ttk.Button(buttons_frame, text="Load Selected Backup", command=on_load, width=20).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Restore", command=on_load, width=20).pack(side=tk.LEFT, padx=5)
         ttk.Button(buttons_frame, text="Cancel", command=on_cancel, width=12).pack(side=tk.RIGHT, padx=5)
     
     def on_configure(self, event):

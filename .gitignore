@@ -13,6 +13,7 @@ rvu_counter.log
 # Data files (optional - uncomment if you don't want to commit these)
 # rvu_records.json
 # rvu_settings.json
+rvu_records.db
 
 # IDE
 .vscode/
