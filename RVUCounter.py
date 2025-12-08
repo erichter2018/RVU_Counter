@@ -28,17 +28,47 @@ except ImportError as e:
     print(f"Warning: tkcalendar not available: {e}")
 
 
-# Configure logging
+# Configure logging with rotation (max 10MB per file, keep 3 backups, clear old logs daily)
 log_file = os.path.join(os.path.dirname(__file__), "rvu_counter.log")
+
+# Check if log file exists and is older than 1 day, archive it
+archived_log = None
+try:
+    if os.path.exists(log_file):
+        log_age = datetime.now() - datetime.fromtimestamp(os.path.getmtime(log_file))
+        if log_age.days >= 1:
+            # Archive old log and start fresh
+            archive_name = log_file.replace('.log', f'_{datetime.now().strftime("%Y%m%d")}.log')
+            if not os.path.exists(archive_name):
+                shutil.move(log_file, archive_name)
+                archived_log = archive_name
+except Exception as e:
+    pass  # If we can't check/clear, just continue
+
+# Use RotatingFileHandler to limit log size
+from logging.handlers import RotatingFileHandler
+file_handler = RotatingFileHandler(
+    log_file, 
+    maxBytes=10*1024*1024,  # 10MB per file
+    backupCount=3,  # Keep 3 backup files
+    encoding='utf-8'
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+console_handler = logging.StreamHandler()
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler()
-    ]
+    handlers=[file_handler, console_handler]
 )
 logger = logging.getLogger(__name__)
+
+# Log that we archived the old log file if we did
+if archived_log:
+    logger.info(f"Archived previous day's log file to {archived_log}")
 
 
 # =============================================================================
@@ -267,6 +297,12 @@ class RecordsDatabase:
         self._lock = threading.Lock()  # Thread safety for database operations
         self._connect()
         self._create_tables()
+        # Run migrations in background thread to avoid blocking startup
+        # Fix incorrectly categorized studies (quick operation)
+        self._fix_incorrectly_categorized_studies()
+        # Multi-accession migration runs in background (can be slow)
+        migration_thread = threading.Thread(target=self._migrate_multi_accession_records, daemon=True)
+        migration_thread.start()
     
     def _connect(self):
         """Create database connection."""
@@ -314,10 +350,19 @@ class RecordsDatabase:
                 individual_study_types TEXT,
                 individual_rvus TEXT,
                 individual_accessions TEXT,
+                from_multi_accession INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (shift_id) REFERENCES shifts(id) ON DELETE CASCADE
             )
         ''')
+        
+        # Add from_multi_accession column if it doesn't exist (migration for existing databases)
+        try:
+            cursor.execute('ALTER TABLE records ADD COLUMN from_multi_accession INTEGER DEFAULT 0')
+            logger.info("Added from_multi_accession column to records table")
+        except sqlite3.OperationalError:
+            # Column already exists, ignore
+            pass
         
         # Legacy records table (records without a shift - for backwards compatibility)
         cursor.execute('''
@@ -344,6 +389,234 @@ class RecordsDatabase:
         
         self.conn.commit()
         logger.info("Database tables created/verified")
+    
+    def _migrate_multi_accession_records(self):
+        """Migrate old multi-accession records to individual records.
+        
+        Finds records with individual_procedures/individual_accessions and splits them
+        into separate individual records, then deletes the old multi-accession record.
+        """
+        try:
+            with self._lock:
+                if not self.conn:
+                    return
+                
+                cursor = self.conn.cursor()
+                
+                # Find all records with individual data (old multi-accession format)
+                # Check for records that have individual_accessions populated (JSON string)
+                # OR records with study_type starting with "Multiple"
+                # EXCLUDE records that are already individual records (from_multi_accession = 1)
+                cursor.execute('''
+                    SELECT * FROM records 
+                    WHERE ((individual_accessions IS NOT NULL 
+                      AND individual_accessions != ''
+                      AND individual_accessions != 'null'
+                      AND individual_accessions != '[]')
+                    OR study_type LIKE 'Multiple %')
+                    AND (from_multi_accession IS NULL OR from_multi_accession = 0)
+                ''')
+                
+                multi_accession_records = cursor.fetchall()
+                
+                if not multi_accession_records:
+                    logger.debug("No multi-accession records found to migrate")
+                    return  # No migration needed
+                
+                logger.info(f"Found {len(multi_accession_records)} multi-accession records to migrate")
+                
+                # Pre-build a set of existing accessions for fast lookup (much faster than querying each time)
+                logger.info("Building existing accessions index for fast duplicate checking...")
+                cursor.execute('SELECT shift_id, accession FROM records')
+                existing_accessions = {}  # {(shift_id, accession): True}
+                for row in cursor.fetchall():
+                    existing_accessions[(row['shift_id'], row['accession'])] = True
+                logger.info(f"Indexed {len(existing_accessions)} existing records for duplicate checking")
+                
+                migrated_count = 0
+                processed_count = 0
+                for row_idx, row in enumerate(multi_accession_records):
+                    processed_count += 1
+                    if processed_count % 10 == 0:
+                        logger.info(f"Migration progress: {processed_count}/{len(multi_accession_records)} records processed...")
+                    
+                    record = self._record_row_to_dict(row)
+                    shift_id = row['shift_id']
+                    old_record_id = row['id']
+                    
+                    # Parse individual data (these are JSON strings in the database)
+                    individual_procedures = record.get('individual_procedures', [])
+                    individual_study_types = record.get('individual_study_types', [])
+                    individual_rvus = record.get('individual_rvus', [])
+                    individual_accessions = record.get('individual_accessions', [])
+                    
+                    # If no individual_accessions but study_type is "Multiple X", try to extract from accession field
+                    if not individual_accessions or len(individual_accessions) == 0:
+                        # Check if study_type indicates multiple (e.g., "Multiple XR")
+                        study_type = record.get('study_type', '')
+                        if study_type.startswith('Multiple '):
+                            # Try to parse accession field - might be comma-separated
+                            accession_str = record.get('accession', '')
+                            if accession_str and ',' in accession_str:
+                                individual_accessions = [acc.strip() for acc in accession_str.split(',')]
+                                logger.info(f"Extracted {len(individual_accessions)} accessions from comma-separated accession field for record {old_record_id}")
+                        
+                        if not individual_accessions or len(individual_accessions) == 0:
+                            # Can't migrate this record - delete it since it's a broken multi-accession record
+                            cursor.execute('DELETE FROM records WHERE id = ?', (old_record_id,))
+                            self.conn.commit()
+                            logger.info(f"Deleted unmigrateable multi-accession record {old_record_id} (study_type: {study_type}, no individual accessions)")
+                            continue
+                    
+                    logger.info(f"Processing multi-accession record {old_record_id} ({processed_count}/{len(multi_accession_records)}) with {len(individual_accessions)} accessions")
+                    
+                    # Calculate duration per study
+                    total_duration = record.get('duration_seconds', 0)
+                    num_studies = len(individual_accessions)
+                    duration_per_study = total_duration / num_studies if num_studies > 0 else 0
+                    
+                    # Batch insert individual records for better performance
+                    records_to_insert = []
+                    for i, accession in enumerate(individual_accessions):
+                        # Fast duplicate check using pre-built index
+                        if (shift_id, accession) in existing_accessions:
+                            logger.debug(f"Skipping {accession} - already exists as individual record")
+                            continue
+                        
+                        # Get corresponding data
+                        procedure = individual_procedures[i] if i < len(individual_procedures) else record.get('procedure', 'Unknown')
+                        study_type = individual_study_types[i] if i < len(individual_study_types) else record.get('study_type', 'Unknown')
+                        rvu = individual_rvus[i] if i < len(individual_rvus) else (record.get('rvu', 0) / num_studies if num_studies > 0 else 0)
+                        
+                        # Create new individual record
+                        individual_record = {
+                            'accession': accession,
+                            'procedure': procedure,
+                            'patient_class': record.get('patient_class', ''),
+                            'study_type': study_type,
+                            'rvu': rvu,
+                            'time_performed': record.get('time_performed', ''),
+                            'time_finished': record.get('time_finished', ''),
+                            'duration_seconds': duration_per_study,
+                            'from_multi_accession': True,  # Mark as from multi-accession
+                        }
+                        
+                        records_to_insert.append(individual_record)
+                        # Add to index so we don't create duplicates within this migration
+                        existing_accessions[(shift_id, accession)] = True
+                    
+                    # Batch insert all records for this multi-accession study using direct SQL (much faster)
+                    if records_to_insert:
+                        # Use direct SQL INSERT for batch operations (faster than add_record which commits each time)
+                        for individual_record in records_to_insert:
+                            cursor.execute('''
+                                INSERT INTO records (shift_id, accession, procedure, patient_class, study_type,
+                                                   rvu, time_performed, time_finished, duration_seconds,
+                                individual_procedures, individual_study_types, 
+                                individual_rvus, individual_accessions, from_multi_accession)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                shift_id,
+                                individual_record.get('accession', ''),
+                                individual_record.get('procedure', ''),
+                                individual_record.get('patient_class', ''),
+                                individual_record.get('study_type', ''),
+                                individual_record.get('rvu', 0),
+                                individual_record.get('time_performed', ''),
+                                individual_record.get('time_finished', ''),
+                                individual_record.get('duration_seconds', 0),
+                                None,  # Don't set individual_* fields for migrated records
+                                None,
+                                None,
+                                None,
+                                1,  # Mark as from_multi_accession
+                            ))
+                        
+                        created_count = len(records_to_insert)
+                        
+                        # Delete the old multi-accession record
+                        delete_result = cursor.execute('DELETE FROM records WHERE id = ?', (old_record_id,))
+                        deleted_rows = cursor.rowcount
+                        migrated_count += 1
+                        
+                        # Commit after each multi-accession record (batch commit is faster than per-record commits)
+                        self.conn.commit()
+                        if deleted_rows > 0:
+                            logger.info(f"Migrated multi-accession record {old_record_id}: created {created_count} individual records, deleted old record (rows deleted: {deleted_rows})")
+                        else:
+                            logger.warning(f"Migrated multi-accession record {old_record_id}: created {created_count} individual records, but DELETE returned 0 rows (record may not exist)")
+                    else:
+                        # Even if no new records were created (all already exist), delete the old multi-accession record
+                        # The individual records already exist, so the multi-accession record is redundant
+                        delete_result = cursor.execute('DELETE FROM records WHERE id = ?', (old_record_id,))
+                        deleted_rows = cursor.rowcount
+                        self.conn.commit()
+                        if deleted_rows > 0:
+                            logger.info(f"Deleted multi-accession record {old_record_id}: all individual records already exist, no migration needed (rows deleted: {deleted_rows})")
+                        else:
+                            logger.warning(f"Attempted to delete multi-accession record {old_record_id} but DELETE returned 0 rows (record may not exist)")
+                
+                # Final commit
+                self.conn.commit()
+                logger.info(f"Migration complete: processed {len(multi_accession_records)} multi-accession records, migrated {migrated_count}")
+                
+        except Exception as e:
+            logger.error(f"Error migrating multi-accession records: {e}", exc_info=True)
+    
+    def _fix_incorrectly_categorized_studies(self):
+        """Fix incorrectly categorized studies in the database.
+        
+        Reclassifies studies based on their procedure text using current classification rules.
+        For example, "XR Chest 1 view" should be "XR Chest", not "XR Other".
+        """
+        try:
+            with self._lock:
+                if not self.conn:
+                    return
+                
+                cursor = self.conn.cursor()
+                
+                # Get all records
+                cursor.execute('SELECT * FROM records')
+                all_records = cursor.fetchall()
+                
+                if not all_records:
+                    return
+                
+                # Load classification rules and RVU table from settings
+                # We need to get these from the data manager, but we don't have access here
+                # So we'll use a simple approach: check procedure text for common patterns
+                
+                fixed_count = 0
+                for row in all_records:
+                    record = self._record_row_to_dict(row)
+                    procedure = record.get('procedure', '').lower()
+                    current_study_type = record.get('study_type', '')
+                    record_id = row['id']
+                    
+                    # Check for XR Chest studies incorrectly categorized as XR Other
+                    if current_study_type == "XR Other" and procedure:
+                        # Check if procedure contains "chest"
+                        if "chest" in procedure:
+                            # Check if it's an XR study (should have xr, x-ray, radiograph, etc.)
+                            if any(xr_term in procedure for xr_term in ["xr", "x-ray", "radiograph", "x ray"]):
+                                # Update to XR Chest
+                                cursor.execute('''
+                                    UPDATE records 
+                                    SET study_type = ? 
+                                    WHERE id = ?
+                                ''', ("XR Chest", record_id))
+                                fixed_count += 1
+                                logger.info(f"Fixed record {record_id}: XR Other -> XR Chest (procedure: {record.get('procedure', '')})")
+                
+                if fixed_count > 0:
+                    self.conn.commit()
+                    logger.info(f"Fixed {fixed_count} incorrectly categorized studies")
+                else:
+                    logger.debug("No incorrectly categorized studies found")
+                
+        except Exception as e:
+            logger.error(f"Error fixing incorrectly categorized studies: {e}", exc_info=True)
     
     def close(self):
         """Close database connection."""
@@ -1846,25 +2119,9 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         return direct_match_name, direct_match_rvu
     
     # Check for modality keywords and use "Other" types as fallback before partial matching
-    modality_fallbacks = {
-        "ct": ("CT Other", rvu_table.get("CT Other", 1.0)),
-        "mri": ("MRI Other", rvu_table.get("MRI Other", 1.75)),
-        "mr ": ("MRI Other", rvu_table.get("MRI Other", 1.75)),
-        "us ": ("US Other", rvu_table.get("US Other", 0.68)),
-        "ultrasound": ("US Other", rvu_table.get("US Other", 0.68)),
-        "xr ": ("XR Other", rvu_table.get("XR Other", 0.3)),
-        "x-ray": ("XR Other", rvu_table.get("XR Other", 0.3)),
-        "nm ": ("NM Other", rvu_table.get("NM Other", 1.0)),
-        "nuclear": ("NM Other", rvu_table.get("NM Other", 1.0)),
-    }
-    
-    # Check for modality keywords (case-insensitive)
-    for keyword, (study_type, rvu) in modality_fallbacks.items():
-        if keyword in procedure_lower:
-            # Only use as fallback if the study_type exists in rvu_table
-            if study_type in rvu_table:
-                logger.info(f"Using modality fallback '{study_type}' for procedure containing '{keyword}': {procedure_text}")
-            return study_type, rvu
+    # BUT: Don't use fallback if a more specific match exists (e.g., "XR Chest" should match before "XR Other")
+    # This is handled by checking partial matches first, so we skip this fallback for now
+    # and let it fall through to partial matching which will find "XR Chest" before "XR Other"
     
     # Try exact match first
     for study_type, rvu in rvu_table.items():
@@ -1872,20 +2129,21 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             return study_type, rvu
     
     # Try keyword matching FIRST (before partial matching) to correctly identify modality
+    # Order matters: longer keywords checked first (e.g., "ultrasound" before "us")
     keywords = {
         "ct cap": ("CT CAP", 3.06),
         "ct ap": ("CT AP", 1.68),
         "cta": ("CTA Brain", 1.75),  # Default CTA
-        "pet": ("PET CT", 3.6),
+        "ultrasound": ("US Other", 0.68),  # Check "ultrasound" before "us"
         "mri": ("MRI Other", 1.75),
         "mr ": ("MRI Other", 1.75),
-        "ultrasound": ("US Other", 0.68),
         "us ": ("US Other", 0.68),
         "x-ray": ("XR Other", 0.3),
         "xr ": ("XR Other", 0.3),
         "xr\t": ("XR Other", 0.3),  # XR with tab
         "nuclear": ("NM Other", 1.0),
         "nm ": ("NM Other", 1.0),
+        # Note: "pet" intentionally excluded - PET CT must match both "pet" and "ct" together in partial matching
     }
     
     # Check for keywords - prioritize longer/more specific keywords first
@@ -1896,6 +2154,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             return study_type, rvu
     
     # Also check if procedure starts with modality prefix (case-insensitive)
+    # Note: "pe" prefix excluded - PET CT must match both "pet" and "ct" together in partial matching
     if len(procedure_lower) >= 2:
         first_two = procedure_lower[:2]
         prefix_keywords = {
@@ -1905,7 +2164,6 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             "mr": ("MRI Other", 1.75),
             "us": ("US Other", 0.68),
             "nm": ("NM Other", 1.0),
-            "pe": ("PET CT", 3.6),  # PET
         }
         if first_two in prefix_keywords:
             study_type, rvu = prefix_keywords[first_two]
@@ -1913,10 +2171,20 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             return study_type, rvu
     
     # Try partial matches (most specific first), but exclude "Other" types initially
+    # PET CT is handled separately as it requires both "pet" and "ct" together
     matches = []
     other_matches = []
+    pet_ct_match = None
+    
     for study_type, rvu in rvu_table.items():
         study_lower = study_type.lower()
+        
+        # Special handling for PET CT - only match if both "pet" and "ct" appear together
+        if study_lower == "pet ct":
+            if "pet" in procedure_lower and "ct" in procedure_lower:
+                pet_ct_match = (study_type, rvu)
+            continue  # Skip adding to matches - will handle separately at the very end
+        
         if study_lower in procedure_lower or procedure_lower in study_lower:
             # Score by length (longer = more specific)
             score = len(study_type)
@@ -1936,6 +2204,11 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         other_matches.sort(reverse=True)  # Highest score first
         logger.info(f"Using 'Other' type fallback '{other_matches[0][1]}' for: {procedure_text}")
         return other_matches[0][1], other_matches[0][2]
+    
+    # Absolute last resort: PET CT (only if both "pet" and "ct" appear together)
+    if pet_ct_match:
+        logger.info(f"Using PET CT as last resort match (both 'pet' and 'ct' found) for: {procedure_text}")
+        return pet_ct_match
     
     return "Unknown", 0.0
 
@@ -3995,7 +4268,8 @@ class RVUCounterApp:
             self.pace_bar_current.place(x=0, y=0, width=current_width, height=9)
             
             # Update prior bar (bottom) - width scales with prior total relative to max
-            self.pace_bar_prior_track.place(x=0, y=11, width=prior_total_width, height=9)
+            # Must set relwidth=0 to clear the initial relwidth=1.0 setting
+            self.pace_bar_prior_track.place(x=0, y=11, width=prior_total_width, height=9, relwidth=0)
             
             # Update prior marker (black line on lavender bar showing "prior at this time")
             self.pace_bar_prior_marker.place(x=prior_marker_pos, y=11, width=2, height=9)
@@ -4705,24 +4979,18 @@ class RVUCounterApp:
         total_rvu = 0
         recorded_count = 0
         
-        # Check duplicate settings
-        ignore_duplicates = self.data_manager.data["settings"].get("ignore_duplicate_accessions", True)
-        
         # Record each study individually
+        # NOTE: We do NOT skip based on seen_accessions here because:
+        # 1. seen_accessions gets polluted during multi-accession entry when checking for display purposes
+        # 2. _record_or_update_study already handles duplicates correctly:
+        #    - If record exists with lower duration: updates it
+        #    - If record exists with higher duration: skips (logs debug message)
+        #    - If no record exists: creates new one
         for i, entry in enumerate(all_entries):
             data = self.multi_accession_data[entry]
             
             # Get the pure accession number
             accession = accession_numbers[i] if i < len(accession_numbers) else entry
-            
-            # Skip if this accession was already recorded (as individual or part of another multi)
-            if ignore_duplicates:
-                if accession in self.tracker.seen_accessions:
-                    logger.debug(f"Skipping duplicate accession in multi-accession recording: {accession}")
-                    continue
-                if self.tracker._was_part_of_multi_accession(accession, self.data_manager):
-                    logger.debug(f"Skipping accession already recorded in another multi-accession: {accession}")
-                    continue
             
             study_record = {
                 "accession": accession,
@@ -9685,8 +9953,9 @@ class StatisticsWindow:
         Returns:
             Tuple of (start_datetime, end_datetime) for the work week
         """
-        start_hour = self.typical_shift_start_hour
-        end_hour = self.typical_shift_end_hour
+        # Get typical shift times from the app object
+        start_hour = self.app.typical_shift_start_hour if hasattr(self.app, 'typical_shift_start_hour') else 23
+        end_hour = self.app.typical_shift_end_hour if hasattr(self.app, 'typical_shift_end_hour') else 8
         
         # Find the Monday that started the current work week
         days_since_monday = target_date.weekday()  # Monday = 0
@@ -9717,30 +9986,11 @@ class StatisticsWindow:
         return work_week_start, work_week_end
     
     def _get_records_in_range(self, start: datetime, end: datetime) -> List[dict]:
-        """Get all records within a date range."""
-        records = []
-        
-        # Check current shift
-        current_shift = self.data_manager.data.get("current_shift", {})
-        for record in current_shift.get("records", []):
-            try:
-                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
-                if start <= rec_time <= end:
-                    records.append(record)
-            except:
-                pass
-        
-        # Check historical shifts from the "shifts" array
-        historical_shifts = self.data_manager.data.get("shifts", [])
-        for shift in historical_shifts:
-            for record in shift.get("records", []):
-                try:
-                    rec_time = datetime.fromisoformat(record.get("time_performed", ""))
-                    if start <= rec_time <= end:
-                        records.append(record)
-                except:
-                    pass
-        
+        """Get all records within a date range from the database."""
+        # Use database query for accurate results
+        start_str = start.isoformat()
+        end_str = end.isoformat()
+        records = self.data_manager.db.get_records_in_date_range(start_str, end_str)
         return records
     
     def _expand_multi_accession_records(self, records: List[dict]) -> List[dict]:
@@ -9837,6 +10087,129 @@ class StatisticsWindow:
         if self.selected_period.get() == "custom_date_range":
             self.refresh_data()
     
+    def _count_shifts_in_period(self) -> int:
+        """Count the number of unique shifts in the selected period."""
+        period = self.selected_period.get()
+        now = datetime.now()
+        
+        if period == "current_shift":
+            # Current shift counts as 1
+            if self.data_manager.data.get("current_shift", {}).get("shift_start"):
+                return 1
+            return 0
+        
+        elif period == "prior_shift":
+            # Prior shift counts as 1
+            shifts = self.get_all_shifts()
+            for shift in shifts:
+                if not shift.get("is_current"):
+                    return 1
+            return 0
+        
+        elif period == "specific_shift":
+            # Specific shift counts as 1
+            return 1
+        
+        elif period in ["this_work_week", "last_work_week"]:
+            # Count shifts in the work week range
+            which_week = "this" if period == "this_work_week" else "last"
+            start, end = self._get_work_week_range(now, which_week)
+            return self._count_shifts_in_range(start, end)
+        
+        elif period == "all_time":
+            # Count all shifts
+            start = datetime.min.replace(year=2000)
+            return self._count_shifts_in_range(start, now)
+        
+        elif period == "custom_date_range":
+            # Count shifts in custom date range
+            try:
+                start_str = self.custom_start_date.get().strip()
+                end_str = self.custom_end_date.get().strip()
+                start = datetime.strptime(start_str, "%m/%d/%Y")
+                end = datetime.strptime(end_str, "%m/%d/%Y")
+                start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = end.replace(hour=23, minute=59, second=59, microsecond=999999)
+                if start > end:
+                    return 0
+                return self._count_shifts_in_range(start, end)
+            except:
+                return 0
+        
+        elif period in ["this_month", "last_month"]:
+            # Count shifts in month range
+            if period == "this_month":
+                start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+                # End of current month
+                if now.month == 12:
+                    end = now.replace(year=now.year + 1, month=1, day=1, hour=23, minute=59, second=59, microsecond=999999) - timedelta(days=1)
+                else:
+                    end = now.replace(month=now.month + 1, day=1, hour=23, minute=59, second=59, microsecond=999999) - timedelta(days=1)
+            else:  # last_month
+                if now.month == 1:
+                    start = now.replace(year=now.year - 1, month=12, day=1, hour=0, minute=0, second=0, microsecond=0)
+                    end = now.replace(day=1, hour=23, minute=59, second=59, microsecond=999999) - timedelta(days=1)
+                else:
+                    start = now.replace(month=now.month - 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                    end = now.replace(month=now.month, day=1, hour=23, minute=59, second=59, microsecond=999999) - timedelta(days=1)
+            return self._count_shifts_in_range(start, end)
+        
+        elif period == "last_3_months":
+            # Count shifts in last 3 months
+            start = now - timedelta(days=90)
+            start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+            return self._count_shifts_in_range(start, now)
+        
+        elif period == "last_year":
+            # Count shifts in last year
+            start = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            return self._count_shifts_in_range(start, now)
+        
+        return 0
+    
+    def _count_shifts_in_range(self, start: datetime, end: datetime) -> int:
+        """Count unique shifts that have records within the date range."""
+        shift_ids = set()
+        
+        # Check current shift
+        current_shift = self.data_manager.data.get("current_shift", {})
+        if current_shift.get("shift_start"):
+            try:
+                shift_start = datetime.fromisoformat(current_shift.get("shift_start", ""))
+                # Check if shift has any records in the range
+                for record in current_shift.get("records", []):
+                    try:
+                        rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                        if start <= rec_time <= end:
+                            shift_ids.add("current")
+                            break
+                    except:
+                        pass
+            except:
+                pass
+        
+        # Check historical shifts
+        for shift in self.data_manager.data.get("shifts", []):
+            try:
+                shift_start_str = shift.get("shift_start", "")
+                if not shift_start_str:
+                    continue
+                shift_start = datetime.fromisoformat(shift_start_str)
+                # Check if shift has any records in the range
+                for record in shift.get("records", []):
+                    try:
+                        rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                        if start <= rec_time <= end:
+                            # Use shift_start as unique identifier
+                            shift_ids.add(shift_start_str)
+                            break
+                    except:
+                        pass
+            except:
+                pass
+        
+        return len(shift_ids)
+    
     def refresh_data(self):
         """Refresh the data display based on current selections."""
         current_period = self.selected_period.get()
@@ -9850,6 +10223,20 @@ class StatisticsWindow:
             self.custom_date_frame.pack_forget()
         
         records, period_desc = self.get_records_for_period()
+        
+        # For efficiency view, add shift count in parentheses after date range
+        if self.view_mode.get() == "efficiency":
+            # Count unique shifts in the date range
+            shift_count = self._count_shifts_in_period()
+            if shift_count > 0:
+                # Find where the date range ends (after the last dash)
+                if " - " in period_desc:
+                    # Add shift count after the date range
+                    period_desc = f"{period_desc} ({shift_count} shift{'s' if shift_count != 1 else ''})"
+                else:
+                    # No date range, just add shift count
+                    period_desc = f"{period_desc} ({shift_count} shift{'s' if shift_count != 1 else ''})"
+        
         self.period_label.config(text=period_desc)
         
         # Expand multi-accession records into individual modality records for statistics
@@ -9942,6 +10329,15 @@ class StatisticsWindow:
                 def save_study_count_mode():
                     self.data_manager.data.setdefault("settings", {})["efficiency_study_count_mode"] = self.study_count_mode.get()
                     self.data_manager.save(save_records=False)
+                    # Force immediate redraw of efficiency view if it's currently displayed
+                    if hasattr(self, '_efficiency_redraw_functions') and self._efficiency_redraw_functions:
+                        for redraw_func in self._efficiency_redraw_functions:
+                            try:
+                                redraw_func()  # This will read the updated radio button value
+                            except Exception as e:
+                                logger.debug(f"Error calling redraw function: {e}")
+                                pass
+                    # Always do a full refresh to ensure everything is updated
                     self.refresh_data()
                 
                 # Create radio buttons for study count display mode
@@ -9971,7 +10367,16 @@ class StatisticsWindow:
                 def save_heatmap_mode():
                     self.data_manager.data.setdefault("settings", {})["efficiency_heatmap_mode"] = self.heatmap_mode.get()
                     self.data_manager.save(save_records=False)
-                    self.refresh_data()
+                    # Redraw efficiency view if it's currently displayed
+                    if hasattr(self, '_efficiency_redraw_functions') and self._efficiency_redraw_functions:
+                        for redraw_func in self._efficiency_redraw_functions:
+                            try:
+                                redraw_func()
+                            except:
+                                pass
+                    else:
+                        # Fallback to full refresh if redraw functions not available
+                        self.refresh_data()
                 
                 # Create radio buttons for heat map mode
                 # Pack label on LEFT first
@@ -10452,8 +10857,23 @@ class StatisticsWindow:
             if hasattr(self, '_all_studies_table'):
                 delattr(self, '_all_studies_table')
         
-        # Store records for virtual rendering
-        self._all_studies_records = records
+        # Filter out multi-accession records (they should have been split into individual records)
+        # Exclude records with study_type starting with "Multiple" or with individual_accessions populated
+        filtered_records = []
+        for record in records:
+            study_type = record.get("study_type", "")
+            # Skip multi-accession records
+            if study_type.startswith("Multiple "):
+                continue
+            # Skip records with individual_accessions (old format that should have been migrated)
+            if record.get("individual_accessions"):
+                individual_accessions = record.get("individual_accessions", [])
+                if individual_accessions and len(individual_accessions) > 0:
+                    continue
+            filtered_records.append(record)
+        
+        # Store filtered records for virtual rendering
+        self._all_studies_records = filtered_records
         self._all_studies_row_height = 22
         
         # Clear render state to force fresh render
@@ -10681,8 +11101,17 @@ class StatisticsWindow:
                     canvas.create_text(x + width//2, 12, text=display_text, font=('Arial', 9, 'bold'), fill=text_fg)
                 x += width
         
-        # Re-render the visible rows
+        # Force immediate re-render by clearing cache and rendering
+        if hasattr(self, '_last_render_range'):
+            delattr(self, '_last_render_range')
+        if hasattr(self, '_rendered_rows'):
+            self._rendered_rows.clear()
+        # Re-render the visible rows immediately
         self._render_visible_rows()
+        # Force canvas update to ensure sort is visible
+        self._all_studies_canvas.update_idletasks()
+        # Also trigger a configure event to force refresh
+        self._all_studies_canvas.event_generate("<Configure>")
     
     def _truncate_text(self, text: str, max_chars: int) -> str:
         """Truncate text to fit within max characters, adding ... if needed."""
@@ -10912,9 +11341,17 @@ class StatisticsWindow:
         record = self._all_studies_records[row_idx]
         accession = record.get("accession", "")
         
-        # Save current sort state before deletion
+        # Save current sort state and scroll position before deletion
         saved_sort_column = getattr(self, '_all_studies_sort_column', None)
         saved_sort_reverse = getattr(self, '_all_studies_sort_reverse', False)
+        
+        # Save scroll position (as fraction of total content)
+        saved_scroll_position = None
+        if hasattr(self, '_all_studies_canvas'):
+            try:
+                saved_scroll_position = self._all_studies_canvas.yview()[0]  # Get top position (0.0 to 1.0)
+            except:
+                pass
         
         # Confirm deletion
         result = messagebox.askyesno(
@@ -10928,41 +11365,97 @@ class StatisticsWindow:
         
         if result:
             time_performed = record.get("time_performed", "")
+            record_id = record.get("id")  # Database ID if available
             
-            # Check current shift records
+            # Delete from database first
+            deleted_from_db = False
+            if record_id:
+                try:
+                    self.data_manager.db.delete_record(record_id)
+                    deleted_from_db = True
+                    logger.info(f"Deleted study from database: {accession} (ID: {record_id})")
+                except Exception as e:
+                    logger.error(f"Error deleting study from database: {e}", exc_info=True)
+            else:
+                # Record doesn't have ID - try to find it in database by accession
+                # Check current shift first
+                try:
+                    current_shift = self.data_manager.db.get_current_shift()
+                    if current_shift:
+                        db_record = self.data_manager.db.find_record_by_accession(
+                            current_shift['id'], accession
+                        )
+                        if db_record:
+                            self.data_manager.db.delete_record(db_record['id'])
+                            deleted_from_db = True
+                            logger.info(f"Deleted study from database by accession: {accession} (ID: {db_record['id']})")
+                except Exception as e:
+                    logger.error(f"Error finding/deleting study in database (current shift): {e}", exc_info=True)
+                
+                # If not found in current shift, check historical shifts
+                if not deleted_from_db:
+                    try:
+                        historical_shifts = self.data_manager.db.get_all_shifts()
+                        for shift in historical_shifts:
+                            if shift.get('is_current'):
+                                continue
+                            db_record = self.data_manager.db.find_record_by_accession(
+                                shift['id'], accession
+                            )
+                            if db_record:
+                                self.data_manager.db.delete_record(db_record['id'])
+                                deleted_from_db = True
+                                logger.info(f"Deleted study from database by accession (historical shift): {accession} (ID: {db_record['id']})")
+                                break
+                    except Exception as e:
+                        logger.error(f"Error finding/deleting study in database (historical shifts): {e}", exc_info=True)
+            
+            # Delete from memory (check current shift first, then historical)
+            found_in_memory = False
             current_records = self.data_manager.data.get("current_shift", {}).get("records", [])
             for i, r in enumerate(current_records):
                 if r.get("accession") == accession and r.get("time_performed") == time_performed:
                     current_records.pop(i)
                     self.data_manager.save()
-                    logger.info(f"Deleted study from current shift: {accession}")
-                    # Restore sort state after refresh
-                    self.refresh_data()
-                    if saved_sort_column:
-                        # Use after_idle to ensure display is complete before restoring sort
-                        self.window.after_idle(
-                            lambda: self._sort_all_studies(saved_sort_column, force_reverse=saved_sort_reverse)
-                        )
-                    return
+                    logger.info(f"Deleted study from current shift memory: {accession}")
+                    found_in_memory = True
+                    break
             
-            # Check historical shifts
-            for shift in self.data_manager.data.get("shifts", []):
-                shift_records = shift.get("records", [])
-                for i, r in enumerate(shift_records):
-                    if r.get("accession") == accession and r.get("time_performed") == time_performed:
-                        shift_records.pop(i)
-                        self.data_manager.save()
-                        logger.info(f"Deleted study from historical shift: {accession}")
-                        # Restore sort state after refresh
-                        self.refresh_data()
-                        if saved_sort_column:
-                            # Use after_idle to ensure display is complete before restoring sort
-                            self.window.after_idle(
-                                lambda: self._sort_all_studies(saved_sort_column, force_reverse=saved_sort_reverse)
-                            )
-                        return
+            # If not found in current shift, check historical shifts
+            if not found_in_memory:
+                for shift in self.data_manager.data.get("shifts", []):
+                    shift_records = shift.get("records", [])
+                    for i, r in enumerate(shift_records):
+                        if r.get("accession") == accession and r.get("time_performed") == time_performed:
+                            shift_records.pop(i)
+                            self.data_manager.save()
+                            logger.info(f"Deleted study from historical shift memory: {accession}")
+                            found_in_memory = True
+                            break
+                    if found_in_memory:
+                        break
             
-            logger.warning(f"Could not find record to delete: {accession}")
+            if not found_in_memory and not deleted_from_db:
+                logger.warning(f"Could not find record to delete in memory or database: {accession}")
+            
+            # Refresh data and restore state
+            self.refresh_data()
+            
+            # Restore sort state and scroll position after refresh completes
+            def restore_state():
+                if saved_sort_column:
+                    self._sort_all_studies(saved_sort_column, force_reverse=saved_sort_reverse)
+                
+                # Restore scroll position
+                if saved_scroll_position is not None and hasattr(self, '_all_studies_canvas'):
+                    try:
+                        # Wait a moment for canvas to update, then restore scroll
+                        self._all_studies_canvas.update_idletasks()
+                        self._all_studies_canvas.yview_moveto(saved_scroll_position)
+                    except:
+                        pass
+            
+            self.window.after_idle(restore_state)
     
     def _sort_column(self, col: str, reverse: bool = None):
         """Sort treeview by column. Toggles direction on each click."""
@@ -11078,12 +11571,15 @@ class StatisticsWindow:
         if self.efficiency_frame is None:
             self.efficiency_frame = ttk.Frame(self.table_frame)
         
-        # Clear existing widgets
+        # Clear existing widgets and redraw functions
         for widget in list(self.efficiency_frame.winfo_children()):
             try:
                 widget.destroy()
             except:
                 pass
+        # Clear redraw function references when rebuilding
+        if hasattr(self, '_efficiency_redraw_functions'):
+            self._efficiency_redraw_functions.clear()
         
         # Make sure efficiency frame is packed and visible
         try:
@@ -11099,6 +11595,51 @@ class StatisticsWindow:
         # Build data structure: modality -> hour -> list of durations and counts
         efficiency_data = {}
         study_count_data = {}  # modality -> hour -> count
+        shifts_per_hour = {}  # modality -> hour -> set of shift identifiers (for average calculation)
+        
+        # Build a mapping of time_performed to shift_id by checking all shifts
+        # This helps us calculate averages (studies per hour / number of shifts with data in that hour)
+        shift_time_map = {}  # time_performed -> shift_id
+        all_shifts = []
+        current_shift = self.data_manager.data.get("current_shift", {})
+        if current_shift.get("shift_start"):
+            all_shifts.append(("current", current_shift))
+        for shift in self.data_manager.data.get("shifts", []):
+            if shift.get("shift_start"):
+                all_shifts.append((shift.get("shift_start"), shift))
+        
+        # Helper function to track which shift a record belongs to
+        def track_shift_for_record(modality, hour, record_time_str):
+            """Track which shift this record belongs to for average calculation."""
+            if not record_time_str:
+                return
+            try:
+                record_time = datetime.fromisoformat(record_time_str)
+                # Find which shift this record belongs to
+                for shift_id, shift_data in all_shifts:
+                    shift_start_str = shift_data.get("shift_start") if isinstance(shift_data, dict) else None
+                    if shift_start_str:
+                        try:
+                            shift_start = datetime.fromisoformat(shift_start_str)
+                            shift_end_str = shift_data.get("shift_end") if isinstance(shift_data, dict) else None
+                            if shift_end_str:
+                                shift_end = datetime.fromisoformat(shift_end_str)
+                            else:
+                                # No end time, assume 9 hour shift
+                                shift_end = shift_start + timedelta(hours=9)
+                            
+                            if shift_start <= record_time <= shift_end:
+                                # This record belongs to this shift
+                                if modality not in shifts_per_hour:
+                                    shifts_per_hour[modality] = {}
+                                if hour not in shifts_per_hour[modality]:
+                                    shifts_per_hour[modality][hour] = set()
+                                shifts_per_hour[modality][hour].add(shift_id)
+                                break
+                        except:
+                            pass
+            except:
+                pass
         
         for record in records:
             study_type = record.get("study_type", "Unknown")
@@ -11107,6 +11648,7 @@ class StatisticsWindow:
             try:
                 rec_time = datetime.fromisoformat(record.get("time_performed", ""))
                 hour = rec_time.hour
+                record_time_str = record.get("time_performed", "")
             except:
                 continue
             
@@ -11140,6 +11682,7 @@ class StatisticsWindow:
                         if hour not in study_count_data[expanded_mod]:
                             study_count_data[expanded_mod][hour] = 0
                         study_count_data[expanded_mod][hour] += 1
+                        track_shift_for_record(expanded_mod, hour, record_time_str)
                 else:
                     # No individual data - try to parse from study_type (e.g., "Multiple CT, XR")
                     # Extract modalities after "Multiple "
@@ -11164,6 +11707,7 @@ class StatisticsWindow:
                             if hour not in study_count_data[mod]:
                                 study_count_data[mod][hour] = 0
                             study_count_data[mod][hour] += 1
+                            track_shift_for_record(mod, hour, record_time_str)
                     else:
                         # Can't expand - treat as single "Multiple" entry
                         # Track duration data
@@ -11180,6 +11724,7 @@ class StatisticsWindow:
                         if hour not in study_count_data[modality]:
                             study_count_data[modality][hour] = 0
                         study_count_data[modality][hour] += 1
+                        track_shift_for_record(modality, hour, record_time_str)
             else:
                 # Regular single study - process normally
                 # Track duration data
@@ -11197,6 +11742,7 @@ class StatisticsWindow:
                 if hour not in study_count_data[modality]:
                     study_count_data[modality][hour] = 0
                 study_count_data[modality][hour] += 1
+                track_shift_for_record(modality, hour, record_time_str)
         
         # Combine modalities from both data sources
         all_modalities = sorted(set(list(efficiency_data.keys()) + list(study_count_data.keys())))
@@ -11334,8 +11880,11 @@ class StatisticsWindow:
                 """Draw all rows, sorted if needed."""
                 rows_canvas.delete("all")
                 
-                # Get radio button state
-                heatmap_mode = self.heatmap_mode.get()
+                # Get radio button state - force update to ensure we get current values
+                try:
+                    heatmap_mode = self.heatmap_mode.get()
+                except:
+                    heatmap_mode = "duration"
                 show_duration = (heatmap_mode == "duration")
                 show_count = (heatmap_mode == "count")
                 
@@ -11367,7 +11916,33 @@ class StatisticsWindow:
                     x += modality_col_width
                     
                     # Hour cells with color coding
-                    for idx, (avg_duration, cell_text) in enumerate(row_cell_data):
+                    # Get avg_count_data which stores pre-calculated averages (total/shifts)
+                    row_avg_count_data = row_data.get('avg_count_data', row_count_data)
+                    
+                    for idx, (avg_duration, _) in enumerate(row_cell_data):
+                        # Rebuild cell text based on current study_count_mode (not the stored one)
+                        current_study_count_mode = self.study_count_mode.get() if hasattr(self, 'study_count_mode') else "average"
+                        total_count = row_count_data[idx] if idx < len(row_count_data) else 0
+                        avg_count = row_avg_count_data[idx] if idx < len(row_avg_count_data) else 0
+                        
+                        # Build cell text dynamically based on current mode - ALWAYS rebuild, don't use stored text
+                        if avg_duration is not None:
+                            duration_str = self._format_duration(avg_duration)
+                            if current_study_count_mode == "average":
+                                # Show average: pre-calculated (total / num_shifts)
+                                cell_text = f"{duration_str} ({avg_count})"
+                            else:
+                                # Show total: use the total study count
+                                cell_text = f"{duration_str} ({total_count})"
+                        elif total_count > 0:
+                            if current_study_count_mode == "average":
+                                # Show average
+                                cell_text = f"({avg_count})"
+                            else:
+                                cell_text = f"({total_count})"
+                        else:
+                            cell_text = "-"
+                        
                         # Determine cell color based on active heatmaps
                         cell_color = data_bg  # Default to background
                         
@@ -11376,11 +11951,9 @@ class StatisticsWindow:
                             cell_color = get_heatmap_color(avg_duration, min_duration, max_duration, duration_range, reverse=False)
                         
                         # Apply study count colors if enabled (blue=high count, red=low count - reversed from duration)
-                        if show_count and idx < len(row_count_data):
-                            count = row_count_data[idx]
-                            if count is not None and count > 0:
-                                # Only count colors enabled (reversed: blue=high, red=low)
-                                cell_color = get_heatmap_color(count, min_count, max_count, count_range, reverse=True)
+                        if show_count and total_count is not None and total_count > 0:
+                            # Only count colors enabled (reversed: blue=high, red=low)
+                            cell_color = get_heatmap_color(total_count, min_count, max_count, count_range, reverse=True)
                         
                         rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
                                                    fill=cell_color, outline=border_color, width=1)
@@ -11406,10 +11979,9 @@ class StatisticsWindow:
                     x = 0
                     rows_canvas.create_rectangle(x, y, x + modality_col_width, y + row_height,
                                                fill=total_bg, outline=border_color, width=1)
-                    # Show label based on study count mode
-                    total_label = study_count_mode if study_count_mode in ["average", "total"] else "average"
+                    # Always show "Total" as the label (not based on study count mode)
                     rows_canvas.create_text(x + modality_col_width//2, y + row_height//2,
-                                           text=total_label, font=('Arial', 9, 'bold'), anchor='center',
+                                           text="Total", font=('Arial', 9, 'bold'), anchor='center',
                                            fill=text_fg)
                     x += modality_col_width
                     
@@ -11423,21 +11995,46 @@ class StatisticsWindow:
                     total_max_count = total_row_data.get('max_count', 0)
                     total_count_range = total_row_data.get('count_range', 1)
                     
-                    for idx, cell_text in enumerate(total_hour_cells):
+                    # Rebuild cell text dynamically based on current study_count_mode
+                    current_study_count_mode = self.study_count_mode.get() if hasattr(self, 'study_count_mode') else "average"
+                    
+                    # Get average counts for total row
+                    total_hour_avg_counts = total_row_data.get('hour_avg_counts', [])
+                    
+                    for idx in range(len(total_hour_cells)):
+                        # Rebuild cell text based on current mode
+                        avg_duration = total_hour_durations[idx] if idx < len(total_hour_durations) else None
+                        total_count = total_hour_counts[idx] if idx < len(total_hour_counts) else None
+                        hour_count = total_count if total_count is not None else 0
+                        avg_count = total_hour_avg_counts[idx] if idx < len(total_hour_avg_counts) else 0
+                        
+                        if avg_duration is not None:
+                            duration_str = self._format_duration(avg_duration)
+                            if current_study_count_mode == "average":
+                                # Show average: pre-calculated (total / num_shifts)
+                                cell_text = f"{duration_str} ({avg_count})"
+                            else:
+                                # Show total study count
+                                cell_text = f"{duration_str} ({hour_count})"
+                        elif hour_count > 0:
+                            if current_study_count_mode == "average":
+                                # Show average
+                                cell_text = f"({avg_count})"
+                            else:
+                                cell_text = f"({hour_count})"
+                        else:
+                            cell_text = "-"
+                        
                         # Determine cell color based on active heatmaps
                         cell_color = total_bg  # Default to background
                         
                         # Apply duration colors if enabled (blue=fast, red=slow)
-                        if show_duration and idx < len(total_hour_durations):
-                            avg_duration = total_hour_durations[idx]
-                            if avg_duration is not None:
-                                cell_color = get_heatmap_color(avg_duration, total_min_duration, total_max_duration, total_duration_range, reverse=False)
+                        if show_duration and avg_duration is not None:
+                            cell_color = get_heatmap_color(avg_duration, total_min_duration, total_max_duration, total_duration_range, reverse=False)
                         
                         # Apply study count colors if enabled (blue=high count, red=low count - reversed from duration)
-                        if show_count and idx < len(total_hour_counts):
-                            count = total_hour_counts[idx]
-                            if count is not None and count > 0:
-                                cell_color = get_heatmap_color(count, total_min_count, total_max_count, total_count_range, reverse=True)
+                        if show_count and hour_count > 0:
+                            cell_color = get_heatmap_color(hour_count, total_min_count, total_max_count, total_count_range, reverse=True)
                         
                         rows_canvas.create_rectangle(x, y, x + hour_col_width, y + row_height,
                                                    fill=cell_color, outline=border_color, width=1)
@@ -11473,7 +12070,8 @@ class StatisticsWindow:
             # Build row data for all modalities
             for modality in all_modalities:
                 modality_durations = []
-                modality_counts_row = []
+                modality_counts_row = []  # Total counts
+                modality_avg_counts_row = []  # Average counts (total / num_shifts)
                 row_cell_data = []
                 
                 for hour in hours_list:
@@ -11489,19 +12087,26 @@ class StatisticsWindow:
                     study_count = study_count_data.get(modality, {}).get(hour, 0) if modality in study_count_data else 0
                     modality_counts_row.append(study_count)
                     
+                    # Calculate average: total studies / number of shifts with data in this hour
+                    num_shifts_with_data = len(shifts_per_hour.get(modality, {}).get(hour, set())) if modality in shifts_per_hour else 0
+                    if num_shifts_with_data == 0:
+                        num_shifts_with_data = 1  # Avoid division by zero, assume at least 1 shift
+                    avg_studies = round(study_count / num_shifts_with_data) if study_count > 0 else 0
+                    modality_avg_counts_row.append(avg_studies)
+                    
                     # Build cell text based on study count mode
                     if avg_duration is not None:
                         duration_str = self._format_duration(avg_duration)
                         if study_count_mode == "average":
-                            # Show average: divide total count by number of hours in period (approximate)
-                            # For now, just show the count as-is since we don't have shift count
-                            cell_text = f"{duration_str} ({duration_count})"
+                            # Show average: studies per hour averaged across shifts
+                            cell_text = f"{duration_str} ({avg_studies})"
                         else:
                             # Show total: use the total study count
                             cell_text = f"{duration_str} ({study_count})"
                     elif study_count > 0:
                         if study_count_mode == "average":
-                            cell_text = f"({duration_count})" if duration_count > 0 else f"({study_count})"
+                            # Average: studies per hour averaged across shifts
+                            cell_text = f"({avg_studies})"
                         else:
                             cell_text = f"({study_count})"
                     else:
@@ -11533,7 +12138,8 @@ class StatisticsWindow:
                 row_data_list.append({
                     'modality': modality,
                     'cell_data': row_cell_data,
-                    'count_data': modality_counts_row,
+                    'count_data': modality_counts_row,  # Total counts
+                    'avg_count_data': modality_avg_counts_row,  # Average counts (total / num_shifts)
                     'min_duration': min_duration,
                     'max_duration': max_duration,
                     'duration_range': duration_range,
@@ -11546,11 +12152,17 @@ class StatisticsWindow:
             if efficiency_data:
                 total_hour_cells = []
                 total_hour_durations = []
-                total_hour_counts = []
+                total_hour_counts = []  # Total counts
+                total_hour_avg_counts = []  # Average counts (total / num_shifts)
+                total_shifts_per_hour = []  # Number of shifts with data in each hour
+                
                 for hour in hours_list:
                     hour_durations = []
                     hour_count = 0
                     hour_duration_count = 0
+                    # Track unique shifts for this hour across all modalities
+                    hour_shift_ids = set()
+                    
                     for mod in efficiency_data.keys():
                         if hour in efficiency_data[mod]:
                             hour_durations.extend(efficiency_data[mod][hour])
@@ -11558,25 +12170,37 @@ class StatisticsWindow:
                         # Count all studies for this hour across all modalities
                         if mod in study_count_data and hour in study_count_data[mod]:
                             hour_count += study_count_data[mod][hour]
+                        # Collect shift IDs for this hour
+                        if mod in shifts_per_hour and hour in shifts_per_hour[mod]:
+                            hour_shift_ids.update(shifts_per_hour[mod][hour])
                     
+                    num_shifts = len(hour_shift_ids) if hour_shift_ids else 0
+                    if num_shifts == 0:
+                        num_shifts = 1  # Avoid division by zero
+                    avg_count = round(hour_count / num_shifts) if hour_count > 0 else 0
+                    
+                    total_hour_counts.append(hour_count if hour_count > 0 else None)
+                    total_hour_avg_counts.append(avg_count)
+                    total_shifts_per_hour.append(num_shifts)
+                    
+                    # Build cell text based on study count mode (will be rebuilt in draw_rows)
                     if hour_durations:
                         avg_duration = sum(hour_durations) / len(hour_durations)
                         duration_str = self._format_duration(avg_duration)
                         if study_count_mode == "average":
-                            # Show count of studies with duration data
-                            cell_text = f"{duration_str} ({hour_duration_count})"
+                            cell_text = f"{duration_str} ({avg_count})"
                         else:
-                            # Show total study count
                             cell_text = f"{duration_str} ({hour_count})"
                         total_hour_durations.append(avg_duration)
                     else:
-                        if study_count_mode == "total" and hour_count > 0:
+                        if study_count_mode == "average":
+                            cell_text = f"({avg_count})" if avg_count > 0 else "-"
+                        elif study_count_mode == "total" and hour_count > 0:
                             cell_text = f"({hour_count})"
                         else:
                             cell_text = "-"
                         total_hour_durations.append(None)
                     
-                    total_hour_counts.append(hour_count if hour_count > 0 else None)
                     total_hour_cells.append(cell_text)
                 
                 # Calculate min/max for total row duration colors
@@ -11602,7 +12226,8 @@ class StatisticsWindow:
                 total_row_data = {
                     'hour_cells': total_hour_cells,
                     'hour_durations': total_hour_durations,
-                    'hour_counts': total_hour_counts,
+                    'hour_counts': total_hour_counts,  # Total counts
+                    'hour_avg_counts': total_hour_avg_counts,  # Average counts (total / num_shifts)
                     'min_duration': total_min_duration,
                     'max_duration': total_max_duration,
                     'duration_range': total_duration_range,
@@ -11613,6 +12238,12 @@ class StatisticsWindow:
             
             # Initial draw
             draw_rows()
+            
+            # Store reference to draw_rows so it can be called when radio buttons change
+            # This allows redrawing without full refresh_data() call
+            if not hasattr(self, '_efficiency_redraw_functions'):
+                self._efficiency_redraw_functions = []
+            self._efficiency_redraw_functions.append(draw_rows)
             
             # Pack canvas and scrollbar
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -12135,6 +12766,23 @@ class StatisticsWindow:
         self._summary_table.add_row({'metric': 'Total RVU', 'value': f"{total_rvu:.1f}"})
         self._summary_table.add_row({'metric': 'Average RVU per Study', 'value': f"{avg_rvu:.2f}"})
         
+        # Calculate compensation above average RVU per study (in dollars per hour)
+        above_avg_records = [r for r in records if r.get("rvu", 0) > avg_rvu]
+        if above_avg_records and hours > 0:
+            # Calculate total compensation for above-average studies
+            above_avg_compensation = sum(self._calculate_study_compensation(r) for r in above_avg_records)
+            # Calculate compensation per hour
+            above_avg_comp_per_hour = above_avg_compensation / hours
+            self._summary_table.add_row({
+                'metric': 'Hourly compensation rate',
+                'value': f"${above_avg_comp_per_hour:,.2f}/hr"
+            })
+        else:
+            self._summary_table.add_row({
+                'metric': 'Hourly compensation rate',
+                'value': 'N/A'
+            })
+        
         # Calculate XR vs CT efficiency metrics
         xr_records = []
         ct_records = []
@@ -12148,6 +12796,28 @@ class StatisticsWindow:
             elif study_type.startswith("CT"):
                 ct_records.append(r)
         
+        # Get average compensation rate from compensation_rates structure
+        # Use a representative rate (e.g., weekday partner 11pm = 40, or average)
+        compensation_rates = self.data_manager.data.get("compensation_rates", {})
+        compensation_rate = 0
+        if compensation_rates:
+            # Try to get a representative rate (weekday partner 11pm as default, or average)
+            try:
+                role = self.data_manager.data["settings"].get("role", "Partner").lower()
+                role_key = "partner" if role == "partner" else "assoc"
+                # Use 11pm weekday rate as representative, or calculate average
+                if "weekday" in compensation_rates and role_key in compensation_rates["weekday"]:
+                    rates_dict = compensation_rates["weekday"][role_key]
+                    # Use 11pm rate, or calculate average of all rates
+                    compensation_rate = rates_dict.get("11pm", 0)
+                    if compensation_rate == 0:
+                        # Calculate average if 11pm not found
+                        all_rates = [v for v in rates_dict.values() if isinstance(v, (int, float)) and v > 0]
+                        compensation_rate = sum(all_rates) / len(all_rates) if all_rates else 0
+            except Exception as e:
+                logger.debug(f"Error getting compensation rate: {e}")
+                compensation_rate = 0
+        
         # Calculate XR efficiency
         if xr_records:
             xr_total_rvu = sum(r.get("rvu", 0) for r in xr_records)
@@ -12155,15 +12825,20 @@ class StatisticsWindow:
             xr_rvu_per_minute = xr_total_rvu / xr_total_minutes if xr_total_minutes > 0 else 0
             
             # Calculate studies and time to reach $100 compensation
-            # Need to get compensation rate from settings
-            compensation_rate = self.data_manager.data.get("settings", {}).get("compensation_rate", 0)
-            if compensation_rate > 0:
+            # Always calculate time, even if compensation rate is 0 (will show N/A for studies)
+            if compensation_rate > 0 and xr_rvu_per_minute > 0:
                 target_rvu = 100.0 / compensation_rate  # RVU needed for $100
                 xr_avg_rvu_per_study = xr_total_rvu / len(xr_records) if xr_records else 0
                 xr_studies_for_100 = target_rvu / xr_avg_rvu_per_study if xr_avg_rvu_per_study > 0 else 0
-                xr_avg_minutes_per_study = xr_total_minutes / len(xr_records) if xr_records else 0
-                xr_time_for_100_minutes = xr_studies_for_100 * xr_avg_minutes_per_study
+                # Calculate time directly from RVU per minute rate (more accurate)
+                xr_time_for_100_minutes = target_rvu / xr_rvu_per_minute if xr_rvu_per_minute > 0 else 0
                 xr_time_for_100_formatted = self._format_duration(xr_time_for_100_minutes * 60) if xr_time_for_100_minutes > 0 else "N/A"
+            elif xr_rvu_per_minute > 0:
+                # Calculate time to reach 100 RVU if compensation rate not set
+                target_rvu = 100.0
+                xr_time_for_100_minutes = target_rvu / xr_rvu_per_minute if xr_rvu_per_minute > 0 else 0
+                xr_time_for_100_formatted = self._format_duration(xr_time_for_100_minutes * 60) if xr_time_for_100_minutes > 0 else "N/A"
+                xr_studies_for_100 = 0  # Can't calculate without rate
             else:
                 xr_studies_for_100 = 0
                 xr_time_for_100_formatted = "N/A"
@@ -12179,14 +12854,20 @@ class StatisticsWindow:
             ct_rvu_per_minute = ct_total_rvu / ct_total_minutes if ct_total_minutes > 0 else 0
             
             # Calculate studies and time to reach $100 compensation
-            compensation_rate = self.data_manager.data.get("settings", {}).get("compensation_rate", 0)
-            if compensation_rate > 0:
+            # Always calculate time, even if compensation rate is 0 (will show N/A for studies)
+            if compensation_rate > 0 and ct_rvu_per_minute > 0:
                 target_rvu = 100.0 / compensation_rate  # RVU needed for $100
                 ct_avg_rvu_per_study = ct_total_rvu / len(ct_records) if ct_records else 0
                 ct_studies_for_100 = target_rvu / ct_avg_rvu_per_study if ct_avg_rvu_per_study > 0 else 0
-                ct_avg_minutes_per_study = ct_total_minutes / len(ct_records) if ct_records else 0
-                ct_time_for_100_minutes = ct_studies_for_100 * ct_avg_minutes_per_study
+                # Calculate time directly from RVU per minute rate (more accurate)
+                ct_time_for_100_minutes = target_rvu / ct_rvu_per_minute if ct_rvu_per_minute > 0 else 0
                 ct_time_for_100_formatted = self._format_duration(ct_time_for_100_minutes * 60) if ct_time_for_100_minutes > 0 else "N/A"
+            elif ct_rvu_per_minute > 0:
+                # Calculate time to reach 100 RVU if compensation rate not set
+                target_rvu = 100.0
+                ct_time_for_100_minutes = target_rvu / ct_rvu_per_minute if ct_rvu_per_minute > 0 else 0
+                ct_time_for_100_formatted = self._format_duration(ct_time_for_100_minutes * 60) if ct_time_for_100_minutes > 0 else "N/A"
+                ct_studies_for_100 = 0  # Can't calculate without rate
             else:
                 ct_studies_for_100 = 0
                 ct_time_for_100_formatted = "N/A"
@@ -12195,26 +12876,16 @@ class StatisticsWindow:
             ct_studies_for_100 = 0
             ct_time_for_100_formatted = "N/A"
         
-        # Add XR vs CT efficiency metrics
+        # Add XR vs CT efficiency metrics (grouped: RVU/min together, then to $100 together)
         self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
         self._summary_table.add_row({'metric': 'XR vs CT Efficiency:', 'value': ''})
         
+        # Group RVU per minute together
         if xr_records:
             self._summary_table.add_row({
                 'metric': '  XR RVU per Minute',
                 'value': f"{xr_rvu_per_minute:.3f}"
             })
-            # Always show the "to $100" row if we have XR records
-            if xr_studies_for_100 > 0 and xr_time_for_100_formatted != "N/A":
-                self._summary_table.add_row({
-                    'metric': '  XR to $100',
-                    'value': f"{xr_studies_for_100:.1f} studies, {xr_time_for_100_formatted}"
-                })
-            else:
-                self._summary_table.add_row({
-                    'metric': '  XR to $100',
-                    'value': 'N/A (compensation rate not set)'
-                })
         else:
             self._summary_table.add_row({'metric': '  XR RVU per Minute', 'value': 'N/A (no XR studies)'})
         
@@ -12223,19 +12894,45 @@ class StatisticsWindow:
                 'metric': '  CT RVU per Minute',
                 'value': f"{ct_rvu_per_minute:.3f}"
             })
-            # Always show the "to $100" row if we have CT records
-            if ct_studies_for_100 > 0 and ct_time_for_100_formatted != "N/A":
+        else:
+            self._summary_table.add_row({'metric': '  CT RVU per Minute', 'value': 'N/A (no CT studies)'})
+        
+        # Group "to $100" together
+        if xr_records:
+            if compensation_rate > 0 and xr_studies_for_100 > 0 and xr_time_for_100_formatted != "N/A":
+                self._summary_table.add_row({
+                    'metric': '  XR to $100',
+                    'value': f"{xr_studies_for_100:.1f} studies, {xr_time_for_100_formatted}"
+                })
+            elif xr_time_for_100_formatted != "N/A":
+                # Show time even if compensation rate not set
+                self._summary_table.add_row({
+                    'metric': '  XR to $100',
+                    'value': f"{xr_time_for_100_formatted} (rate not set)"
+                })
+            else:
+                self._summary_table.add_row({
+                    'metric': '  XR to $100',
+                    'value': 'N/A'
+                })
+        
+        if ct_records:
+            if compensation_rate > 0 and ct_studies_for_100 > 0 and ct_time_for_100_formatted != "N/A":
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
                     'value': f"{ct_studies_for_100:.1f} studies, {ct_time_for_100_formatted}"
                 })
+            elif ct_time_for_100_formatted != "N/A":
+                # Show time even if compensation rate not set
+                self._summary_table.add_row({
+                    'metric': '  CT to $100',
+                    'value': f"{ct_time_for_100_formatted} (rate not set)"
+                })
             else:
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
-                    'value': 'N/A (compensation rate not set)'
+                    'value': 'N/A'
                 })
-        else:
-            self._summary_table.add_row({'metric': '  CT RVU per Minute', 'value': 'N/A (no CT studies)'})
         
         self._summary_table.add_row({'metric': '', 'value': ''})  # Spacer
         
@@ -12366,6 +13063,37 @@ class StatisticsWindow:
         total_studies = len(records)
         total_rvu = sum(r.get("rvu", 0) for r in records)
         
+        # Calculate hours elapsed
+        hours_elapsed = 0.0
+        if self.selected_period.get() == "current_shift" and self.app and self.app.shift_start:
+            # For current shift, use actual elapsed time
+            hours_elapsed = (datetime.now() - self.app.shift_start).total_seconds() / 3600
+        elif records:
+            # For historical periods, calculate from records' time range
+            try:
+                times = []
+                for r in records:
+                    time_str = r.get("time_finished") or r.get("time_performed", "")
+                    if time_str:
+                        times.append(datetime.fromisoformat(time_str))
+                
+                if len(times) > 1:
+                    earliest = min(times)
+                    latest = max(times)
+                    hours_elapsed = (latest - earliest).total_seconds() / 3600
+                elif len(times) == 1:
+                    # Single record - use shift length as fallback
+                    hours_elapsed = self.app.data_manager.data["settings"].get("shift_length_hours", 9.0) if self.app else 9.0
+            except (ValueError, AttributeError):
+                # Fallback to shift length if time parsing fails
+                hours_elapsed = self.app.data_manager.data["settings"].get("shift_length_hours", 9.0) if self.app else 9.0
+        else:
+            # No records - use shift length as fallback
+            hours_elapsed = self.app.data_manager.data["settings"].get("shift_length_hours", 9.0) if self.app else 9.0
+        
+        # Calculate compensation per hour
+        comp_per_hour = total_compensation / hours_elapsed if hours_elapsed > 0 else 0.0
+        
         # Get compensation color from theme (dark green for light mode, lighter green for dark mode)
         comp_color = "dark green"
         if self.app and hasattr(self.app, 'theme_colors'):
@@ -12376,6 +13104,10 @@ class StatisticsWindow:
         self._compensation_table.add_row({'category': 'Total RVU', 'value': f"{total_rvu:.2f}"})
         self._compensation_table.add_row(
             {'category': 'Total Compensation', 'value': f"${total_compensation:,.2f}"},
+            cell_text_colors={'value': comp_color}
+        )
+        self._compensation_table.add_row(
+            {'category': 'Compensation per Hour', 'value': f"${comp_per_hour:,.2f}/hr"},
             cell_text_colors={'value': comp_color}
         )
         self._compensation_table.add_row({'category': '', 'value': ''})  # Spacer
