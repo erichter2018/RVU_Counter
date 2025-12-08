@@ -269,8 +269,8 @@ def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> 
 
 
 # Version information
-VERSION = "1.4"
-VERSION_DATE = "2025-12-06"
+VERSION = "1.4.1"
+VERSION_DATE = "2025-12-07"
 
 
 # =============================================================================
@@ -1087,11 +1087,14 @@ RVU_TABLE = {
     "Ultrasound transvaginal complete": 1.38,
     "US Arterial Lower Extremity": 1.2,
     "US Other": 0.68,
-    "XR": 0.3,
+    "XR Other": 0.3,
+    "XR Chest": 0.3,
     "CT Brain": 0.9,
+    "CT Chest": 1.0,
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
+    "CT Spine": 1.0,
     "CTA Runoff with Abdo/Pelvis": 2.75,
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
@@ -1099,6 +1102,7 @@ RVU_TABLE = {
     "CT TL Spine": 2.0,
     "CT Face": 1.0,
     "XR Abdomen": 0.3,
+    "XR Acute Abdomen": 0.6,
     "XR MSK": 0.3,
 }
 
@@ -2106,13 +2110,26 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         return classification_match_name, classification_match_rvu
     
     # SECOND: Check direct/exact lookups (exact procedure name matches)
+    # Direct lookups can map to either:
+    # 1. A study type name (string) - will look up RVU from rvu_table
+    # 2. An RVU value (number) - legacy format, returns procedure name as study type
     if direct_lookups:
         # Try exact match (case-insensitive)
-        for lookup_procedure, rvu_value in direct_lookups.items():
+        for lookup_procedure, lookup_value in direct_lookups.items():
             if lookup_procedure.lower().strip() == procedure_lower:
-                direct_match_rvu = rvu_value
-                direct_match_name = lookup_procedure
-                logger.debug(f"Matched direct lookup: {procedure_text} -> {rvu_value} RVU")
+                # Check if lookup_value is a study type name (string) or RVU (number)
+                if isinstance(lookup_value, str):
+                    # It's a study type name - look up RVU from rvu_table
+                    study_type_name = lookup_value
+                    rvu_value = rvu_table.get(study_type_name, 0.0)
+                    direct_match_name = study_type_name
+                    direct_match_rvu = rvu_value
+                    logger.debug(f"Matched direct lookup: {procedure_text} -> {study_type_name} ({rvu_value} RVU)")
+                else:
+                    # Legacy format: it's an RVU value, return procedure name as study type
+                    direct_match_rvu = lookup_value
+                    direct_match_name = lookup_procedure
+                    logger.debug(f"Matched direct lookup (legacy): {procedure_text} -> {lookup_value} RVU")
                 break
     
     # If direct lookup matched, return it
@@ -2981,10 +2998,12 @@ class RVUData:
         - Updates: rvu_table, classification_rules, direct_lookups (to get bug fixes)
         - Adds: any new settings keys from the new version
         """
-        # Get bundled/default settings first (from new version)
+        # Get bundled/default settings from the settings file
+        # Priority: 1) Bundled file (if frozen), 2) Local file (if script)
+        # There are NO hardcoded defaults - the settings file MUST exist
         default_data = None
-        bundled_settings_file = None
         
+        # Try bundled file first (when frozen)
         if self.is_frozen:
             try:
                 bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
@@ -2995,39 +3014,27 @@ class RVUData:
             except Exception as e:
                 logger.error(f"Error loading bundled settings file: {e}")
         
-        # If no bundled file, use hardcoded defaults
+        # Try local file (when running as script, or if bundled file not found)
         if default_data is None:
-            default_data = {
-                "settings": {
-                    "auto_start": False,
-                    "show_total": True,
-                    "show_avg": True,
-                    "show_last_hour": True,
-                    "show_last_full_hour": True,
-                    "show_projected": True,
-                    "show_projected_shift": True,
-                    "show_comp_projected_shift": True,
-                    "show_pace_car": False,
-                    "pace_goal_rvu_per_hour": 15.0,
-                    "pace_goal_shift_hours": 9.0,
-                    "pace_goal_total_rvu": 135.0,
-                    "pace_comparison_mode": "prior",
-                    "shift_length_hours": 9,
-                    "min_study_seconds": 5,
-                    "ignore_duplicate_accessions": True,
-                    "data_source": "PowerScribe",
-                    "show_time": False,
-                    "stay_on_top": True,
-                },
-                "direct_lookups": {},
-                "rvu_table": RVU_TABLE.copy(),
-                "classification_rules": {},
-                "window_positions": {
-                    "main": {"x": 50, "y": 50},
-                    "settings": {"x": 100, "y": 100},
-                    "statistics": {"x": 150, "y": 150}
-                }
-            }
+            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.json")
+            if os.path.exists(local_settings_file):
+                try:
+                    with open(local_settings_file, 'r') as f:
+                        default_data = json.load(f)
+                        logger.info(f"Loaded default settings from local file: {local_settings_file}")
+                except Exception as e:
+                    logger.error(f"Error loading local settings file: {e}")
+        
+        # Settings file MUST exist - fail if it doesn't
+        if default_data is None:
+            error_msg = (
+                f"CRITICAL ERROR: Could not load settings file!\n"
+                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.json')}\n"
+                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.json')}\n"
+                f"The settings file must be bundled with the app or present in the script directory."
+            )
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
         
         # Try to load user's existing settings file
         user_data = None
@@ -3092,11 +3099,40 @@ class RVUData:
                             if day_type in default_comp and role in default_comp[day_type]:
                                 merged_data["compensation_rates"][day_type][role] = default_comp[day_type][role]
         
-        # Update RVU-related settings (replace with new versions to get bug fixes)
-        merged_data["rvu_table"] = default_data.get("rvu_table", RVU_TABLE.copy())
-        merged_data["classification_rules"] = default_data.get("classification_rules", {})
-        merged_data["direct_lookups"] = default_data.get("direct_lookups", {})
-        logger.info("Updated RVU table, classification rules, and direct lookups from new version")
+        # RVU table - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_rvu_table = user_data.get("rvu_table", {})
+        if user_rvu_table:
+            merged_data["rvu_table"] = user_rvu_table.copy()
+            logger.info(f"Preserved user RVU table with {len(user_rvu_table)} entries (no defaults added)")
+        else:
+            # Only use defaults if user has NO rvu_table at all
+            merged_data["rvu_table"] = default_data.get("rvu_table", RVU_TABLE.copy())
+            logger.info("No user RVU table found, using defaults")
+        
+        # Classification rules - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_classification_rules = user_data.get("classification_rules", {})
+        if user_classification_rules:
+            merged_data["classification_rules"] = user_classification_rules.copy()
+            logger.info(f"Preserved user classification rules with {len(user_classification_rules)} study types (no defaults added)")
+        else:
+            # Only use defaults if user has NO classification_rules at all
+            default_classification_rules = default_data.get("classification_rules", {})
+            merged_data["classification_rules"] = default_classification_rules.copy() if default_classification_rules else {}
+            logger.info("No user classification rules found, using defaults")
+        
+        # Direct lookups - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_direct_lookups = user_data.get("direct_lookups", {})
+        if user_direct_lookups:
+            merged_data["direct_lookups"] = user_direct_lookups.copy()
+            logger.info(f"Preserved user direct lookups with {len(user_direct_lookups)} entries (no defaults added)")
+        else:
+            # Only use defaults if user has NO direct_lookups at all
+            default_direct_lookups = default_data.get("direct_lookups", {})
+            merged_data["direct_lookups"] = default_direct_lookups.copy() if default_direct_lookups else {}
+            logger.info("No user direct lookups found, using defaults")
         
         # Save merged settings back to file
         try:
@@ -3503,6 +3539,17 @@ class StudyTracker:
             self.active_studies[accession]["last_seen"] = timestamp
             if patient_class:
                 self.active_studies[accession]["patient_class"] = patient_class
+            # If procedure was empty/Unknown before and now we have a valid procedure, update it
+            existing_procedure = self.active_studies[accession].get("procedure", "")
+            existing_study_type = self.active_studies[accession].get("study_type", "")
+            if (not existing_procedure or existing_procedure.lower() in ["n/a", "na", "no report", ""] or 
+                existing_study_type == "Unknown") and procedure and procedure.lower() not in ["n/a", "na", "no report", ""]:
+                # Update procedure and re-match study type
+                study_type, rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+                self.active_studies[accession]["procedure"] = procedure
+                self.active_studies[accession]["study_type"] = study_type
+                self.active_studies[accession]["rvu"] = rvu
+                logger.info(f"Updated study procedure and type: {accession} - {study_type} ({rvu} RVU) (was: {existing_study_type})")
         else:
             # New study - use direct lookups, classification rules if provided
             study_type, rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
@@ -5075,24 +5122,52 @@ class RVUCounterApp:
         
         time_performed = self.multi_accession_start_time.isoformat() if self.multi_accession_start_time else current_time.isoformat()
         
-        # Extract pure accession numbers for group ID and recording
-        # Handle both old format (key is accession number) and new format (key has "accession_number" field)
-        accession_numbers = []
+        # DEDUPLICATE: Build a map from accession NUMBER to best data
+        # This prevents recording the same accession multiple times when entries have different keys
+        # (e.g., same accession appears with different procedure text in entry format "ACC (PROC)")
+        accession_to_data = {}  # accession_number -> {entry, data}
+        
         for entry in all_entries:
             data = self.multi_accession_data[entry]
+            
+            # Extract pure accession number
             if data.get("accession_number"):
-                # New format: explicit accession_number field
-                accession_numbers.append(data["accession_number"])
+                acc_num = data["accession_number"]
             elif '(' in entry and ')' in entry:
-                # Entry is "ACC (PROC)" format - parse it
                 acc_match = re.match(r'^([^(]+)', entry)
-                if acc_match:
-                    accession_numbers.append(acc_match.group(1).strip())
-                else:
-                    accession_numbers.append(entry.strip())
+                acc_num = acc_match.group(1).strip() if acc_match else entry.strip()
             else:
-                # Entry is already just the accession number
-                accession_numbers.append(entry.strip())
+                acc_num = entry.strip()
+            
+            # Check if we already have data for this accession number
+            if acc_num in accession_to_data:
+                # Keep the entry with more information (non-Unknown study type, higher RVU)
+                existing_data = accession_to_data[acc_num]["data"]
+                existing_unknown = existing_data.get("study_type", "Unknown") == "Unknown"
+                new_unknown = data.get("study_type", "Unknown") == "Unknown"
+                
+                # Prefer known study type over Unknown
+                if existing_unknown and not new_unknown:
+                    accession_to_data[acc_num] = {"entry": entry, "data": data}
+                    logger.debug(f"Replaced duplicate accession {acc_num}: Unknown -> {data.get('study_type')}")
+                # If both known or both unknown, keep higher RVU
+                elif existing_unknown == new_unknown and data.get("rvu", 0) > existing_data.get("rvu", 0):
+                    accession_to_data[acc_num] = {"entry": entry, "data": data}
+                    logger.debug(f"Replaced duplicate accession {acc_num}: higher RVU {data.get('rvu')}")
+                else:
+                    logger.debug(f"Skipping duplicate accession {acc_num}: keeping existing {existing_data.get('study_type')}")
+            else:
+                accession_to_data[acc_num] = {"entry": entry, "data": data}
+        
+        # Get unique accession numbers (deduplicated)
+        accession_numbers = list(accession_to_data.keys())
+        num_unique_studies = len(accession_numbers)
+        
+        if num_unique_studies < num_studies:
+            logger.info(f"Deduplicated multi-accession: {num_studies} entries -> {num_unique_studies} unique accessions")
+        
+        # Recalculate duration per study based on unique count
+        duration_per_study = total_duration / num_unique_studies if num_unique_studies > 0 else 0
         
         # Generate a unique group ID to link these studies for duplicate detection
         multi_accession_group_id = "_".join(sorted(accession_numbers))
@@ -5100,18 +5175,9 @@ class RVUCounterApp:
         total_rvu = 0
         recorded_count = 0
         
-        # Record each study individually
-        # NOTE: We do NOT skip based on seen_accessions here because:
-        # 1. seen_accessions gets polluted during multi-accession entry when checking for display purposes
-        # 2. _record_or_update_study already handles duplicates correctly:
-        #    - If record exists with lower duration: updates it
-        #    - If record exists with higher duration: skips (logs debug message)
-        #    - If no record exists: creates new one
-        for i, entry in enumerate(all_entries):
-            data = self.multi_accession_data[entry]
-            
-            # Get the pure accession number
-            accession = accession_numbers[i] if i < len(accession_numbers) else entry
+        # Record each UNIQUE study
+        for accession in accession_numbers:
+            data = accession_to_data[accession]["data"]
             
             study_record = {
                 "accession": accession,
@@ -5125,7 +5191,7 @@ class RVUCounterApp:
                 # Track that this was from a multi-accession session
                 "from_multi_accession": True,
                 "multi_accession_group": multi_accession_group_id,
-                "multi_accession_count": num_studies,
+                "multi_accession_count": num_unique_studies,
             }
             
             total_rvu += data.get("rvu", 0)
@@ -6087,16 +6153,18 @@ class RVUCounterApp:
                     # Check if any of the new accessions were being tracked as single
                     # If so, migrate their data to multi-accession tracking
                     # Must extract accession numbers since multiple_accessions may be "ACC (PROC)" format
+                    # Track which accession NUMBERS we've already migrated to prevent duplicates
+                    migrated_acc_nums = set()
+                    
                     for acc_entry in multiple_accessions:
                         # Extract just the accession number from "ACC (PROC)" format
-                        if '(' in acc_entry and ')' in acc_entry:
-                            acc_match = re.match(r'^([^(]+)', acc_entry)
-                            if acc_match:
-                                acc_num = acc_match.group(1).strip()
-                            else:
-                                acc_num = acc_entry.strip()
-                        else:
-                            acc_num = acc_entry.strip()
+                        acc_num = _extract_accession_number(acc_entry)
+                        
+                        # Skip if we've already processed this accession NUMBER
+                        # (could appear multiple times with different procedure text)
+                        if acc_num in migrated_acc_nums:
+                            logger.debug(f"Skipping duplicate accession {acc_num} during initial migration")
+                            continue
                         
                         if acc_num in self.tracker.active_studies:
                             study = self.tracker.active_studies[acc_num]
@@ -6110,6 +6178,7 @@ class RVUCounterApp:
                             }
                             # Remove from active_studies to prevent completion
                             del self.tracker.active_studies[acc_num]
+                            migrated_acc_nums.add(acc_num)
                             logger.info(f"Migrated {acc_num} from single to multi-accession tracking (entry: {acc_entry})")
                     
                     logger.info(f"Started multi-accession mode with {len(multiple_accessions)} accessions")
@@ -6173,40 +6242,53 @@ class RVUCounterApp:
                         direct_lookups = self.data_manager.data.get("direct_lookups", {})
                         study_type, rvu = match_study_type(procedure, self.data_manager.data["rvu_table"], classification_rules, direct_lookups)
                         
+                        # Build set of accession NUMBERS already collected (not entry keys)
+                        # This prevents adding the same accession twice under different entry formats
+                        collected_acc_nums = set()
+                        for entry, data in self.multi_accession_data.items():
+                            existing_acc_num = data.get("accession_number") or _extract_accession_number(entry)
+                            collected_acc_nums.add(existing_acc_num)
+                        
                         # Find which accession this procedure belongs to
                         # Strategy: 
                         # 1. Try to match by procedure name in the listbox entry (format: "ACC (PROC)")
                         # 2. Fall back to first accession without data
                         matched_acc = None
+                        matched_acc_num = None
                         
                         # First, try to match by procedure text in the listbox entry
                         for acc_entry in multiple_accessions:
-                            if acc_entry not in self.multi_accession_data:
-                                # Check if procedure is embedded in the entry (format: "ACC (PROC)")
-                                if '(' in acc_entry and ')' in acc_entry:
-                                    entry_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', acc_entry)
-                                    if entry_match:
-                                        embedded_proc = entry_match.group(2).strip()
-                                        # Check if embedded procedure matches current procedure (case-insensitive partial match)
-                                        if (embedded_proc.upper() in procedure.upper() or 
-                                            procedure.upper() in embedded_proc.upper()):
-                                            matched_acc = acc_entry
-                                            break
+                            # Extract accession number from entry
+                            entry_acc_num = _extract_accession_number(acc_entry)
+                            
+                            # Skip if this accession NUMBER is already collected
+                            if entry_acc_num in collected_acc_nums:
+                                continue
+                                
+                            # Check if procedure is embedded in the entry (format: "ACC (PROC)")
+                            if '(' in acc_entry and ')' in acc_entry:
+                                entry_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', acc_entry)
+                                if entry_match:
+                                    embedded_proc = entry_match.group(2).strip()
+                                    # Check if embedded procedure matches current procedure (case-insensitive partial match)
+                                    if (embedded_proc.upper() in procedure.upper() or 
+                                        procedure.upper() in embedded_proc.upper()):
+                                        matched_acc = acc_entry
+                                        matched_acc_num = entry_acc_num
+                                        break
                         
-                        # Fall back: assign to first accession without data
+                        # Fall back: assign to first accession NUMBER not yet collected
                         if not matched_acc:
                             for acc_entry in multiple_accessions:
-                                if acc_entry not in self.multi_accession_data:
+                                entry_acc_num = _extract_accession_number(acc_entry)
+                                if entry_acc_num not in collected_acc_nums:
                                     matched_acc = acc_entry
+                                    matched_acc_num = entry_acc_num
                                     break
                         
                         if matched_acc:
-                            # Extract pure accession number for recording
-                            if '(' in matched_acc and ')' in matched_acc:
-                                acc_match = re.match(r'^([^(]+)', matched_acc)
-                                acc_num = acc_match.group(1).strip() if acc_match else matched_acc.strip()
-                            else:
-                                acc_num = matched_acc.strip()
+                            # Use the extracted accession number
+                            acc_num = matched_acc_num if matched_acc_num else _extract_accession_number(matched_acc)
                             
                             self.multi_accession_data[matched_acc] = {
                                 "procedure": procedure,
@@ -6384,12 +6466,16 @@ class RVUCounterApp:
                                 logger.info(f"Using cached pending study data for {accession}: {study_procedure}")
                     
                     if study_procedure and study_procedure.lower() not in ["n/a", "na", "no report", ""]:
-                        logger.info(f"Adding study before N/A check: {accession} - {study_procedure}")
-                        self.tracker.add_study(accession, study_procedure, current_time, 
-                                             rvu_table, classification_rules, direct_lookups, 
-                                             pending_patient_class)
-                        self.tracker.mark_seen(accession)
-                        # Remove from pending after adding
+                        # Check if study is already recorded before adding from pending cache
+                        if not self.tracker.is_already_recorded(accession, self.data_manager):
+                            logger.info(f"Adding study before N/A check: {accession} - {study_procedure}")
+                            self.tracker.add_study(accession, study_procedure, current_time, 
+                                                 rvu_table, classification_rules, direct_lookups, 
+                                                 pending_patient_class)
+                            self.tracker.mark_seen(accession)
+                        else:
+                            logger.debug(f"Skipping adding {accession} from pending cache - already recorded")
+                        # Remove from pending after processing (whether added or skipped)
                         with self._ps_lock:
                             if accession in self._pending_studies:
                                 del self._pending_studies[accession]
@@ -6841,6 +6927,17 @@ class RVUCounterApp:
                 if accession and accession in self.tracker.seen_accessions:
                     self.tracker.seen_accessions.remove(accession)
                     logger.info(f"Removed {accession} from seen_accessions - can be tracked again if reopened")
+                
+                # Remove from active_studies if currently being tracked
+                if accession and accession in self.tracker.active_studies:
+                    del self.tracker.active_studies[accession]
+                    logger.info(f"Removed {accession} from active_studies tracking")
+                
+                # Remove from pending_studies cache
+                with self._ps_lock:
+                    if accession and accession in self._pending_studies:
+                        del self._pending_studies[accession]
+                        logger.info(f"Removed {accession} from pending_studies cache")
                 
                 # Save to sync memory changes to database
                 self.data_manager.save()

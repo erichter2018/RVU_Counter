@@ -211,18 +211,16 @@ if RegExMatch(PriorOriginal, TimezonePattern, PriorTime)
 StringCaseSense, ON
 
 ; Handle various status flags - normalize to SIGNXED for processing
-StatusFlags := ["IN_PROGRESS", "NO_HL7_ORDER", "UNKNOWN", "SIGNED"]
-for index, flag in StatusFlags
-{
-    ModalitySearch := A_Tab . flag
-    if InStr(PriorOriginal, ModalitySearch)
+    StatusFlags := ["IN_PROGRESS", "NO_HL7_ORDER", "UNKNOWN", "SIGNED"]
+    for index, flag in StatusFlags
     {
-        if (flag = "NO_HL7_ORDER" or flag = "UNKNOWN")
-            PriorReport := "No Prior Report. "
-        
-        PriorOriginal := StrReplace(PriorOriginal, ModalitySearch, " SIGNXED")
+        ModalitySearch := A_Tab . flag
+        if InStr(PriorOriginal, ModalitySearch)
+        {
+            ; Don't add "No Prior Report" - filter it out
+            PriorOriginal := StrReplace(PriorOriginal, ModalitySearch, " SIGNXED")
+        }
     }
-}
 
 ; Check for NO_IMAGES flag
 if InStr(PriorOriginal, A_Tab . "NO_IMAGES")
@@ -459,6 +457,7 @@ if InStr(PriorOriginal, ModalitySearch)
     
     ; Body part abbreviations
     PriorDescript := StrReplace(PriorDescript, "ab pe", "abdomen and pelvis")
+    PriorDescript := StrReplace(PriorDescript, "abd & pelvis", "abdomen and pelvis")
     PriorDescript := StrReplace(PriorDescript, "abd/pelvis", "abdomen and pelvis")
     PriorDescript := StrReplace(PriorDescript, " abd pel ", " abdomen and pelvis ")
     PriorDescript := StrReplace(PriorDescript, "abdomen/pelvis", "abdomen and pelvis")
@@ -585,6 +584,9 @@ if (PriorDate != "" and PriorTimeFormatted != "")
             IncludeTime := true
     }
 }
+
+; Filter out "No Prior Report" phrase if it appears in the description
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\s*no prior report\.?\s*", " ", , 1)
 
 ; Build the final comparison text
 if (IncludeTime)

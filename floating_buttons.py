@@ -290,10 +290,6 @@ class FloatingButtons:
             pyautogui.click(target_x, target_y)
             print(f"🔘 Copy clicked at ({original_x}, {original_y}) - double-clicked at ({target_x}, {target_y})")
             
-            # Return mouse to original position
-            pyautogui.moveTo(original_x, original_y)
-            print(f"   Mouse returned to ({original_x}, {original_y})")
-            
             # Send Ctrl+Shift+R
             pyautogui.hotkey('ctrl', 'shift', 'r')
             print(f"   Sent: Ctrl+Shift+R")
@@ -325,10 +321,6 @@ class FloatingButtons:
             time.sleep(0.05)  # 50ms delay
             pyautogui.click(target_x, target_y)
             print(f"🔘 Prior clicked at ({original_x}, {original_y}) - double-clicked at ({target_x}, {target_y})")
-            
-            # Return mouse to original position
-            pyautogui.moveTo(original_x, original_y)
-            print(f"   Mouse returned to ({original_x}, {original_y})")
             
             # Send Ctrl+Shift+R
             pyautogui.hotkey('ctrl', 'shift', 'r')
