@@ -269,8 +269,8 @@ def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> 
 
 
 # Version information
-VERSION = "1.4.1"
-VERSION_DATE = "2025-12-07"
+VERSION = "1.4.5"
+VERSION_DATE = "12/10/25"
 
 
 # =============================================================================
@@ -1229,10 +1229,11 @@ def quick_check_mosaic() -> bool:
                 # Quick title check without deep inspection - USE TIMEOUT to prevent hanging
                 title = _window_text_with_timeout(window, timeout=0.5, element_name="Mosaic quick check")
                 title_lower = title.lower()
-                # Check for MosaicInfoHub variations
+                # Check for MosaicInfoHub variations and Mosaic Reporting
                 if ("mosaicinfohub" in title_lower or 
                     "mosaic info hub" in title_lower or 
-                    "mosaic infohub" in title_lower):
+                    "mosaic infohub" in title_lower or
+                    ("mosaic" in title_lower and "reporting" in title_lower)):
                     # Exclude test windows
                     if not any(x in title_lower for x in ["rvu counter", "test", "viewer", "diagnostic"]):
                         return True
@@ -1303,9 +1304,10 @@ def find_mosaic_window():
                     continue
                 
                 # Look for Mosaic Info Hub window - handle variations:
-                # "MosaicInfoHub", "Mosaic Info Hub", "Mosaic InfoHub"
+                # "MosaicInfoHub", "Mosaic Info Hub", "Mosaic InfoHub", "Mosaic Reporting"
                 is_mosaic = ("mosaicinfohub" in window_text or 
-                            ("mosaic" in window_text and "info" in window_text and "hub" in window_text))
+                            ("mosaic" in window_text and "info" in window_text and "hub" in window_text) or
+                            ("mosaic" in window_text and "reporting" in window_text))
                 if is_mosaic:
                     # Verify it has the MainForm automation ID
                     try:
@@ -4262,6 +4264,9 @@ class RVUCounterApp:
         if not self.data_manager.data["current_shift"]["records"]:
             self.undo_btn.config(state=tk.DISABLED)
             self.undo_used = True
+        
+        # Apply theme colors to tk widgets (must be done AFTER widgets are created)
+        self._update_tk_widget_colors()
     
     def setup_refresh(self):
         """Setup periodic refresh."""
@@ -7834,6 +7839,18 @@ class RVUCounterApp:
             delete_btn_hover = "#ffcccc"  # Light red for light mode
             border_color = "#cccccc"  # Light grey for canvas borders
             text_secondary = "gray"  # Gray text for secondary info
+            # Pace car bar colors (light mode)
+            pace_container_bg = "#e0e0e0"
+            pace_current_track_bg = "#e8e8e8"
+            pace_prior_track_bg = "#B8B8DC"  # Lavender
+            pace_marker_bg = "#000000"  # Black marker
+        
+        if dark_mode:
+            # Pace car bar colors (dark mode)
+            pace_container_bg = "#3d3d3d"
+            pace_current_track_bg = "#4a4a4a"
+            pace_prior_track_bg = "#5a5a8c"  # Darker lavender
+            pace_marker_bg = "#ffffff"  # White marker for visibility
         
         # Store current theme colors for new widgets
         self.theme_colors = {
@@ -7851,7 +7868,11 @@ class RVUCounterApp:
             "delete_btn_hover": delete_btn_hover,
             "border_color": border_color,
             "text_secondary": text_secondary,
-            "dark_mode": dark_mode
+            "dark_mode": dark_mode,
+            "pace_container_bg": pace_container_bg,
+            "pace_current_track_bg": pace_current_track_bg,
+            "pace_prior_track_bg": pace_prior_track_bg,
+            "pace_marker_bg": pace_marker_bg
         }
         
         # Configure root window
@@ -7894,6 +7915,13 @@ class RVUCounterApp:
         fg_color = colors["fg"]
         comp_color = colors["comp_color"]
         canvas_bg = colors["canvas_bg"]
+        text_secondary = colors.get("text_secondary", "gray")
+        
+        # Pace car bar colors
+        pace_container_bg = colors.get("pace_container_bg", "#e0e0e0")
+        pace_current_track_bg = colors.get("pace_current_track_bg", "#e8e8e8")
+        pace_prior_track_bg = colors.get("pace_prior_track_bg", "#B8B8DC")
+        pace_marker_bg = colors.get("pace_marker_bg", "#000000")
         
         # Update compensation labels (tk.Label)
         for label in [
@@ -7906,6 +7934,11 @@ class RVUCounterApp:
         ]:
             if label:
                 label.configure(bg=bg_color, fg=comp_color)
+        
+        # Update backup status label (tk.Label)
+        backup_label = getattr(self, 'backup_status_label', None)
+        if backup_label:
+            backup_label.configure(bg=bg_color)
         
         # Update canvas
         canvas = getattr(self, 'studies_canvas', None)
@@ -7927,16 +7960,34 @@ class RVUCounterApp:
         if debug_frame:
             debug_frame.configure(bg=bg_color, fg=fg_color)
         
+        # Update pace car bar widgets (tk.Frame)
+        pace_bars_container = getattr(self, 'pace_bars_container', None)
+        if pace_bars_container:
+            pace_bars_container.configure(bg=pace_container_bg)
+        
+        pace_bar_current_track = getattr(self, 'pace_bar_current_track', None)
+        if pace_bar_current_track:
+            pace_bar_current_track.configure(bg=pace_current_track_bg)
+        
+        pace_bar_prior_track = getattr(self, 'pace_bar_prior_track', None)
+        if pace_bar_prior_track:
+            pace_bar_prior_track.configure(bg=pace_prior_track_bg)
+        
+        pace_bar_prior_marker = getattr(self, 'pace_bar_prior_marker', None)
+        if pace_bar_prior_marker:
+            pace_bar_prior_marker.configure(bg=pace_marker_bg)
+        
         # Update pace car labels (tk.Label)
         pace_labels = [
             getattr(self, 'pace_label_now_text', None),
             getattr(self, 'pace_label_separator', None),
             getattr(self, 'pace_label_time', None),
             getattr(self, 'pace_label_right', None),
+            getattr(self, 'pace_label_prior_text', None),
         ]
         for label in pace_labels:
             if label:
-                label.configure(bg=bg_color)
+                label.configure(bg=bg_color, fg=text_secondary)
         
         # pace_label_now_value and pace_label_prior_value keep their dynamic colors
         if hasattr(self, 'pace_label_now_value') and self.pace_label_now_value:
@@ -9829,7 +9880,7 @@ class StatisticsWindow:
         
         # Scrollable list of shifts
         canvas_bg = getattr(self, 'theme_canvas_bg', 'SystemButtonFace')
-        self.shifts_canvas = tk.Canvas(shifts_frame, width=180, highlightthickness=0, bg=canvas_bg)
+        self.shifts_canvas = tk.Canvas(shifts_frame, width=210, highlightthickness=0, bg=canvas_bg)
         shifts_scrollbar = ttk.Scrollbar(shifts_frame, orient="vertical", command=self.shifts_canvas.yview)
         self.shifts_list_frame = ttk.Frame(self.shifts_canvas)
         
@@ -10039,10 +10090,29 @@ class StatisticsWindow:
             count = len(records)
             total_rvu = sum(r.get("rvu", 0) for r in records)
             
-            # Shift button (clickable)
-            btn = ttk.Button(shift_frame, text=f"{label_text} ({count})", width=18,
-                           command=lambda idx=i: self.select_shift(idx))
-            btn.pack(side=tk.LEFT, padx=(0, 2))
+            # Shift button (clickable frame with left-justified name and right-justified count)
+            btn_frame = ttk.Frame(shift_frame)
+            btn_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
+            
+            # Left-justified shift name
+            name_label = ttk.Label(btn_frame, text=label_text, anchor=tk.W, cursor="hand2")
+            name_label.pack(side=tk.LEFT)
+            
+            # Spacer to push count to the right
+            spacer = ttk.Frame(btn_frame)
+            spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            
+            # Right-justified count
+            count_label = ttk.Label(btn_frame, text=f"({count})", anchor=tk.E, cursor="hand2")
+            count_label.pack(side=tk.RIGHT)
+            
+            # Make the entire frame clickable
+            def select_shift_cmd(event, idx=i):
+                self.select_shift(idx)
+            btn_frame.bind("<Button-1>", select_shift_cmd)
+            name_label.bind("<Button-1>", select_shift_cmd)
+            count_label.bind("<Button-1>", select_shift_cmd)
+            spacer.bind("<Button-1>", select_shift_cmd)
             
             # Delete button (subtle, small)
             if not shift.get("is_current"):
@@ -12224,7 +12294,7 @@ class StatisticsWindow:
                 header_fg = theme_colors.get("fg", "black")
                 header_border = theme_colors.get("border_color", "#cccccc")  # Light grey for canvas borders
                 rect_id = header_canvas.create_rectangle(x, 0, x + modality_col_width, header_height, 
-                                                         fill='#d0d0d0', outline=header_border, width=1,
+                                                         fill=header_bg, outline=header_border, width=1,
                                                          tags="header_modality")
                 
                 header_canvas.create_text(x + modality_col_width//2, header_height//2, 
@@ -13445,26 +13515,137 @@ class StatisticsWindow:
         total_studies = len(records)
         total_rvu = sum(r.get("rvu", 0) for r in records)
         
-        # Calculate hours elapsed
+        # Calculate hours elapsed - sum of actual shift durations, not time from first to last record
         hours_elapsed = 0.0
         if self.selected_period.get() == "current_shift" and self.app and self.app.shift_start:
             # For current shift, use actual elapsed time
             hours_elapsed = (datetime.now() - self.app.shift_start).total_seconds() / 3600
         elif records:
-            # For historical periods, calculate from records' time range
+            # For historical periods, sum actual shift durations
             try:
-                times = []
-                for r in records:
-                    time_str = r.get("time_finished") or r.get("time_performed", "")
-                    if time_str:
-                        times.append(datetime.fromisoformat(time_str))
+                # Get all shifts (current and historical)
+                all_shifts = []
+                current_shift = self.data_manager.data.get("current_shift", {})
+                if current_shift.get("shift_start"):
+                    all_shifts.append(current_shift)
+                all_shifts.extend(self.data_manager.data.get("shifts", []))
                 
-                if len(times) > 1:
-                    earliest = min(times)
-                    latest = max(times)
-                    hours_elapsed = (latest - earliest).total_seconds() / 3600
-                elif len(times) == 1:
-                    # Single record - use shift length as fallback
+                # Find which shifts contain these records and sum their durations
+                record_times = []
+                for r in records:
+                    try:
+                        time_str = r.get("time_finished") or r.get("time_performed", "")
+                        if time_str:
+                            record_times.append(datetime.fromisoformat(time_str))
+                    except:
+                        pass
+                
+                shifts_with_records = {}
+                if record_times:
+                    # Find unique shifts that contain any of these records
+                    for record_time in record_times:
+                        for shift in all_shifts:
+                            try:
+                                shift_start_str = shift.get("shift_start")
+                                if not shift_start_str:
+                                    continue
+                                
+                                shift_start = datetime.fromisoformat(shift_start_str)
+                                shift_end_str = shift.get("shift_end")
+                                
+                                # Check if record falls within this shift
+                                if shift_end_str:
+                                    shift_end = datetime.fromisoformat(shift_end_str)
+                                    if shift_start <= record_time <= shift_end:
+                                        shifts_with_records[shift_start_str] = shift
+                                else:
+                                    # Current shift without end - check if record is after shift start
+                                    if record_time >= shift_start:
+                                        shifts_with_records[shift_start_str] = shift
+                            except:
+                                continue
+                
+                # Also check if the selected period spans multiple shifts by checking shift time ranges
+                # This ensures we include all shifts in the period, even if they don't have records
+                period = self.selected_period.get()
+                if period in ["this_work_week", "last_work_week", "last_7_days", "last_30_days", "last_90_days", "custom_date_range", "all_time"]:
+                    # For date range periods, also include shifts that fall within the period
+                    period_start = None
+                    period_end = None
+                    now = datetime.now()
+                    
+                    if period == "this_work_week":
+                        period_start, period_end = self._get_work_week_range(now, "this")
+                    elif period == "last_work_week":
+                        period_start, period_end = self._get_work_week_range(now, "last")
+                    elif period == "last_7_days":
+                        period_start = now - timedelta(days=7)
+                        period_end = now
+                    elif period == "last_30_days":
+                        period_start = now - timedelta(days=30)
+                        period_end = now
+                    elif period == "last_90_days":
+                        period_start = now - timedelta(days=90)
+                        period_end = now
+                    elif period == "custom_date_range":
+                        try:
+                            start_str = self.custom_start_date.get().strip()
+                            end_str = self.custom_end_date.get().strip()
+                            period_start = datetime.strptime(start_str, "%m/%d/%Y")
+                            period_end = datetime.strptime(end_str, "%m/%d/%Y") + timedelta(days=1) - timedelta(seconds=1)
+                        except:
+                            period_start = None
+                            period_end = None
+                    elif period == "all_time":
+                        period_start = datetime.min.replace(year=2000)
+                        period_end = now
+                    
+                    # Include shifts that overlap with the period
+                    if period_start and period_end:
+                        for shift in all_shifts:
+                            try:
+                                shift_start_str = shift.get("shift_start")
+                                if not shift_start_str:
+                                    continue
+                                
+                                shift_start = datetime.fromisoformat(shift_start_str)
+                                shift_end_str = shift.get("shift_end")
+                                
+                                # Check if shift overlaps with period
+                                if shift_end_str:
+                                    shift_end = datetime.fromisoformat(shift_end_str)
+                                    # Shift overlaps if it starts before period ends and ends after period starts
+                                    if shift_start <= period_end and shift_end >= period_start:
+                                        shifts_with_records[shift_start_str] = shift
+                                else:
+                                    # Current shift - include if it starts before period ends
+                                    if shift_start <= period_end:
+                                        shifts_with_records[shift_start_str] = shift
+                            except:
+                                continue
+                
+                # Sum durations of unique shifts
+                for shift_start_str, shift in shifts_with_records.items():
+                    try:
+                        shift_start = datetime.fromisoformat(shift_start_str)
+                        shift_end_str = shift.get("shift_end")
+                        
+                        if shift_end_str:
+                            shift_end = datetime.fromisoformat(shift_end_str)
+                            shift_duration = (shift_end - shift_start).total_seconds() / 3600
+                            hours_elapsed += shift_duration
+                        else:
+                            # Current shift - use latest record time as end
+                            if record_times:
+                                latest_record_time = max(record_times)
+                                if latest_record_time > shift_start:
+                                    shift_duration = (latest_record_time - shift_start).total_seconds() / 3600
+                                    hours_elapsed += shift_duration
+                    except:
+                        continue
+                
+                # Fallback if no shifts found - use shift length
+                if hours_elapsed == 0.0:
                     hours_elapsed = self.app.data_manager.data["settings"].get("shift_length_hours", 9.0) if self.app else 9.0
             except (ValueError, AttributeError):
                 # Fallback to shift length if time parsing fails
@@ -13475,6 +13656,9 @@ class StatisticsWindow:
         
         # Calculate compensation per hour
         comp_per_hour = total_compensation / hours_elapsed if hours_elapsed > 0 else 0.0
+        
+        # Calculate compensation per RVU
+        comp_per_rvu = total_compensation / total_rvu if total_rvu > 0 else 0.0
         
         # Get compensation color from theme (dark green for light mode, lighter green for dark mode)
         comp_color = "dark green"
@@ -13490,6 +13674,10 @@ class StatisticsWindow:
         )
         self._compensation_table.add_row(
             {'category': 'Compensation per Hour', 'value': f"${comp_per_hour:,.2f}/hr"},
+            cell_text_colors={'value': comp_color}
+        )
+        self._compensation_table.add_row(
+            {'category': 'Compensation per RVU', 'value': f"${comp_per_rvu:,.2f}/RVU"},
             cell_text_colors={'value': comp_color}
         )
         self._compensation_table.add_row({'category': '', 'value': ''})  # Spacer
