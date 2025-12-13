@@ -37,12 +37,20 @@
     "CT INTERNAL AUDITORY CANAL WITHOUT IV CONTRAST": 1.0,
     "CT MAXILLOFACIAL WITHOUT IV CONTRAST": 1.0,
     "CT ORBITS WITH IV CONTRAST": 1.0,
-    "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)": "XR Acute Abdomen"
+    "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)": "XR Acute Abdomen",
+    "XA GUIDANCE UPPER GI TRACT G-J TUBE PLACEMENT": 0.3,
+    "XR EXAM UNLISTED": "XR Exam Unlisted",
+    "XR NOSE TO RECTUM FOREIGN BODY PEDIATRIC": "XR Other"
   },
   "rvu_table": {
     "MRI Brain": 2.3,
     "MRI Other": 1.75,
     "CT CAP": 3.06,
+    "CT CAP Angio": 3.06,
+    "CT CAP Angio Combined": 2.68,
+    "CT CAP Trauma": 3.0,
+    "CT CA": 2.0,
+    "CT CA no P": 2.0,
     "CT AP": 1.68,
     "CT Other": 1.0,
     "NM Myocardial stress": 1.62,
@@ -54,11 +62,15 @@
     "XR Other": 0.3,
     "XR Chest": 0.3,
     "CT Brain": 0.9,
+    "CT Brain with Contrast": 1.0,
+    "CT Spine Lumbar Recon": 1.0,
+    "XR Exam Unlisted": 0.68,
     "CT Chest": 1.0,
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
     "CT Spine": 1.0,
+    "CT Spine Lumbar": 2.0,
     "CTA Runoff with Abdo/Pelvis": 2.75,
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
@@ -67,85 +79,103 @@
     "CT Face": 1.0,
     "XR Abdomen": 0.3,
     "XR Acute Abdomen": 0.6,
-    "XR MSK": 0.3
+    "XR MSK": 0.3,
+    "XR MSK Bilateral": 0.6
   },
   "classification_rules": {
-    "CT AP": [
+    "CTA Brain and Neck": [
       {
         "required_keywords": [
-          "CT",
-          "abd",
-          "pel"
-        ],
-        "excluded_keywords": [
-          "chest"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "stone"
-        ]
-      }
-    ],
-    "CT Brain": [
-      {
-        "required_keywords": [
-          "CT",
-          "brain"
-        ],
-        "excluded_keywords": [
           "CTA",
+          "brain",
           "neck"
         ]
       },
       {
         "required_keywords": [
           "CT",
-          "head"
-        ],
-        "excluded_keywords": [
-          "CTA",
+          "head",
           "neck",
-          "angiography",
-          "angio",
-          "perf"
-        ]
-      }
-    ],
-    "MRI Brain": [
-      {
-        "required_keywords": [
-          "MRI",
-          "brain"
+          "angiography"
         ]
       },
-      {
-        "required_keywords": [
-          "MRI",
-          "head"
-        ]
-      },
-      {
-        "required_keywords": [
-          "MR",
-          "brain"
-        ]
-      },
-      {
-        "required_keywords": [
-          "MR",
-          "head"
-        ]
-      }
-    ],
-    "CT CAP": [
       {
         "required_keywords": [
           "CT",
+          "head",
+          "neck",
+          "angio"
+        ]
+      }
+    ],
+    "CTA Runoff with Abdo/Pelvis": [
+      {
+        "required_keywords": [
+          "ct",
+          "abd",
+          "ang",
+          "runoff"
+        ]
+      }
+    ],
+    "CT CAP Angio Combined": [
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
+          "angio",
+          "and",
+          "ct",
+          "abd",
+          "pel"
+        ]
+      }
+    ],
+    "CT CAP Angio": [
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
+          "angiography",
+          "abd",
+          "pel"
+        ]
+      }
+    ],
+    "CT CAP Trauma": [
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
           "abd",
           "pel",
-          "ch"
+          "trauma"
+        ]
+      }
+    ],
+    "CT CA": [
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
+          "abd"
+        ],
+        "excluded_keywords": [
+          "pel",
+          "ang"
+        ]
+      }
+    ],
+    "CT CA no P": [
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
+          "abd",
+          "ang"
+        ],
+        "excluded_keywords": [
+          "pel"
         ]
       }
     ],
@@ -212,6 +242,180 @@
         ]
       }
     ],
+    "CT TL Spine": [
+      {
+        "required_keywords": [
+          "CT",
+          "thor",
+          "lumb"
+        ]
+      }
+    ],
+    "CT Spine Lumbar Recon": [
+      {
+        "required_keywords": [
+          "CT",
+          "lumb",
+          "recon"
+        ],
+        "excluded_keywords": [
+          "thor"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "lumbar",
+          "spine",
+          "recon"
+        ]
+      }
+    ],
+    "CT Spine Lumbar": [
+      {
+        "required_keywords": [
+          "CT",
+          "lumb"
+        ],
+        "excluded_keywords": [
+          "thor",
+          "recon"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "lumbar",
+          "spine"
+        ],
+        "excluded_keywords": [
+          "recon"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "l",
+          "spine"
+        ],
+        "excluded_keywords": [
+          "thor",
+          "recon",
+          "cervical"
+        ]
+      }
+    ],
+    "CT CAP": [
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "ch"
+        ]
+      }
+    ],
+    "CT AP": [
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel"
+        ],
+        "excluded_keywords": [
+          "chest"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "stone"
+        ]
+      }
+    ],
+    "CT Brain and Cervical": [
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "cervical"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "angio",
+          "angiography"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "brain",
+          "cervical"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "angio",
+          "angiography"
+        ]
+      }
+    ],
+    "CT Brain with Contrast": [
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "contrast"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck",
+          "cervical",
+          "angiography",
+          "angio",
+          "without"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "brain",
+          "contrast"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck",
+          "cervical",
+          "without"
+        ]
+      }
+    ],
+    "CT Brain": [
+      {
+        "required_keywords": [
+          "CT",
+          "brain"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck",
+          "cervical"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck",
+          "angiography",
+          "angio",
+          "perf",
+          "cervical"
+        ]
+      }
+    ],
     "CT Neck": [
       {
         "required_keywords": [
@@ -227,35 +431,26 @@
         ]
       }
     ],
-    "CTA Brain and Neck": [
-      {
-        "required_keywords": [
-          "CTA",
-          "brain",
-          "neck"
-        ]
-      },
+    "CT Chest": [
       {
         "required_keywords": [
           "CT",
-          "head",
+          "Chest"
+        ],
+        "excluded_keywords": [
           "neck",
-          "angiography"
-        ]
-      },
-      {
-        "required_keywords": [
-          "CT",
-          "head",
-          "neck",
-          "angio"
+          "abd",
+          "pel"
         ]
       }
     ],
-    "CT TL Spine": [
+    "CT Spine": [
       {
         "required_keywords": [
           "CT",
+          "Spine"
+        ],
+        "excluded_keywords": [
           "thor",
           "lumb"
         ]
@@ -275,11 +470,104 @@
         ]
       }
     ],
+    "MRI Brain": [
+      {
+        "required_keywords": [
+          "MRI",
+          "brain"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "head"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "brain"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "head"
+        ]
+      }
+    ],
+    "US Arterial Lower Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "art",
+          "low",
+          "ext"
+        ]
+      }
+    ],
+    "XR MSK Bilateral": [
+      {
+        "required_keywords": [
+          "XR",
+          "bilateral"
+        ],
+        "excluded_keywords": [
+          "chest"
+        ],
+        "any_of_keywords": [
+          "knee",
+          "wrist",
+          "hand",
+          "thumb",
+          "index finger",
+          "middle finger",
+          "ring finger",
+          "small finger",
+          "fingers",
+          "pelvis",
+          "hip",
+          "hips",
+          "si joints",
+          "ankle",
+          "foot",
+          "humerus",
+          "forearm",
+          "tibia-fibula",
+          "tibia/fibula",
+          "tib/fib",
+          "tibia",
+          "fibula",
+          "elbow",
+          "shoulder",
+          "femur",
+          "ribs",
+          "rib"
+        ]
+      }
+    ],
     "XR Abdomen": [
       {
         "required_keywords": [
           "XR",
           "abd"
+        ]
+      }
+    ],
+    "XR Exam Unlisted": [
+      {
+        "required_keywords": [
+          "XR",
+          "exam",
+          "unlisted"
+        ]
+      }
+    ],
+    "XR Chest": [
+      {
+        "required_keywords": [
+          "XR",
+          "Chest"
         ]
       }
     ],
@@ -342,59 +630,6 @@
           "sacrum",
           "coccyx",
           "sacrum and coccyx"
-        ]
-      }
-    ],
-    "CT Chest": [
-      {
-        "required_keywords": [
-          "CT",
-          "Chest"
-        ],
-        "excluded_keywords": [
-          "neck",
-          "abd",
-          "pel"
-        ]
-      }
-    ],
-    "CT Spine": [
-      {
-        "required_keywords": [
-          "CT",
-          "Spine"
-        ],
-        "excluded_keywords": [
-          "thor",
-          "lumb"
-        ]
-      }
-    ],
-    "XR Chest": [
-      {
-        "required_keywords": [
-          "XR",
-          "Chest"
-        ]
-      }
-    ],
-    "CTA Runoff with Abdo/Pelvis": [
-      {
-        "required_keywords": [
-          "ct",
-          "abd",
-          "ang",
-          "runoff"
-        ]
-      }
-    ],
-    "US Arterial Lower Extremity": [
-      {
-        "required_keywords": [
-          "US",
-          "art",
-          "low",
-          "ext"
         ]
       }
     ],
@@ -561,18 +796,18 @@
   },
   "window_positions": {
     "main": {
-      "x": 6615,
-      "y": 86,
+      "x": 6606,
+      "y": -10,
       "width": 240,
-      "height": 501
+      "height": 612
     },
     "settings": {
       "x": 5254,
       "y": -310
     },
     "statistics": {
-      "x": 5201,
-      "y": -163
+      "x": 5203,
+      "y": -274
     },
     "backup_history": {
       "x": 5762,
@@ -583,7 +818,7 @@
     "cloud_backup_enabled": true,
     "backup_schedule": "shift_end",
     "backup_retention_count": 10,
-    "last_backup_time": "2025-12-08T07:57:44.276308",
+    "last_backup_time": "2025-12-10T21:37:28.752532",
     "last_backup_status": "success",
     "last_backup_error": null,
     "onedrive_path": "C:\\Users\\erik.richter\\OneDrive - Radiology Partners Inc",

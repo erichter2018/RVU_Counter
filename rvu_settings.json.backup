@@ -1,0 +1,595 @@
+{
+  "settings": {
+    "auto_start": true,
+    "show_total": true,
+    "show_avg": true,
+    "show_last_hour": true,
+    "show_last_full_hour": true,
+    "show_projected": true,
+    "show_comp_total": false,
+    "show_comp_avg": false,
+    "show_comp_last_hour": false,
+    "show_comp_last_full_hour": false,
+    "show_comp_projected": false,
+    "role": "Partner",
+    "min_study_seconds": 1,
+    "ignore_duplicate_accessions": true,
+    "dark_mode": true,
+    "show_projected_shift": true,
+    "show_comp_projected_shift": false,
+    "shift_length_hours": 9,
+    "data_source": "Auto",
+    "show_time": true,
+    "stay_on_top": true,
+    "efficiency_heatmap_mode": "none",
+    "show_pace_car": true,
+    "pace_goal_rvu_per_hour": 15.0,
+    "pace_goal_shift_hours": 9.0,
+    "pace_goal_total_rvu": 135.0,
+    "pace_comparison_mode": "week_2",
+    "efficiency_study_count_mode": "average"
+  },
+  "direct_lookups": {
+    "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
+    "CT BRAIN PERFUSION CTA HEAD NECK WITH IV CONTRAST": 4.5,
+    "CT BRAIN PERFUSION CTA HEAD NECK WITHOUT THEN WITH IV CONTRAST": 4.5,
+    "CT EXAM UNLISTED": 1.0,
+    "CT INTERNAL AUDITORY CANAL WITHOUT IV CONTRAST": 1.0,
+    "CT MAXILLOFACIAL WITHOUT IV CONTRAST": 1.0,
+    "CT ORBITS WITH IV CONTRAST": 1.0,
+    "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)": "XR Acute Abdomen",
+    "CT Lumbar Spine": "CT Spine Lumbar"
+  },
+  "rvu_table": {
+    "MRI Brain": 2.3,
+    "MRI Other": 1.75,
+    "CT CAP": 3.06,
+    "CT AP": 1.68,
+    "CT Other": 1.0,
+    "NM Myocardial stress": 1.62,
+    "NM Other": 1.0,
+    "PET CT": 3.6,
+    "Ultrasound transvaginal complete": 1.38,
+    "US Arterial Lower Extremity": 1.2,
+    "US Other": 0.68,
+    "XR Other": 0.3,
+    "XR Chest": 0.3,
+    "CT Brain": 0.9,
+    "CT Chest": 1.0,
+    "CTA Brain": 1.75,
+    "CTA Neck": 1.75,
+    "CT Neck": 1.5,
+    "CT Spine": 1.0,
+    "CT Spine Lumbar": 2.0,
+    "CTA Runoff with Abdo/Pelvis": 2.75,
+    "Bone Survey": 1.0,
+    "CTA Brain and Neck": 3.5,
+    "CT Brain and Cervical": 1.9,
+    "CT TL Spine": 2.0,
+    "CT Face": 1.0,
+    "XR Abdomen": 0.3,
+    "XR Acute Abdomen": 0.6,
+    "XR MSK": 0.3
+  },
+  "classification_rules": {
+    "CT AP": [
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel"
+        ],
+        "excluded_keywords": [
+          "chest"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "stone"
+        ]
+      }
+    ],
+    "CT Brain": [
+      {
+        "required_keywords": [
+          "CT",
+          "brain"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head"
+        ],
+        "excluded_keywords": [
+          "CTA",
+          "neck",
+          "angiography",
+          "angio",
+          "perf"
+        ]
+      }
+    ],
+    "MRI Brain": [
+      {
+        "required_keywords": [
+          "MRI",
+          "brain"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "head"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "brain"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "head"
+        ]
+      }
+    ],
+    "CT CAP": [
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "ch"
+        ]
+      }
+    ],
+    "CTA Brain": [
+      {
+        "required_keywords": [
+          "CTA",
+          "brain"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CTA",
+          "head"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "angio"
+        ],
+        "excluded_keywords": [
+          "neck"
+        ]
+      }
+    ],
+    "CTA Neck": [
+      {
+        "required_keywords": [
+          "CT",
+          "neck",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "head",
+          "brain"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CTA",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "head",
+          "brain"
+        ]
+      }
+    ],
+    "CT Neck": [
+      {
+        "required_keywords": [
+          "CT",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "head",
+          "brain",
+          "angiography",
+          "angio",
+          "CTA"
+        ]
+      }
+    ],
+    "CTA Brain and Neck": [
+      {
+        "required_keywords": [
+          "CTA",
+          "brain",
+          "neck"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "neck",
+          "angiography"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "head",
+          "neck",
+          "angio"
+        ]
+      }
+    ],
+    "CT TL Spine": [
+      {
+        "required_keywords": [
+          "CT",
+          "thor",
+          "lumb"
+        ]
+      }
+    ],
+    "CT Face": [
+      {
+        "required_keywords": [
+          "CT"
+        ],
+        "any_of_keywords": [
+          "facial",
+          "face",
+          "orbit",
+          "maxil",
+          "sinus"
+        ]
+      }
+    ],
+    "XR Abdomen": [
+      {
+        "required_keywords": [
+          "XR",
+          "abd"
+        ]
+      }
+    ],
+    "XR MSK": [
+      {
+        "required_keywords": [
+          "XR"
+        ],
+        "any_of_keywords": [
+          "knee",
+          "wrist",
+          "hand",
+          "thumb",
+          "index finger",
+          "middle finger",
+          "ring finger",
+          "small finger",
+          "fingers",
+          "pelvis",
+          "hip",
+          "hips",
+          "si joints",
+          "ankle",
+          "foot",
+          "humerus",
+          "forearm",
+          "tibia-fibula",
+          "tibia/fibula",
+          "tib/fib",
+          "tibia",
+          "fibula",
+          "elbow",
+          "shoulder",
+          "cervical spine",
+          "c-spine",
+          "thoracic spine",
+          "t-spine",
+          "lumbar spine",
+          "l-spine",
+          "lumbosacral spine",
+          "ls-spine",
+          "spine",
+          "scoliosis",
+          "leg length",
+          "lower extremity leg length",
+          "bone survey",
+          "ribs",
+          "rib",
+          "clavicle",
+          "scapula",
+          "calcaneus",
+          "femur",
+          "skull",
+          "mandible",
+          "facial bones",
+          "nasal bones",
+          "orbits",
+          "tmj",
+          "sternum",
+          "sacrum",
+          "coccyx",
+          "sacrum and coccyx"
+        ]
+      }
+    ],
+    "CT Chest": [
+      {
+        "required_keywords": [
+          "CT",
+          "Chest"
+        ],
+        "excluded_keywords": [
+          "neck",
+          "abd",
+          "pel"
+        ]
+      }
+    ],
+    "CT Spine": [
+      {
+        "required_keywords": [
+          "CT",
+          "Spine"
+        ],
+        "excluded_keywords": [
+          "thor",
+          "lumb"
+        ]
+      }
+    ],
+    "XR Chest": [
+      {
+        "required_keywords": [
+          "XR",
+          "Chest"
+        ]
+      }
+    ],
+    "CTA Runoff with Abdo/Pelvis": [
+      {
+        "required_keywords": [
+          "ct",
+          "abd",
+          "ang",
+          "runoff"
+        ]
+      }
+    ],
+    "US Arterial Lower Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "art",
+          "low",
+          "ext"
+        ]
+      }
+    ],
+    "CT Other": [
+      {
+        "required_keywords": [
+          "CT"
+        ]
+      }
+    ],
+    "MRI Other": [
+      {
+        "required_keywords": [
+          "MRI"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR "
+        ]
+      }
+    ],
+    "NM Other": [
+      {
+        "required_keywords": [
+          "NM"
+        ]
+      },
+      {
+        "required_keywords": [
+          "nuclear"
+        ]
+      }
+    ],
+    "US Other": [
+      {
+        "required_keywords": [
+          "US"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound"
+        ]
+      }
+    ],
+    "XR Other": [
+      {
+        "required_keywords": [
+          "XR"
+        ]
+      }
+    ]
+  },
+  "compensation_rates": {
+    "weekday": {
+      "assoc": {
+        "12am": 39,
+        "1am": 39,
+        "2am": 41,
+        "3am": 41,
+        "4am": 41,
+        "5am": 41,
+        "6am": 39,
+        "7am": 39,
+        "8am": 29,
+        "9am": 29,
+        "10am": 29,
+        "11am": 29,
+        "12pm": 29,
+        "1pm": 29,
+        "2pm": 29,
+        "3pm": 29,
+        "4pm": 32,
+        "5pm": 32,
+        "6pm": 32,
+        "7pm": 32,
+        "8pm": 35,
+        "9pm": 37,
+        "10pm": 38,
+        "11pm": 39
+      },
+      "partner": {
+        "12am": 41,
+        "1am": 41,
+        "2am": 43,
+        "3am": 43,
+        "4am": 43,
+        "5am": 43,
+        "6am": 41,
+        "7am": 41,
+        "8am": 31,
+        "9am": 31,
+        "10am": 31,
+        "11am": 31,
+        "12pm": 31,
+        "1pm": 31,
+        "2pm": 31,
+        "3pm": 31,
+        "4pm": 34,
+        "5pm": 34,
+        "6pm": 34,
+        "7pm": 34,
+        "8pm": 36,
+        "9pm": 37,
+        "10pm": 39,
+        "11pm": 40
+      }
+    },
+    "weekend": {
+      "assoc": {
+        "12am": 41,
+        "1am": 41,
+        "2am": 43,
+        "3am": 43,
+        "4am": 43,
+        "5am": 41,
+        "6am": 41,
+        "7am": 32,
+        "8am": 32,
+        "9am": 32,
+        "10am": 32,
+        "11am": 32,
+        "12pm": 32,
+        "1pm": 32,
+        "2pm": 32,
+        "3pm": 32,
+        "4pm": 34,
+        "5pm": 34,
+        "6pm": 34,
+        "7pm": 34,
+        "8pm": 36,
+        "9pm": 37,
+        "10pm": 39,
+        "11pm": 40
+      },
+      "partner": {
+        "12am": 43,
+        "1am": 43,
+        "2am": 45,
+        "3am": 45,
+        "4am": 45,
+        "5am": 45,
+        "6am": 43,
+        "7am": 43,
+        "8am": 34,
+        "9am": 34,
+        "10am": 34,
+        "11am": 34,
+        "12pm": 34,
+        "1pm": 34,
+        "2pm": 34,
+        "3pm": 34,
+        "4pm": 36,
+        "5pm": 36,
+        "6pm": 36,
+        "7pm": 36,
+        "8pm": 38,
+        "9pm": 39,
+        "10pm": 41,
+        "11pm": 42
+      }
+    }
+  },
+  "window_positions": {
+    "main": {
+      "x": 6606,
+      "y": -10,
+      "width": 240,
+      "height": 612
+    },
+    "settings": {
+      "x": 5254,
+      "y": -310
+    },
+    "statistics": {
+      "x": 5203,
+      "y": -274
+    },
+    "backup_history": {
+      "x": 5762,
+      "y": 2
+    }
+  },
+  "backup": {
+    "cloud_backup_enabled": true,
+    "backup_schedule": "shift_end",
+    "backup_retention_count": 10,
+    "last_backup_time": "2025-12-10T21:37:28.752532",
+    "last_backup_status": "success",
+    "last_backup_error": null,
+    "onedrive_path": "C:\\Users\\erik.richter\\OneDrive - Radiology Partners Inc",
+    "setup_prompt_dismissed": true,
+    "first_backup_prompt_shown": true
+  }
+}

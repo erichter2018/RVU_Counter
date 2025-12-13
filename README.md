@@ -38,16 +38,18 @@ A real-time RVU (Relative Value Unit) tracking application for medical professio
    ```
 3. Run the application:
    ```bash
-   py RVUCounter.py
+   py RVUCounter.pyw
    ```
+   Or double-click `RVUCounter.pyw` (Windows will run it without console window)
 
 ## Usage
 
 1. Launch PowerScribe 360
 2. Start the RVU Counter:
    ```bash
-   py RVUCounter.py
+   py RVUCounter.pyw
    ```
+   Or double-click `RVUCounter.pyw` (Windows will run it without console window)
 3. Click "Start Shift" to begin tracking
 4. The application will automatically detect studies as you work in PowerScribe 360
 
@@ -67,7 +69,7 @@ Classification rules allow you to match procedure descriptions to study types us
 
 ## Files
 
-- `RVUCounter.py` - Main application
+- `RVUCounter.pyw` - Main application (runs without console window)
 - `rvu_settings.json` - Settings, RVU table, classification rules, window positions
 - `rvu_records.json` - Study records and shift data
 - `requirements.txt` - Python dependencies

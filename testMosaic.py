@@ -1,6 +1,6 @@
 """
-Test script to display all UI elements from Mosaic Info Hub interface.
-This shows all displayable items in the Mosaic Info Hub window.
+Test script to display all UI elements from Mosaic Info Hub or Mosaic Reporting interface.
+This shows all displayable items in the Mosaic window.
 """
 
 import tkinter as tk
@@ -11,7 +11,7 @@ import re
 
 
 def find_mosaic_window():
-    """Find Mosaic Info Hub window - it's a WinForms app with WebView2."""
+    """Find Mosaic Info Hub or Mosaic Reporting window - it's a WinForms app with WebView2."""
     desktop = Desktop(backend="uia")
     
     try:
@@ -27,8 +27,9 @@ def find_mosaic_window():
                     "diagnostic" in window_text):
                     continue
                 
-                # Look for Mosaic Info Hub window
-                if "mosaic" in window_text and "info hub" in window_text:
+                # Look for Mosaic Info Hub or Mosaic Reporting window
+                if ("mosaic" in window_text and "info hub" in window_text) or \
+                   ("mosaic" in window_text and "reporting" in window_text):
                     # Verify it has the MainForm automation ID
                     try:
                         automation_id = window.element_info.automation_id
@@ -75,8 +76,8 @@ def find_webview_element(main_window):
     return None
 
 
-def get_all_elements(element, depth=0, max_depth=10):
-    """Recursively get all UI elements from a window."""
+def get_all_elements(element, depth=0, max_depth=15):
+    """Recursively get all UI elements from a window using children()."""
     elements = []
     
     if depth > max_depth:
@@ -104,6 +105,11 @@ def get_all_elements(element, depth=0, max_depth=10):
         except:
             text = ""
         
+        try:
+            framework_id = element.element_info.framework_id or ""
+        except:
+            framework_id = ""
+        
         # Only include elements with some meaningful content
         if automation_id or name or text:
             elements.append({
@@ -111,11 +117,12 @@ def get_all_elements(element, depth=0, max_depth=10):
                 'automation_id': automation_id,
                 'control_type': control_type,
                 'name': name,
-                'text': text[:100] if text else "",  # Limit text length
+                'text': text[:200] if text else "",  # Limit text length
                 'element': element,  # Store actual element reference for inspection
+                'framework_id': framework_id,
             })
         
-        # Recursively get children
+        # Recursively get children - NO LIMIT
         try:
             children = element.children()
             for child in children:
@@ -127,6 +134,148 @@ def get_all_elements(element, depth=0, max_depth=10):
         pass
     
     return elements
+
+
+def get_all_elements_descendants(window, max_elements=5000):
+    """Get all elements using descendants() - exhaustive search."""
+    elements = []
+    
+    try:
+        count = 0
+        for elem in window.descendants():
+            try:
+                automation_id = elem.element_info.automation_id or ""
+            except:
+                automation_id = ""
+            
+            try:
+                control_type = elem.element_info.control_type or ""
+            except:
+                control_type = ""
+            
+            try:
+                name = elem.element_info.name or ""
+            except:
+                name = ""
+            
+            try:
+                text = elem.window_text() or ""
+            except:
+                text = ""
+            
+            try:
+                framework_id = elem.element_info.framework_id or ""
+            except:
+                framework_id = ""
+            
+            if automation_id or name or text:
+                elements.append({
+                    'depth': 0,  # descendants() doesn't track depth
+                    'automation_id': automation_id,
+                    'control_type': control_type,
+                    'name': name,
+                    'text': text[:200] if text else "",
+                    'element': elem,
+                    'framework_id': framework_id,
+                })
+            
+            count += 1
+            if count >= max_elements:
+                break
+    except Exception as e:
+        print(f"descendants() error: {e}")
+    
+    return elements
+
+
+def get_elements_via_uia(window_title_contains):
+    """Get elements using direct UIA via comtypes - bypasses pywinauto."""
+    elements = []
+    
+    try:
+        import comtypes.client
+        
+        # Initialize UIA
+        uia = comtypes.client.CreateObject("{ff48dba4-60ef-4201-aa87-54103eef594e}")
+        
+        # Get the IUIAutomation interface
+        from comtypes.gen import UIAutomationClient
+        IUIAutomation = uia.QueryInterface(UIAutomationClient.IUIAutomation)
+        
+        # Get root element
+        root = IUIAutomation.GetRootElement()
+        
+        # Find window containing the title
+        # Use subtree search with name condition
+        all_windows = []
+        
+        # Create a true condition to get all children
+        true_condition = IUIAutomation.CreateTrueCondition()
+        
+        # Get all top-level windows
+        children = root.FindAll(2, true_condition)  # TreeScope_Children = 2
+        
+        target_window = None
+        for i in range(children.Length):
+            child = children.GetElement(i)
+            try:
+                name = child.CurrentName
+                if name and window_title_contains.lower() in name.lower():
+                    target_window = child
+                    break
+            except:
+                continue
+        
+        if not target_window:
+            return elements, "Window not found"
+        
+        # Get ALL descendants of the target window
+        all_descendants = target_window.FindAll(7, true_condition)  # TreeScope_Subtree = 7
+        
+        for i in range(all_descendants.Length):
+            try:
+                elem = all_descendants.GetElement(i)
+                automation_id = elem.CurrentAutomationId or ""
+                control_type = elem.CurrentControlType
+                name = elem.CurrentName or ""
+                
+                # Map control type ID to string
+                control_type_map = {
+                    50000: "Button", 50001: "Calendar", 50002: "CheckBox",
+                    50003: "ComboBox", 50004: "Edit", 50005: "Hyperlink",
+                    50006: "Image", 50007: "ListItem", 50008: "List",
+                    50009: "Menu", 50010: "MenuBar", 50011: "MenuItem",
+                    50012: "ProgressBar", 50013: "RadioButton", 50014: "ScrollBar",
+                    50015: "Slider", 50016: "Spinner", 50017: "StatusBar",
+                    50018: "Tab", 50019: "TabItem", 50020: "Text",
+                    50021: "ToolBar", 50022: "ToolTip", 50023: "Tree",
+                    50024: "TreeItem", 50025: "Custom", 50026: "Group",
+                    50027: "Thumb", 50028: "DataGrid", 50029: "DataItem",
+                    50030: "Document", 50031: "SplitButton", 50032: "Window",
+                    50033: "Pane", 50034: "Header", 50035: "HeaderItem",
+                    50036: "Table", 50037: "TitleBar", 50038: "Separator",
+                }
+                control_type_str = control_type_map.get(control_type, f"Type_{control_type}")
+                
+                if automation_id or name:
+                    elements.append({
+                        'depth': 0,
+                        'automation_id': automation_id,
+                        'control_type': control_type_str,
+                        'name': name,
+                        'text': name,  # UIA uses Name for text
+                        'element': None,  # No pywinauto element
+                    })
+            except Exception as e:
+                continue
+        
+        return elements, None
+        
+    except ImportError as e:
+        return elements, f"comtypes not available: {e}"
+    except Exception as e:
+        import traceback
+        return elements, f"UIA error: {e}\n{traceback.format_exc()}"
 
 
 def extract_mosaic_data(webview_element):
@@ -145,160 +294,774 @@ def extract_mosaic_data(webview_element):
         'patient_class': '',  # Might be Gender (Male/Female) in Mosaic
         'study_date': '',
         'modality': '',
-        'multiple_accessions': []  # List of {accession, procedure} dicts
+        'multiple_accessions': [],  # List of {accession, procedure} dicts
+        'debug_info': {
+            'accession_candidates': []  # List of potential accessions found
+        }
     }
     
     try:
         # Get all elements from WebView2 with deep scan
         all_elements = get_all_elements(webview_element, max_depth=20)
         
-        # Convert to list of (element, name, text) tuples for easier searching
+        # Convert to list - prioritize name, but also include text for broader search
         element_data = []
+        all_text_data = []  # Separate list for text-only elements
         for elem in all_elements:
             name = elem.get('name', '').strip()
             text = elem.get('text', '').strip()
-            if name or text:
+            auto_id = elem.get('automation_id', '').strip()
+            elem_obj = elem.get('element')
+            
+            if name:
                 element_data.append({
-                    'element': elem.get('element'),
+                    'element': elem_obj,
                     'name': name,
+                    'text': text,  # Keep text for reference
+                    'automation_id': auto_id,
+                    'depth': elem.get('depth', 0)
+                })
+            elif text:  # Elements with only text (no name)
+                all_text_data.append({
+                    'element': elem_obj,
+                    'name': '',
                     'text': text,
+                    'automation_id': auto_id,
+                    'depth': elem.get('depth', 0)
+                })
+            elif auto_id:  # Elements with only automation_id
+                all_text_data.append({
+                    'element': elem_obj,
+                    'name': '',
+                    'text': '',
+                    'automation_id': auto_id,
                     'depth': elem.get('depth', 0)
                 })
         
-        # Find elements by label and get their values
+        # Append text-only and automation_id-only elements at the end
+        element_data.extend(all_text_data)
+        
+        # Helper function to check if a string looks like an accession
+        def is_accession_like(s):
+            """Check if string looks like an accession number."""
+            if not s:
+                return False
+            s = s.strip()
+            if len(s) < 6:
+                return False
+            clean_s = s.replace('-', '').replace('_', '').replace(' ', '')
+            if len(clean_s) < 6:
+                return False
+            
+            # Reject dates (MM/DD/YYYY or similar)
+            if re.match(r'^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', s):
+                return False
+            
+            # Reject common UI labels/text
+            lower_s = s.lower()
+            reject_words = ['accession', 'patient', 'study', 'date', 'modality', 'gender', 'male', 'female', 
+                           'mrn', 'name', 'type', 'status', 'prior', 'current', 'report', 'unknown',
+                           'chrome', 'document', 'pane', 'button', 'text', 'group', 'image',
+                           'current study', 'prior study', 'medical record',
+                           # Mosaic labeled fields - these are NOT accessions
+                           'study date', 'body part', 'ordering', 'site group', 'site code',
+                           'description', 'reason for visit', 'chest', 'abdomen', 'pelvis',
+                           'head', 'neck', 'spine', 'extremity', 'knee', 'shoulder', 'hip', 'ankle', 'wrist']
+            if lower_s in reject_words:
+                return False
+            
+            # Reject if value starts with these prefixes (labeled field values)
+            reject_prefixes = ['description:', 'ordering:', 'site group:', 'site code:', 
+                              'body part:', 'reason for visit:', 'study date:']
+            for prefix in reject_prefixes:
+                if lower_s.startswith(prefix):
+                    return False
+            
+            # Reject if it's clearly an MRN (Medical Record Number)
+            # MRN values should NOT be treated as accessions
+            if 'mrn' in lower_s:
+                return False
+            
+            # Reject common body parts and anatomy terms that might match patterns
+            anatomy_terms = ['chest', 'abdomen', 'pelvis', 'head', 'brain', 'spine', 'cervical',
+                            'thoracic', 'lumbar', 'extremity', 'shoulder', 'knee', 'hip', 'ankle',
+                            'wrist', 'elbow', 'hand', 'foot', 'neck', 'face', 'orbit', 'sinus']
+            if lower_s in anatomy_terms:
+                return False
+            
+            # STRONG patterns - definitely accession-like:
+            # Pattern: A000478952CVR - letter(s) + digits + optional letters
+            if re.match(r'^[A-Za-z]{1,4}\d{6,15}[A-Za-z]{0,5}$', clean_s):
+                return True
+            
+            # Pattern: SSH2512080000263CST - SSH prefix + digits + suffix
+            if re.match(r'^SSH\d{10,}[A-Za-z]{0,5}$', clean_s):
+                return True
+            
+            # Pattern: Numbers with embedded letters like facility codes
+            if re.match(r'^[A-Za-z0-9]{8,20}$', clean_s):
+                # Must have both letters AND numbers
+                has_letter = any(c.isalpha() for c in clean_s)
+                has_digit = any(c.isdigit() for c in clean_s)
+                # Must be mostly digits (accessions are number-heavy)
+                digit_ratio = sum(1 for c in clean_s if c.isdigit()) / len(clean_s)
+                if has_letter and has_digit and digit_ratio >= 0.5:
+                    return True
+            
+            # Pure long numbers (10+ digits) could be accessions
+            if clean_s.isdigit() and len(clean_s) >= 10:
+                return True
+            
+            return False
+        
+        # Helper function to extract accession from text and record candidates
+        def extract_accession_from_text(text_str, source="unknown", field="unknown"):
+            """Extract accession(s) from a text string and record candidates."""
+            if not text_str:
+                return []
+            results = []
+            # Pattern 1: "ACC1 (PROC1), ACC2 (PROC2)" format
+            if ',' in text_str and '(' in text_str:
+                parts = text_str.split(',')
+                for part in parts:
+                    part = part.strip()
+                    if '(' in part and ')' in part:
+                        acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
+                        if acc_match:
+                            acc = acc_match.group(1).strip()
+                            proc = acc_match.group(2).strip()
+                            if is_accession_like(acc):
+                                data['debug_info']['accession_candidates'].append({
+                                    'value': acc,
+                                    'source': source,
+                                    'field': field,
+                                    'full_text': part
+                                })
+                                results.append({'accession': acc, 'procedure': proc})
+                    elif is_accession_like(part):
+                        data['debug_info']['accession_candidates'].append({
+                            'value': part,
+                            'source': source,
+                            'field': field,
+                            'full_text': part
+                        })
+                        results.append({'accession': part, 'procedure': ''})
+            # Pattern 2: Single accession in parentheses with procedure
+            elif '(' in text_str and ')' in text_str:
+                acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', text_str)
+                if acc_match:
+                    acc = acc_match.group(1).strip()
+                    proc = acc_match.group(2).strip()
+                    if is_accession_like(acc):
+                        data['debug_info']['accession_candidates'].append({
+                            'value': acc,
+                            'source': source,
+                            'field': field,
+                            'full_text': text_str
+                        })
+                        results.append({'accession': acc, 'procedure': proc})
+            # Pattern 3: Just an accession-like string
+            elif is_accession_like(text_str):
+                data['debug_info']['accession_candidates'].append({
+                    'value': text_str,
+                    'source': source,
+                    'field': field,
+                    'full_text': text_str
+                })
+                results.append({'accession': text_str, 'procedure': ''})
+            return results
+        
+        # Helper to check if an element is a labeled field value (not an accession)
+        labeled_field_markers = ['study date:', 'body part:', 'mrn:', 'ordering:', 'site group:',
+                                 'site code:', 'description:', 'reason for visit:', 'modality:',
+                                 'gender:', 'patient name:', 'accession']
+        
+        def is_labeled_field_value(elem_index):
+            """Check if this element is likely a value for a labeled field (not an accession)."""
+            if elem_index <= 0:
+                return False
+            # Check if the previous element was a label
+            prev_elem = element_data[elem_index - 1]
+            prev_name = prev_elem.get('name', '').lower()
+            for marker in labeled_field_markers:
+                if marker in prev_name:
+                    return True
+            return False
+        
+        # First pass: Look for "Current Study" labels - accession is right below
         for i, elem in enumerate(element_data):
             name = elem['name']
             text = elem['text']
+            combined = f"{name} {text}".strip().lower()
             
-            # Check if this element itself contains multiple accessions (not just a label)
-            # Format: "ACCESSION1 (PROC1), ACCESSION2 (PROC2)"
-            if name and ',' in name and '(' in name and not 'accession' in name.lower():
-                # This might be the accession element itself with multiple accessions
-                if not data['multiple_accessions']:
-                    accession_parts = name.split(',')
-                    for part in accession_parts:
-                        part = part.strip()
-                        if '(' in part and ')' in part:
-                            acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
-                            if acc_match:
-                                acc = acc_match.group(1).strip()
-                                proc = acc_match.group(2).strip()
-                                if acc and len(acc) > 5:
-                                    data['multiple_accessions'].append({
-                                        'accession': acc,
-                                        'procedure': proc
-                                    })
-                    # Set first accession as primary
-                    if data['multiple_accessions']:
-                        data['accession'] = data['multiple_accessions'][0]['accession']
-                        if not data['procedure'] and data['multiple_accessions'][0]['procedure']:
-                            data['procedure'] = data['multiple_accessions'][0]['procedure']
-            
-            # Patient name - usually appears as a name (capital letters, spaces)
-            if not data['patient_name']:
-                # Look for pattern like "FIRST MIDDLE LAST" (all caps, multiple words)
-                if name and len(name.split()) >= 2 and name.isupper():
-                    # Make sure it's not a label (doesn't end with :)
-                    if not name.endswith(':'):
-                        data['patient_name'] = name
-            
-            # Procedure - look for CT/MR/XR etc. procedures (but skip if it's part of accession format)
-            if not data['procedure'] and not (',' in name and '(' in name):
-                if name:
-                    # Check if it looks like a procedure description
-                    proc_keywords = ['CT ', 'MR ', 'XR ', 'US ', 'NM ', 'PET', 'MRI', 'ULTRASOUND']
-                    if any(keyword in name.upper() for keyword in proc_keywords):
-                        data['procedure'] = name
-            
-            # Accession - look for label "Accession(s):" and get next element(s)
-            if 'accession' in name.lower() and ':' in name:
-                # Look at nearby elements for the accession value(s)
-                for j in range(i+1, min(i+10, len(element_data))):
+            if 'current study' in combined:
+                # Look at nearby elements for the accession (should be right below)
+                for j in range(i+1, min(i+15, len(element_data))):
                     next_elem = element_data[j]
                     next_name = next_elem['name'].strip()
-                    next_text = next_elem.get('text', '').strip()
                     
-                    # Check if it contains multiple accessions in format:
-                    # "ACCESSION1 (PROC1), ACCESSION2 (PROC2)"
-                    if next_name and ',' in next_name and '(' in next_name:
-                        # Parse multiple accessions
-                        accession_parts = next_name.split(',')
-                        for part in accession_parts:
-                            part = part.strip()
-                            # Extract accession and procedure: "ACC (PROC)" or "ACC"
-                            if '(' in part and ')' in part:
-                                # Has procedure in parentheses
-                                acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
-                                if acc_match:
-                                    acc = acc_match.group(1).strip()
-                                    proc = acc_match.group(2).strip()
-                                    if acc:
-                                        data['multiple_accessions'].append({
-                                            'accession': acc,
-                                            'procedure': proc
-                                        })
-                            else:
-                                # Just accession, no procedure
-                                if part and len(part) > 5:
-                                    data['multiple_accessions'].append({
-                                        'accession': part,
-                                        'procedure': ''
-                                    })
-                        
-                        # Set first accession as primary
-                        if data['multiple_accessions']:
-                            data['accession'] = data['multiple_accessions'][0]['accession']
-                            if not data['procedure'] and data['multiple_accessions'][0]['procedure']:
-                                data['procedure'] = data['multiple_accessions'][0]['procedure']
-                        break
-                    # Single accession - alphanumeric, no spaces
-                    elif next_name and len(next_name) > 5 and ' ' not in next_name and '(' not in next_name:
-                        data['accession'] = next_name
-                        break
-            
-            # MRN - look for label "MRN:" and get next element
-            if 'mrn' in name.lower() and ':' in name:
-                for j in range(i+1, min(i+5, len(element_data))):
-                    next_elem = element_data[j]
-                    next_name = next_elem['name'].strip()
-                    if next_name and len(next_name) > 5:
-                        data['mrn'] = next_name
-                        break
-            
-            # Study Date - look for label "Study Date:" and get next element
-            if 'study date' in name.lower() and ':' in name:
-                for j in range(i+1, min(i+5, len(element_data))):
-                    next_elem = element_data[j]
-                    next_name = next_elem['name'].strip()
-                    # Date format MM/DD/YYYY
-                    if next_name and '/' in next_name:
-                        data['study_date'] = next_name.split()[0] if ' ' in next_name else next_name
-                        break
-            
-            # Modality - look for label "Modality:" and get next element
-            if 'modality' in name.lower() and ':' in name:
-                for j in range(i+1, min(i+5, len(element_data))):
-                    next_elem = element_data[j]
-                    next_name = next_elem['name'].strip()
-                    if next_name:
-                        data['modality'] = next_name
-                        break
-            
-            # Patient Class/Gender - look for "Male" or "Female"
-            if not data['patient_class']:
-                if name.upper() in ['MALE', 'FEMALE']:
-                    data['patient_class'] = name
-                elif 'gender' in name.lower() and ':' in name:
-                    # Look for next element with Male/Female
-                    for j in range(i+1, min(i+3, len(element_data))):
-                        next_elem = element_data[j]
-                        next_name = next_elem['name'].strip().upper()
-                        if next_name in ['MALE', 'FEMALE']:
-                            data['patient_class'] = next_name
+                    # Skip if it looks like a label or MRN
+                    if next_name and not next_name.endswith(':') and 'mrn' not in next_name.lower():
+                        extracted = extract_accession_from_text(next_name, source=f"current_study_elem_{j}", field="name")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                data['debug_info']['extraction_methods']['accession'] = 'Current Study label'
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                                    if not data['debug_info']['extraction_methods'].get('procedure'):
+                                        data['debug_info']['extraction_methods']['procedure'] = 'Current Study label (from accession)'
                             break
+        
+        # Second pass: Look for explicit "Accession" labels
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                text = elem['text']
+                combined = f"{name} {text}".strip()
+                
+                # Accession - look for label "Accession(s):" and get next element(s)
+                if 'accession' in combined.lower() and ':' in combined:
+                    # Look at nearby elements for the accession value(s) - search deeper
+                    for j in range(i+1, min(i+30, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name'].strip()
+                        next_text = next_elem.get('text', '').strip()
+                        next_combined = f"{next_name} {next_text}".strip()
+                        
+                        # Skip MRN values
+                        if 'mrn' in next_name.lower():
+                            continue
+                        
+                        # Try to extract from name
+                        if next_name:
+                            extracted = extract_accession_from_text(next_name, source=f"element_{j}", field="name")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                break
+                        
+                        # Try to extract from text
+                        if next_text:
+                            extracted = extract_accession_from_text(next_text, source=f"element_{j}", field="text")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                break
+                        
+                        # Try to extract from combined
+                        if next_combined and next_combined != next_name and next_combined != next_text:
+                            extracted = extract_accession_from_text(next_combined, source=f"element_{j}", field="combined")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                break
+                        
+                        # Also check automation_id field
+                        try:
+                            auto_id = next_elem['element'].element_info.automation_id if 'element' in next_elem else None
+                            if auto_id:
+                                extracted = extract_accession_from_text(auto_id, source=f"element_{j}", field="automation_id")
+                                if extracted:
+                                    data['multiple_accessions'].extend(extracted)
+                                    if not data['accession']:
+                                        data['accession'] = extracted[0]['accession']
+                                        if extracted[0]['procedure']:
+                                            data['procedure'] = extracted[0]['procedure']
+                                    break
+                        except:
+                            pass
+        
+        # Third pass: Look for accession-like patterns anywhere in all elements (if not found yet)
+        # This is more aggressive - searches all fields for accession patterns
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                text = elem['text']
+                
+                # Skip MRN values explicitly
+                if 'mrn' in name.lower() or 'mrn' in text.lower():
+                    continue
+                
+                # Skip labeled field values (e.g., values after "Body Part:", "Study Date:", etc.)
+                if is_labeled_field_value(i):
+                    continue
+                
+                # Skip if it's clearly a label (but only skip the name, still check text)
+                skip_name = False
+                if name and (name.endswith(':') or name.lower() in ['accession', 'accessions', 'mrn', 'study date', 'modality', 'gender', 'patient name', 'patient']):
+                    skip_name = True
+                
+                # Check name field (if not a label)
+                if name and not skip_name:
+                    extracted = extract_accession_from_text(name, source=f"second_pass_elem_{i}", field="name")
+                    if extracted:
+                        data['multiple_accessions'].extend(extracted)
+                        if not data['accession']:
+                            data['accession'] = extracted[0]['accession']
+                            if extracted[0]['procedure']:
+                                data['procedure'] = extracted[0]['procedure']
+                        continue
+                
+                # Check text field (always check text, even if name was a label)
+                if text:
+                    # Skip if text looks like a label too
+                    if not (text.endswith(':') or text.lower().strip() in ['accession', 'accessions', 'mrn', 'study date', 'modality', 'gender']):
+                        extracted = extract_accession_from_text(text, source=f"second_pass_elem_{i}", field="text")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                            continue
+                
+                # Check automation_id if available
+                try:
+                    if 'element' in elem:
+                        auto_id = elem['element'].element_info.automation_id
+                        if auto_id:
+                            extracted = extract_accession_from_text(auto_id, source=f"second_pass_elem_{i}", field="automation_id")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                continue
+                except:
+                    pass
+        
+        # Fourth pass: Search all automation_ids specifically (if still not found)
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                auto_id = elem.get('automation_id', '').strip()
+                # Skip MRN
+                if 'mrn' in auto_id.lower():
+                    continue
+                if auto_id and len(auto_id) > 5:
+                    # Check if automation_id itself looks like an accession
+                    extracted = extract_accession_from_text(auto_id, source=f"automation_id_pass_elem_{i}", field="automation_id")
+                    if extracted:
+                        data['multiple_accessions'].extend(extracted)
+                        if not data['accession']:
+                            data['accession'] = extracted[0]['accession']
+                            if extracted[0]['procedure']:
+                                data['procedure'] = extracted[0]['procedure']
+        
+        # Helper to clean procedure text (remove "Description: " prefix)
+        def clean_procedure(proc):
+            if not proc:
+                return proc
+            # Remove "Description: " prefix if present
+            if proc.lower().startswith('description:'):
+                proc = proc[12:].strip()
+            return proc
+        
+        # Procedure extraction: Look for "Description:" label (primary method)
+        if not data['procedure']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                if name and not (',' in name and '(' in name):
+                    # Check for "Description:" label and get value
+                    if 'description:' in name.lower():
+                        # Value might be after the colon in the same element
+                        if ':' in name:
+                            proc_value = name.split(':', 1)[1].strip()
+                            if proc_value:
+                                data['procedure'] = proc_value
+                                data['debug_info']['extraction_methods']['procedure'] = 'Description label (inline)'
+                                break
+                        # Or look at next element
+                        for j in range(i+1, min(i+3, len(element_data))):
+                            next_name = element_data[j]['name'].strip()
+                            if next_name and not next_name.endswith(':'):
+                                data['procedure'] = next_name
+                                data['debug_info']['extraction_methods']['procedure'] = 'Description label (next element)'
+                                break
+                        break
         
     except Exception as e:
         print(f"Error extracting Mosaic data: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return data
+
+
+def extract_mosaic_data_from_elements(element_list):
+    """Extract study data from a list of pre-extracted elements.
+    
+    This is used when we've already extracted elements via multiple approaches
+    and want to parse them for study data.
+    """
+    data = {
+        'procedure': '',
+        'accession': '',
+        'multiple_accessions': [],
+        'debug_info': {
+            'accession_candidates': [],
+            'extraction_methods': {
+                'accession': '',
+                'procedure': ''
+            }
+        }
+    }
+    
+    try:
+        # Convert to element_data format
+        element_data = []
+        for elem in element_list:
+            name = elem.get('name', '').strip()
+            text = elem.get('text', '').strip()
+            auto_id = elem.get('automation_id', '').strip()
+            source = elem.get('source', '')
+            framework = elem.get('framework_id', '').strip()
+            control_type = elem.get('control_type', '').strip()
+            
+            element_data.append({
+                'name': name,
+                'text': text,
+                'automation_id': auto_id,
+                'source': source,
+                'depth': elem.get('depth', 0),
+                'framework_id': framework,
+                'control_type': control_type
+            })
+        
+        # Helper function to check if string looks like accession
+        def is_accession_like(s):
+            if not s:
+                return False
+            s = s.strip()
+            if len(s) < 6:
+                return False
+            clean_s = s.replace('-', '').replace('_', '').replace(' ', '')
+            if len(clean_s) < 6:
+                return False
+            
+            # Reject dates (MM/DD/YYYY or similar)
+            if re.match(r'^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}', s):
+                return False
+            
+            # Reject common UI labels/text
+            lower_s = s.lower()
+            reject_words = ['accession', 'patient', 'study', 'date', 'modality', 'gender', 'male', 'female', 
+                           'mrn', 'name', 'type', 'status', 'prior', 'current', 'report', 'unknown',
+                           'chrome', 'document', 'pane', 'button', 'text', 'group', 'image',
+                           'current study', 'prior study', 'medical record',
+                           # Mosaic labeled fields - these are NOT accessions
+                           'study date', 'body part', 'ordering', 'site group', 'site code',
+                           'description', 'reason for visit', 'chest', 'abdomen', 'pelvis',
+                           'head', 'neck', 'spine', 'extremity', 'knee', 'shoulder', 'hip', 'ankle', 'wrist']
+            if lower_s in reject_words:
+                return False
+            
+            # Reject if value starts with these prefixes (labeled field values)
+            reject_prefixes = ['description:', 'ordering:', 'site group:', 'site code:', 
+                              'body part:', 'reason for visit:', 'study date:']
+            for prefix in reject_prefixes:
+                if lower_s.startswith(prefix):
+                    return False
+            
+            # Reject if it's clearly an MRN (Medical Record Number)
+            # MRN values should NOT be treated as accessions
+            if 'mrn' in lower_s:
+                return False
+            
+            # Reject common body parts and anatomy terms that might match patterns
+            anatomy_terms = ['chest', 'abdomen', 'pelvis', 'head', 'brain', 'spine', 'cervical',
+                            'thoracic', 'lumbar', 'extremity', 'shoulder', 'knee', 'hip', 'ankle',
+                            'wrist', 'elbow', 'hand', 'foot', 'neck', 'face', 'orbit', 'sinus']
+            if lower_s in anatomy_terms:
+                return False
+            
+            # STRONG patterns - definitely accession-like:
+            # Pattern: A000478952CVR - letter(s) + digits + optional letters
+            if re.match(r'^[A-Za-z]{1,4}\d{6,15}[A-Za-z]{0,5}$', clean_s):
+                return True
+            
+            # Pattern: SSH2512080000263CST - SSH prefix + digits + suffix
+            if re.match(r'^SSH\d{10,}[A-Za-z]{0,5}$', clean_s):
+                return True
+            
+            # Pattern: Numbers with embedded letters like facility codes
+            if re.match(r'^[A-Za-z0-9]{8,20}$', clean_s):
+                # Must have both letters AND numbers
+                has_letter = any(c.isalpha() for c in clean_s)
+                has_digit = any(c.isdigit() for c in clean_s)
+                # Must be mostly digits (accessions are number-heavy)
+                digit_ratio = sum(1 for c in clean_s if c.isdigit()) / len(clean_s)
+                if has_letter and has_digit and digit_ratio >= 0.5:
+                    return True
+            
+            # Pure long numbers (10+ digits) could be accessions
+            if clean_s.isdigit() and len(clean_s) >= 10:
+                return True
+            
+            return False
+        
+        # Helper function to extract accession from text
+        def extract_accession_from_text(text_str, source="unknown", field="unknown"):
+            if not text_str:
+                return []
+            results = []
+            # Pattern 1: Multiple accessions "ACC1 (PROC1), ACC2 (PROC2)"
+            if ',' in text_str and '(' in text_str:
+                parts = text_str.split(',')
+                for part in parts:
+                    part = part.strip()
+                    if '(' in part and ')' in part:
+                        acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', part)
+                        if acc_match:
+                            acc = acc_match.group(1).strip()
+                            proc = acc_match.group(2).strip()
+                            if is_accession_like(acc):
+                                data['debug_info']['accession_candidates'].append({
+                                    'value': acc, 'source': source, 'field': field, 'full_text': part
+                                })
+                                results.append({'accession': acc, 'procedure': proc})
+                    elif is_accession_like(part):
+                        data['debug_info']['accession_candidates'].append({
+                            'value': part, 'source': source, 'field': field, 'full_text': part
+                        })
+                        results.append({'accession': part, 'procedure': ''})
+            # Pattern 2: Single with procedure "ACC (PROC)"
+            elif '(' in text_str and ')' in text_str:
+                acc_match = re.match(r'^([^(]+)\s*\(([^)]+)\)', text_str)
+                if acc_match:
+                    acc = acc_match.group(1).strip()
+                    proc = acc_match.group(2).strip()
+                    if is_accession_like(acc):
+                        data['debug_info']['accession_candidates'].append({
+                            'value': acc, 'source': source, 'field': field, 'full_text': text_str
+                        })
+                        results.append({'accession': acc, 'procedure': proc})
+            # Pattern 3: Just accession-like string
+            elif is_accession_like(text_str):
+                data['debug_info']['accession_candidates'].append({
+                    'value': text_str, 'source': source, 'field': field, 'full_text': text_str
+                })
+                results.append({'accession': text_str, 'procedure': ''})
+            return results
+        
+        # Helper to check if an element is a labeled field value (not an accession)
+        labeled_field_markers = ['study date:', 'body part:', 'mrn:', 'ordering:', 'site group:',
+                                 'site code:', 'description:', 'reason for visit:', 'modality:',
+                                 'gender:', 'patient name:', 'accession']
+        
+        def is_labeled_field_value(elem_index):
+            """Check if this element is likely a value for a labeled field (not an accession)."""
+            if elem_index <= 0:
+                return False
+            # Check if the previous element was a label
+            prev_elem = element_data[elem_index - 1]
+            prev_name = prev_elem.get('name', '').lower()
+            for marker in labeled_field_markers:
+                if marker in prev_name:
+                    return True
+            return False
+        
+        # First pass: Look for "Current Study" labels - accession is right below
+        for i, elem in enumerate(element_data):
+            name = elem['name']
+            text = elem['text']
+            combined = f"{name} {text}".strip().lower()
+            
+            if 'current study' in combined:
+                # Look at nearby elements for the accession (should be right below)
+                for j in range(i+1, min(i+15, len(element_data))):
+                    next_elem = element_data[j]
+                    next_name = next_elem['name'].strip()
+                    next_source = next_elem.get('source', 'unknown')
+                    
+                    # Skip if it looks like a label
+                    if next_name and not next_name.endswith(':') and 'mrn' not in next_name.lower():
+                        extracted = extract_accession_from_text(next_name, source=f"current_study_elem_{j}", field="name")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                data['debug_info']['extraction_methods']['accession'] = 'Current Study label'
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                                    if not data['debug_info']['extraction_methods'].get('procedure'):
+                                        data['debug_info']['extraction_methods']['procedure'] = 'Current Study label (from accession)'
+                            break
+        
+        # Second pass: Look for explicit "Accession" labels
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                text = elem['text']
+                auto_id = elem['automation_id']
+                source = elem.get('source', 'unknown')
+                
+                combined = f"{name} {text}".strip()
+                
+                if 'accession' in combined.lower() and ':' in combined:
+                    for j in range(i+1, min(i+30, len(element_data))):
+                        next_elem = element_data[j]
+                        next_name = next_elem['name'].strip()
+                        next_text = next_elem.get('text', '').strip()
+                        next_auto_id = next_elem.get('automation_id', '').strip()
+                        next_source = next_elem.get('source', 'unknown')
+                        
+                        # Skip MRN values
+                        if 'mrn' in next_name.lower():
+                            continue
+                        
+                        # Try name
+                    if next_name:
+                        extracted = extract_accession_from_text(next_name, source=f"{next_source}_elem_{j}", field="name")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                data['debug_info']['extraction_methods']['accession'] = 'Accession label'
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                                    if not data['debug_info']['extraction_methods'].get('procedure'):
+                                        data['debug_info']['extraction_methods']['procedure'] = 'Accession label (from accession)'
+                                break
+                        
+                        # Try text
+                        if next_text and next_text != next_name:
+                            extracted = extract_accession_from_text(next_text, source=f"{next_source}_elem_{j}", field="text")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                break
+                        
+                        # Try automation_id
+                        if next_auto_id:
+                            extracted = extract_accession_from_text(next_auto_id, source=f"{next_source}_elem_{j}", field="automation_id")
+                            if extracted:
+                                data['multiple_accessions'].extend(extracted)
+                                if not data['accession']:
+                                    data['accession'] = extracted[0]['accession']
+                                    if extracted[0]['procedure']:
+                                        data['procedure'] = extracted[0]['procedure']
+                                break
+        
+        # Third pass: Look at Chrome/WebView2 Text elements specifically
+        # These contain the actual content from the web view
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                framework = elem.get('framework_id', '').lower()
+                control_type = elem.get('control_type', '').lower()
+                name = elem['name']
+                
+                # Skip MRN values
+                if 'mrn' in name.lower():
+                    continue
+                
+                # Focus on Chrome framework Text elements
+                if framework == 'chrome' and 'text' in control_type:
+                    if name and len(name) >= 8:
+                        extracted = extract_accession_from_text(name, source=f"chrome_text_elem_{i}", field="name")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                data['debug_info']['extraction_methods']['accession'] = 'Fallback: Chrome Text elements'
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                                    if not data['debug_info']['extraction_methods'].get('procedure'):
+                                        data['debug_info']['extraction_methods']['procedure'] = 'Pass 3: Chrome Text elements (from accession)'
+                                break
+        
+        # Fourth pass: Pattern matching across all elements
+        if not data['accession']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                text = elem['text']
+                auto_id = elem['automation_id']
+                source = elem.get('source', 'unknown')
+                
+                # Skip MRN values explicitly
+                if 'mrn' in name.lower() or 'mrn' in text.lower():
+                    continue
+                
+                # Skip labeled field values (e.g., values after "Body Part:", "Study Date:", etc.)
+                if is_labeled_field_value(i):
+                    continue
+                
+                # Skip labels
+                skip_name = name and (name.endswith(':') or name.lower() in ['accession', 'accessions', 'mrn', 'study date', 'modality', 'gender'])
+                
+                if name and not skip_name:
+                    extracted = extract_accession_from_text(name, source=f"{source}_elem_{i}", field="name")
+                    if extracted:
+                        data['multiple_accessions'].extend(extracted)
+                        if not data['accession']:
+                            data['accession'] = extracted[0]['accession']
+                            data['debug_info']['extraction_methods']['accession'] = 'Fallback: Pattern matching'
+                            if extracted[0]['procedure']:
+                                data['procedure'] = extracted[0]['procedure']
+                                if not data['debug_info']['extraction_methods'].get('procedure'):
+                                    data['debug_info']['extraction_methods']['procedure'] = 'Pass 4: Pattern matching (from accession)'
+                        continue
+                
+                if text and text != name:
+                    if not (text.endswith(':') or text.lower().strip() in ['accession', 'accessions', 'mrn', 'study date', 'modality', 'gender']):
+                        extracted = extract_accession_from_text(text, source=f"{source}_elem_{i}", field="text")
+                        if extracted:
+                            data['multiple_accessions'].extend(extracted)
+                            if not data['accession']:
+                                data['accession'] = extracted[0]['accession']
+                                if extracted[0]['procedure']:
+                                    data['procedure'] = extracted[0]['procedure']
+                            continue
+                
+                if auto_id:
+                    extracted = extract_accession_from_text(auto_id, source=f"{source}_elem_{i}", field="automation_id")
+                    if extracted:
+                        data['multiple_accessions'].extend(extracted)
+                        if not data['accession']:
+                            data['accession'] = extracted[0]['accession']
+                            if extracted[0]['procedure']:
+                                data['procedure'] = extracted[0]['procedure']
+                        continue
+        
+        # Procedure extraction: Look for "Description:" label (primary method)
+        if not data['procedure']:
+            for i, elem in enumerate(element_data):
+                name = elem['name']
+                if name and not (',' in name and '(' in name):
+                    # Check for "Description:" label and get value
+                    if 'description:' in name.lower():
+                        # Value might be after the colon in the same element
+                        if ':' in name:
+                            proc_value = name.split(':', 1)[1].strip()
+                            if proc_value:
+                                data['procedure'] = proc_value
+                                data['debug_info']['extraction_methods']['procedure'] = 'Description label (inline)'
+                                break
+                        # Or look at next element
+                        for j in range(i+1, min(i+3, len(element_data))):
+                            next_name = element_data[j]['name'].strip()
+                            if next_name and not next_name.endswith(':'):
+                                data['procedure'] = next_name
+                                data['debug_info']['extraction_methods']['procedure'] = 'Description label (next element)'
+                                break
+                        break
+    
+    except Exception as e:
+        print(f"Error extracting data from elements: {e}")
         import traceback
         traceback.print_exc()
     
@@ -339,13 +1102,18 @@ def display_elements(elements_to_display=None, search_term=""):
         if source:
             line += f"[{source}] "
         
+        # Add framework indicator (Chrome = WebView2 content)
+        framework = elem.get('framework_id', '')
+        if framework:
+            line += f"({framework}) "
+        
         if elem['automation_id']:
             line += f"ID='{elem['automation_id']}' "
-        if elem['control_type']:
+        if elem.get('control_type'):
             line += f"Type={elem['control_type']} "
         if elem['name']:
             line += f"Name='{elem['name']}' "
-        if elem['text']:
+        if elem['text'] and elem['text'] != elem['name']:
             line += f"Text='{elem['text']}'"
         
         # Add to listbox
@@ -355,96 +1123,111 @@ def display_elements(elements_to_display=None, search_term=""):
 
 
 def refresh_elements():
-    """Refresh the element list and extract data."""
+    """Refresh the element list using multiple approaches to find all elements."""
     global all_elements
     
     left_listbox.delete(0, tk.END)
-    left_header.config(text="Searching for Mosaic Info Hub window...")
+    left_header.config(text="Searching for Mosaic window...")
     root.update()
     
     main_window = find_mosaic_window()
     
     if not main_window:
-        left_header.config(text="ERROR: Mosaic Info Hub window not found! Please make sure Mosaic Info Hub is running.")
+        left_header.config(text="ERROR: Mosaic window (Info Hub or Reporting) not found! Please make sure Mosaic is running.")
         all_elements = []
         return
     
     try:
         window_text = main_window.window_text()
-        left_header.config(text=f"Found Mosaic Info Hub: {window_text} - Looking for WebView2...")
+        
+        # Show extraction progress in right pane
+        right_text.config(state=tk.NORMAL)
+        right_text.delete(1.0, tk.END)
+        right_text.insert(tk.END, "=" * 70 + "\n")
+        right_text.insert(tk.END, "ELEMENT EXTRACTION\n")
+        right_text.insert(tk.END, "=" * 70 + "\n\n")
+        right_text.insert(tk.END, f"Window: {window_text}\n\n")
         root.update()
         
-        # Find the WebView2 control
-        webview = find_webview_element(main_window)
+        all_found_elements = []
         
-        if webview:
-            left_header.config(text=f"Found WebView2 control - Extracting data...")
-            root.update()
-            
-            # Extract structured data from WebView2
-            extracted_data = extract_mosaic_data(webview)
-            
-            # Show extracted data in right pane
-            right_text.config(state=tk.NORMAL)
-            right_text.delete(1.0, tk.END)
-            right_text.insert(tk.END, "=" * 70 + "\n")
-            right_text.insert(tk.END, "EXTRACTED MOSAIC DATA\n")
-            right_text.insert(tk.END, "=" * 70 + "\n\n")
-            
-            # Show procedures and accessions - different format for single vs multiple
-            if extracted_data.get('multiple_accessions') and len(extracted_data['multiple_accessions']) > 1:
-                # Multiple accessions: show all procedures and all accessions
-                procedures = [acc_data.get('procedure', '') for acc_data in extracted_data['multiple_accessions'] if acc_data.get('procedure')]
-                if procedures:
-                    right_text.insert(tk.END, f"Procedures ({len(procedures)}):\n")
-                    for idx, proc in enumerate(procedures, 1):
-                        right_text.insert(tk.END, f"  {idx}. {proc}\n")
-                
-                right_text.insert(tk.END, f"\nAccessions ({len(extracted_data['multiple_accessions'])}):\n")
-                for idx, acc_data in enumerate(extracted_data['multiple_accessions'], 1):
-                    proc = acc_data.get('procedure', '')
-                    if proc:
-                        right_text.insert(tk.END, f"  {idx}. {acc_data['accession']} ({proc})\n")
-                    else:
-                        right_text.insert(tk.END, f"  {idx}. {acc_data['accession']}\n")
+        # =====================================================================
+        # Extract elements using main window descendants (working method)
+        # =====================================================================
+        left_header.config(text="Extracting elements from main window...")
+        root.update()
+        
+        descendants_elements = get_all_elements_descendants(main_window, max_elements=5000)
+        for e in descendants_elements:
+            e['source'] = 'descendants'
+        right_text.insert(tk.END, f"Elements found: {len(descendants_elements)}\n")
+        root.update()
+        
+        # Filter to meaningful elements
+        meaningful = [e for e in descendants_elements if 
+                      (e.get('name', '').strip() and len(e.get('name', '').strip()) > 1) or 
+                      (e.get('automation_id', '').strip() and len(e.get('automation_id', '').strip()) > 1) or
+                      (e.get('text', '').strip() and len(e.get('text', '').strip()) > 1)]
+        
+        all_elements = meaningful
+        
+        right_text.insert(tk.END, f"Meaningful elements: {len(meaningful)}\n")
+        right_text.insert(tk.END, "\n" + "=" * 70 + "\n")
+        
+        # =====================================================================
+        # Now extract data using combined elements
+        # =====================================================================
+        right_text.insert(tk.END, "\nEXTRACTED DATA:\n")
+        right_text.insert(tk.END, "-" * 70 + "\n\n")
+        
+        # Create a fake webview-like element data structure for extract_mosaic_data
+        # by building all_elements list
+        extracted_data = extract_mosaic_data_from_elements(meaningful)
+        
+        debug_info = extracted_data.get('debug_info', {})
+        
+        # Show debug info if available
+        if debug_info:
+            candidates = debug_info.get('accession_candidates', [])
+            if candidates:
+                right_text.insert(tk.END, f"Found {len(candidates)} potential accession candidates:\n")
+                for idx, cand in enumerate(candidates[:20], 1):
+                    right_text.insert(tk.END, f"  {idx}. '{cand.get('value', '')}' (from: {cand.get('source', 'unknown')}, field: {cand.get('field', 'unknown')})\n")
+                right_text.insert(tk.END, "\n")
             else:
-                # Single accession: show simple format
-                right_text.insert(tk.END, f"Procedure: {extracted_data['procedure']}\n")
-                right_text.insert(tk.END, f"Accession: {extracted_data['accession']}\n")
-            
-            right_text.insert(tk.END, f"\nMRN: {extracted_data['mrn']}\n")
-            right_text.insert(tk.END, f"Patient Name: {extracted_data['patient_name']}\n")
-            right_text.insert(tk.END, f"Patient Class/Gender: {extracted_data['patient_class']}\n")
-            right_text.insert(tk.END, f"Study Date: {extracted_data['study_date']}\n")
-            right_text.insert(tk.END, f"Modality: {extracted_data['modality']}\n")
-            right_text.config(state=tk.DISABLED)
-            
-            # Get WebView2 elements for display (with meaningful data only)
-            left_header.config(text=f"Scanning WebView2 elements...")
-            root.update()
-            webview_elements = get_all_elements(webview, max_depth=20)
-            
-            # Filter to only show elements with meaningful data
-            meaningful = [e for e in webview_elements if (e.get('name', '').strip() and len(e.get('name', '').strip()) > 2) or 
-                                                          (e.get('automation_id', '').strip()) or
-                                                          (e.get('text', '').strip() and len(e.get('text', '').strip()) > 2)]
-            
-            all_elements = meaningful
-            left_header.config(text=f"Found {len(meaningful)} elements with meaningful data (of {len(webview_elements)} total)")
-            
-            # Display all elements
-            display_elements()
+                right_text.insert(tk.END, "No accession candidates found.\n\n")
+        
+        # Show only accession and procedure with extraction methods
+        methods = debug_info.get('extraction_methods', {})
+        
+        proc = extracted_data.get('procedure', '')
+        proc_method = methods.get('procedure', 'Not found')
+        if proc:
+            right_text.insert(tk.END, f"Procedure: {proc}\n")
+            right_text.insert(tk.END, f"  [Method: {proc_method}]\n")
         else:
-            left_header.config(text=f"Found window but could not locate WebView2 control - Scanning main window only...")
-            root.update()
-            all_elements = get_all_elements(main_window, max_depth=10)
-            left_header.config(text=f"Found {len(all_elements)} elements from main window")
-            display_elements()
+            right_text.insert(tk.END, f"Procedure: NOT FOUND\n")
+        
+        acc = extracted_data.get('accession', '')
+        acc_method = methods.get('accession', 'Not found')
+        if acc:
+            right_text.insert(tk.END, f"\nAccession: {acc}\n")
+            right_text.insert(tk.END, f"  [Method: {acc_method}]\n")
+        else:
+            right_text.insert(tk.END, f"\nAccession: NOT FOUND - Check elements list\n")
+        right_text.config(state=tk.DISABLED)
+        
+        # Display elements in left pane
+        display_elements()
         
     except Exception as e:
         left_header.config(text=f"ERROR: {str(e)}")
         import traceback
         print(traceback.format_exc())
+        right_text.config(state=tk.NORMAL)
+        right_text.delete(1.0, tk.END)
+        right_text.insert(tk.END, f"ERROR: {str(e)}\n\n{traceback.format_exc()}")
+        right_text.config(state=tk.DISABLED)
         all_elements = []
 
 
@@ -669,7 +1452,7 @@ def on_listbox_select(event):
 
 # Create GUI
 root = tk.Tk()
-root.title("Mosaic Info Hub UI Elements Viewer")
+root.title("Mosaic UI Elements Viewer")
 root.geometry("1400x800")
 
 # Frame for buttons

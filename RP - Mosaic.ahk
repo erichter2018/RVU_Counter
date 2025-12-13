@@ -1,4 +1,4 @@
-﻿;F12::MsgBox, Script is Running!
+;F12::MsgBox, Script is Running!
 
 ; --- DEPRECATED KEY COMBINATIONS (removed) ---
 ; Ctrl+F (low side button) - Used to handle single/double press detection for clicking at specific coordinates
@@ -466,12 +466,12 @@ if (IncludeTime)
 else
     FinalText := " COMPARISON: " . PriorDate . " " . PriorDescript1 . ". " . PriorReport . PriorImages
 
-; Activate Mosaic Info Hub window and paste
+; Activate Mosaic Reporting window and paste
 SetTitleMatchMode, 2
-WinActivate, Mosaic Info Hub
-WinWaitActive, Mosaic Info Hub, , 1
+WinActivate, Mosaic Reporting
+WinWaitActive, Mosaic Reporting, , 1
 
-mosaicwinID := WinExist("Mosaic Info Hub")
+mosaicwinID := WinExist("Mosaic Reporting")
 if (mosaicwinID)
 {
     WinActivate, ahk_id %mosaicwinID%
@@ -483,7 +483,7 @@ if (mosaicwinID)
 }
 else
 {
-    MsgBox, Mosaic Info Hub window not found!
+    MsgBox, Mosaic Reporting window not found!
 }
 
 ; Restore original clipboard
