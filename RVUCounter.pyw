@@ -2423,9 +2423,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     procedure_lower = procedure_text.lower().strip()
     procedure_stripped = procedure_text.strip()
     
-    # Check both direct lookup and classification rules
-    direct_match_rvu = None
-    direct_match_name = None
+    # Check classification rules
     classification_match_name = None
     classification_match_rvu = None
     
@@ -2474,37 +2472,10 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
         if classification_match_name:
             break
     
-    # If classification rule matched, return it immediately (highest priority)
+    # If classification rule matched, return it immediately
     if classification_match_name:
         logger.debug(f"Matched classification rule: {procedure_text} -> {classification_match_name} ({classification_match_rvu} RVU)")
         return classification_match_name, classification_match_rvu
-    
-    # SECOND: Check direct/exact lookups (exact procedure name matches)
-    # Direct lookups can map to either:
-    # 1. A study type name (string) - will look up RVU from rvu_table
-    # 2. An RVU value (number) - legacy format, returns procedure name as study type
-    if direct_lookups:
-        # Try exact match (case-insensitive)
-        for lookup_procedure, lookup_value in direct_lookups.items():
-            if lookup_procedure.lower().strip() == procedure_lower:
-                # Check if lookup_value is a study type name (string) or RVU (number)
-                if isinstance(lookup_value, str):
-                    # It's a study type name - look up RVU from rvu_table
-                    study_type_name = lookup_value
-                    rvu_value = rvu_table.get(study_type_name, 0.0)
-                    direct_match_name = study_type_name
-                    direct_match_rvu = rvu_value
-                    logger.debug(f"Matched direct lookup: {procedure_text} -> {study_type_name} ({rvu_value} RVU)")
-                else:
-                    # Legacy format: it's an RVU value, return procedure name as study type
-                    direct_match_rvu = lookup_value
-                    direct_match_name = lookup_procedure
-                    logger.debug(f"Matched direct lookup (legacy): {procedure_text} -> {lookup_value} RVU")
-                break
-    
-    # If direct lookup matched, return it
-    if direct_match_rvu is not None:
-        return direct_match_name, direct_match_rvu
     
     # Check for modality keywords and use "Other" types as fallback before partial matching
     # BUT: Don't use fallback if a more specific match exists (e.g., "XR Chest" should match before "XR Other")
@@ -2545,8 +2516,19 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     # Also check if procedure starts with modality prefix (case-insensitive)
     # Note: "pe" prefix excluded - PET CT must match both "pet" and "ct" together in partial matching
+    # IMPORTANT: Check XA before CT (since "xa" starts with "x" which could match "xr")
     if len(procedure_lower) >= 2:
         first_two = procedure_lower[:2]
+        # Check for 3-character prefixes first (XA, CTA) before 2-character
+        if len(procedure_lower) >= 3:
+            first_three = procedure_lower[:3]
+            if first_three == "xa " or first_three == "xa\t":
+                # XA is fluoroscopy (XR modality)
+                return "XR Other", rvu_table.get("XR Other", 0.3)
+            elif first_three == "cta":
+                # CTA - will be handled by classification rules or keyword matching
+                pass
+        
         prefix_study_types = {
             "xr": "XR Other",
             "x-": "XR Other",
@@ -9842,10 +9824,16 @@ class CanvasTable:
                 indicator = " ▼" if self.sort_reverse else " ▲"
                 display_text = text + indicator
             
-            # Draw text
-            self.header_canvas.create_text(x + width//2, self.header_height//2,
+            # Draw text - left-align text columns, center numeric columns
+            if col_name == 'body_part' or col_name == 'study_type' or col_name == 'procedure' or col_name == 'metric' or col_name == 'modality' or col_name == 'patient_class' or col_name == 'category':
+                text_anchor = 'w'
+                text_x = x + 4  # Small left padding
+            else:
+                text_anchor = 'center'
+                text_x = x + width//2
+            self.header_canvas.create_text(text_x, self.header_height//2,
                                          text=display_text, font=('Arial', 9, 'bold'),
-                                         anchor='center', fill=header_fg, tags=f"header_{col_name}")
+                                         anchor=text_anchor, fill=header_fg, tags=f"header_{col_name}")
             
             # Make clickable if sortable
             if sortable and col_name in self.sortable:
@@ -10006,13 +9994,25 @@ class CanvasTable:
                             self.data_canvas.create_text(start_x, text_y, text=after_dollar, font=font, anchor='w', fill=data_fg)
                     else:
                         # No dollar match, render normally
-                        anchor = 'center'
-                        self.data_canvas.create_text(x + width//2, y + self.row_height//2,
+                        # Left-align first column (typically names/categories), center others
+                        if col_name == 'body_part' or col_name == 'study_type' or col_name == 'procedure' or col_name == 'metric' or col_name == 'modality' or col_name == 'patient_class' or col_name == 'category':
+                            anchor = 'w'
+                            text_x = x + 4
+                        else:
+                            anchor = 'center'
+                            text_x = x + width//2
+                        self.data_canvas.create_text(text_x, y + self.row_height//2,
                                                    text=value_str, font=font, anchor=anchor, fill=text_color)
                 else:
                     # Normal rendering - entire text in one color
-                    anchor = 'center'
-                    self.data_canvas.create_text(x + width//2, y + self.row_height//2,
+                    # Left-align first column (typically names/categories), center others
+                    if col_name == 'body_part' or col_name == 'study_type' or col_name == 'procedure' or col_name == 'metric' or col_name == 'modality' or col_name == 'patient_class' or col_name == 'category':
+                        anchor = 'w'
+                        text_x = x + 4  # Small left padding
+                    else:
+                        anchor = 'center'
+                        text_x = x + width//2
+                    self.data_canvas.create_text(text_x, y + self.row_height//2,
                                                text=value_str, font=font, anchor=anchor, fill=text_color)
                 x += width
             
@@ -10407,6 +10407,8 @@ class StatisticsWindow:
                        value="by_patient_class", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="By Study Type", variable=self.view_mode,
                        value="by_study_type", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="By Body Part", variable=self.view_mode,
+                       value="by_body_part", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="All Studies", variable=self.view_mode,
                        value="all_studies", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
@@ -11199,8 +11201,8 @@ class StatisticsWindow:
         
         # Hide all Canvas tables and frames (they will be recreated/shown by each view)
         canvas_tables = ['_summary_table', '_all_studies_table', '_by_modality_table', 
-                        '_by_patient_class_table', '_by_study_type_table', '_by_hour_table',
-                        '_compensation_table', '_projection_table']
+                        '_by_patient_class_table', '_by_study_type_table', '_by_body_part_table', 
+                        '_by_hour_table', '_compensation_table', '_projection_table']
         for table_attr in canvas_tables:
             if hasattr(self, table_attr):
                 try:
@@ -11372,6 +11374,8 @@ class StatisticsWindow:
             self._display_by_patient_class(records)
         elif view_mode == "by_study_type":
             self._display_by_study_type(records)
+        elif view_mode == "by_body_part":
+            self._display_by_body_part(records)
         elif view_mode == "all_studies":
             self._display_all_studies(records)
         elif view_mode == "efficiency":
@@ -11695,7 +11699,7 @@ class StatisticsWindow:
         
         if not hasattr(self, '_by_study_type_table'):
             columns = [
-                {'name': 'study_type', 'width': 150, 'text': 'Study Type', 'sortable': True},
+                {'name': 'study_type', 'width': 225, 'text': 'Study Type', 'sortable': True},  # Increased by 50% (150 -> 225)
                 {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': True},
                 {'name': 'rvu', 'width': 80, 'text': 'RVU', 'sortable': True},
                 {'name': 'avg_rvu', 'width': 80, 'text': 'Avg/Study', 'sortable': True},
@@ -11727,12 +11731,12 @@ class StatisticsWindow:
                 study_type = f"{modality} Other" if modality else "(Unknown)"
             
             # Group "CT Spine Lumbar" and "CT Spine Lumbar Recon" with "CT Spine" for display purposes
-            # Group "CT CAP Angio", "CT CAP Trauma", "CT CA", and "CT CA no P" with "CT CAP" for display purposes
+            # Group "CT CAP Angio", "CT CAP Trauma", and "CT CA" with "CT CAP" for display purposes
             # Keep the original RVU value, but group them together
             grouping_key = study_type
             if study_type == "CT Spine Lumbar" or study_type == "CT Spine Lumbar Recon":
                 grouping_key = "CT Spine"
-            elif study_type == "CT CAP Angio" or study_type == "CT CAP Angio Combined" or study_type == "CT CAP Trauma" or study_type == "CT CA" or study_type == "CT CA no P":
+            elif study_type == "CT CAP Angio" or study_type == "CT CAP Angio Combined" or study_type == "CT CAP Trauma" or study_type == "CT CA":
                 grouping_key = "CT CAP"
             
             rvu = record.get("rvu", 0)
@@ -11775,6 +11779,350 @@ class StatisticsWindow:
         
         # Update display once after all rows are added
         self._by_study_type_table.update_data()
+    
+    def _get_body_part_group(self, study_type: str) -> str:
+        """Map study types to modality-specific anatomical groups for hierarchical display."""
+        study_lower = study_type.lower()
+        
+        # Determine modality first
+        if study_type.startswith('CT ') or study_type.startswith('CTA '):
+            # === CT STUDIES ===
+            is_cta = study_type.startswith('CTA')
+            
+            # Check for body region combinations first
+            has_chest = ('chest' in study_lower or ' cap' in study_lower or ' ca ' in study_lower or study_lower.endswith(' ca'))
+            has_abdomen = ('abdomen' in study_lower or ' ap' in study_lower or ' cap' in study_lower or ' ca ' in study_lower or study_lower.endswith(' ca'))
+            has_pelvis = ('pelvis' in study_lower or ' ap' in study_lower or ' cap' in study_lower)
+            
+            # CTA Runoff with Abdo/Pelvis - special case
+            if 'runoff' in study_lower and ('abdomen' in study_lower or 'pelvis' in study_lower or 'abdo' in study_lower):
+                return "CTA: Abdomen/Pelvis"
+            
+            # CT/CTA Body (Chest+Abdomen combinations ± Pelvis)
+            elif has_chest and has_abdomen:
+                return "CTA: Body" if is_cta else "CT: Body"
+            
+            # CT/CTA Abdomen/Pelvis (no chest)
+            elif has_abdomen and not has_chest:
+                return "CTA: Abdomen/Pelvis" if is_cta else "CT: Abdomen/Pelvis"
+            
+            # CT/CTA Chest alone
+            elif has_chest and not has_abdomen:
+                return "CTA: Chest" if is_cta else "CT: Chest"
+            
+            # CT/CTA Brain
+            elif any(kw in study_lower for kw in ['brain', 'head', 'face', 'sinus', 'orbit', 'temporal', 'maxillofacial']):
+                return "CTA: Brain" if is_cta else "CT: Brain"
+            
+            # CT/CTA Neck (without brain/head)
+            elif 'neck' in study_lower:
+                return "CTA: Neck" if is_cta else "CT: Neck"
+            
+            # CT/CTA Spine
+            elif any(kw in study_lower for kw in ['spine', 'cervical', 'thoracic', 'lumbar', 'sacrum', 'coccyx']):
+                return "CTA: Spine" if is_cta else "CT: Spine"
+            
+            # CT/CTA MSK
+            elif any(kw in study_lower for kw in ['shoulder', 'arm', 'elbow', 'wrist', 'hand', 'hip', 'femur', 'knee', 'leg', 'ankle', 'foot', 'joint', 'bone']):
+                return "CTA: MSK" if is_cta else "CT: MSK"
+            
+            # CT/CTA Pelvis alone (no abdomen) - MSK
+            elif has_pelvis and not has_abdomen:
+                return "CTA: MSK" if is_cta else "CT: MSK"
+            
+            else:
+                return "CTA: Other" if is_cta else "CT: Other"
+        
+        elif study_type.startswith('MR') or study_type.startswith('MRI'):
+            # === MRI STUDIES ===
+            # MRI Brain
+            if any(kw in study_lower for kw in ['brain', 'head', 'face', 'orbit', 'pituitary', 'iap', 'temporal']):
+                return "MRI: Brain"
+            
+            # MRI Spine
+            elif any(kw in study_lower for kw in ['spine', 'cervical', 'thoracic', 'lumbar', 'sacrum', 'coccyx']):
+                return "MRI: Spine"
+            
+            # MRI Abdomen/Pelvis
+            elif any(kw in study_lower for kw in ['abdomen', 'pelvis', 'liver', 'kidney', 'pancreas', 'mrcp', 'enterography']):
+                return "MRI: Abdomen/Pelvis"
+            
+            # MRI MSK
+            elif any(kw in study_lower for kw in ['shoulder', 'arm', 'elbow', 'wrist', 'hand', 'hip', 'femur', 'knee', 'leg', 'ankle', 'foot', 'joint', 'extremity']):
+                return "MRI: MSK"
+            
+            # MRI Neck
+            elif 'neck' in study_lower:
+                return "MRI: Neck"
+            
+            # MRI Chest (rare but exists)
+            elif 'chest' in study_lower or 'thorax' in study_lower:
+                return "MRI: Chest"
+            
+            else:
+                return "MRI: Other"
+        
+        elif study_type.startswith('XR'):
+            # === X-RAY STUDIES ===
+            # XR Chest
+            if 'chest' in study_lower:
+                return "XR: Chest"
+            
+            # XR Abdomen
+            elif 'abdomen' in study_lower:
+                return "XR: Abdomen"
+            
+            # XR MSK
+            elif any(kw in study_lower for kw in ['msk', 'bone', 'shoulder', 'arm', 'elbow', 'wrist', 'hand', 'finger', 
+                                                    'hip', 'pelvis', 'femur', 'knee', 'leg', 'ankle', 'foot', 'toe',
+                                                    'spine', 'cervical', 'thoracic', 'lumbar', 'sacrum', 'coccyx',
+                                                    'rib', 'clavicle', 'scapula', 'joint', 'extremity']):
+                return "XR: MSK"
+            
+            else:
+                return "XR: Other"
+        
+        elif study_type.startswith('US'):
+            # === ULTRASOUND STUDIES ===
+            # US Abdomen/Pelvis
+            if any(kw in study_lower for kw in ['abdomen', 'pelvis', 'liver', 'kidney', 'gallbladder', 'spleen', 'pancreas', 'bladder', 'ovary', 'uterus', 'prostate']):
+                return "US: Abdomen/Pelvis"
+            
+            # US Vascular
+            elif any(kw in study_lower for kw in ['vascular', 'doppler', 'artery', 'vein', 'vessel', 'dvt', 'carotid']):
+                return "US: Vascular"
+            
+            # US MSK
+            elif any(kw in study_lower for kw in ['shoulder', 'elbow', 'wrist', 'hand', 'hip', 'knee', 'ankle', 'foot', 'tendon', 'joint']):
+                return "US: MSK"
+            
+            # US Breast
+            elif 'breast' in study_lower:
+                return "US: Breast"
+            
+            # US Thyroid/Neck
+            elif 'thyroid' in study_lower or 'neck' in study_lower:
+                return "US: Neck"
+            
+            else:
+                return "US: Other"
+        
+        elif study_type.startswith('NM'):
+            # === NUCLEAR MEDICINE STUDIES ===
+            # NM Cardiac
+            if any(kw in study_lower for kw in ['cardiac', 'heart', 'myocard', 'stress', 'viability']):
+                return "NM: Cardiac"
+            
+            # NM Bone
+            elif 'bone' in study_lower:
+                return "NM: Bone"
+            
+            # NM Other organs
+            else:
+                return "NM: Other"
+        
+        else:
+            # === OTHER MODALITIES ===
+            return "Other"
+    
+    def _display_by_body_part(self, records: List[dict]):
+        """Display data grouped by anatomical body part with hierarchical organization."""
+        logger.debug(f"_display_by_body_part called with {len(records)} records")
+        
+        # Clear/create Canvas table (force recreation to pick up any column changes)
+        if hasattr(self, '_by_body_part_table'):
+            try:
+                self._by_body_part_table.clear()
+            except:
+                if hasattr(self, '_by_body_part_table'):
+                    self._by_body_part_table.frame.pack_forget()
+                    self._by_body_part_table.frame.destroy()
+                    delattr(self, '_by_body_part_table')
+        
+        # Create table if it doesn't exist
+        if not hasattr(self, '_by_body_part_table'):
+            columns = [
+                {'name': 'body_part', 'width': 250, 'text': 'Body Part / Study Type', 'sortable': False},  # Narrower first column
+                {'name': 'studies', 'width': 80, 'text': 'Studies', 'sortable': False},
+                {'name': 'rvu', 'width': 100, 'text': 'Total RVU', 'sortable': False},
+                {'name': 'avg_rvu', 'width': 80, 'text': 'Avg RVU', 'sortable': False},
+                {'name': 'pct_studies', 'width': 90, 'text': '% Studies', 'sortable': False},
+                {'name': 'pct_rvu', 'width': 90, 'text': '% RVU', 'sortable': False}
+            ]
+            self._by_body_part_table = CanvasTable(self.table_frame, columns, app=self.app)
+        
+        # Always pack the table to ensure it's visible
+        self._by_body_part_table.frame.pack_forget()
+        self._by_body_part_table.pack(fill=tk.BOTH, expand=True)
+        self._by_body_part_table.clear()
+        
+        # Group by study type first, then by body part
+        type_data = {}
+        total_studies = 0
+        total_rvu = 0
+        
+        for record in records:
+            study_type = record.get("study_type", "").strip()
+            if not study_type:
+                study_type = "(Unknown)"
+            
+            # Handle any remaining "Multiple ..." study types
+            if study_type.startswith("Multiple "):
+                modality = study_type.replace("Multiple ", "").strip()
+                study_type = f"{modality} Other" if modality else "(Unknown)"
+            
+            rvu = record.get("rvu", 0)
+            
+            if study_type not in type_data:
+                type_data[study_type] = {"studies": 0, "rvu": 0}
+            
+            type_data[study_type]["studies"] += 1
+            type_data[study_type]["rvu"] += rvu
+            total_studies += 1
+            total_rvu += rvu
+        
+        # Group study types by body part
+        body_part_groups = {}
+        for study_type, data in type_data.items():
+            body_part = self._get_body_part_group(study_type)
+            if body_part not in body_part_groups:
+                body_part_groups[body_part] = {"studies": 0, "rvu": 0, "types": {}}
+            
+            body_part_groups[body_part]["studies"] += data["studies"]
+            body_part_groups[body_part]["rvu"] += data["rvu"]
+            body_part_groups[body_part]["types"][study_type] = data
+        
+        logger.debug(f"Created {len(body_part_groups)} body part groups: {list(body_part_groups.keys())}")
+        
+        # Sort body parts by modality priority, then by specific order
+        def body_part_sort_key(body_part):
+            """Sort by modality (CT, CTA, XR, US, MRI, NM, other), then by specific body part order."""
+            # Determine modality priority based on prefix
+            if body_part.startswith('CT:') or body_part.startswith('CTA:'):
+                # Treat CTA as immediately after CT (same priority level)
+                is_cta = body_part.startswith('CTA:')
+                modality_priority = 0
+                
+                # Special ordering: CT Body, CT Abdomen/Pelvis, CT Chest, then CTA equivalents, then others
+                if body_part == 'CT: Body':
+                    sub_priority = 0
+                elif body_part == 'CT: Abdomen/Pelvis':
+                    sub_priority = 1
+                elif body_part == 'CT: Chest':
+                    sub_priority = 2
+                elif body_part == 'CTA: Body':
+                    sub_priority = 3
+                elif body_part == 'CTA: Abdomen/Pelvis':
+                    sub_priority = 4
+                elif body_part == 'CTA: Chest':
+                    sub_priority = 5
+                else:
+                    # For other CT/CTA categories, CTA comes after CT
+                    base_name = body_part.replace('CTA:', '').replace('CT:', '')
+                    if is_cta:
+                        sub_priority = 100 + ord(base_name[0]) if base_name else 100  # CTA after CT
+                    else:
+                        sub_priority = 50 + ord(base_name[0]) if base_name else 50  # CT before CTA
+            elif body_part.startswith('XR:'):
+                modality_priority = 1
+                sub_priority = 0
+            elif body_part.startswith('US:'):
+                modality_priority = 2
+                sub_priority = 0
+            elif body_part.startswith('MRI:'):
+                modality_priority = 3
+                sub_priority = 0
+            elif body_part.startswith('NM:'):
+                modality_priority = 4
+                sub_priority = 0
+            else:
+                modality_priority = 99  # Everything else
+                sub_priority = 0
+            
+            # Return: (modality, sub_priority, alphabetical name)
+            return (modality_priority, sub_priority, body_part)
+        
+        sorted_body_parts = sorted(body_part_groups.keys(), key=body_part_sort_key)
+        
+        # Display hierarchically
+        for body_part in sorted_body_parts:
+            bp_data = body_part_groups[body_part]
+            num_children = len(bp_data["types"])
+            
+            # Sort study types within this body part by RVU
+            sorted_types = sorted(bp_data["types"].keys(), 
+                                 key=lambda k: bp_data["types"][k]["rvu"], 
+                                 reverse=True)
+            
+            # If only one child study type, skip parent header and just show the study type
+            if num_children == 1:
+                study_type = sorted_types[0]
+                st_data = bp_data["types"][study_type]
+                st_avg_rvu = st_data["rvu"] / st_data["studies"] if st_data["studies"] > 0 else 0
+                st_pct_studies = (st_data["studies"] / total_studies * 100) if total_studies > 0 else 0
+                st_pct_rvu = (st_data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+                
+                # Show study type with body part prefix for context
+                self._by_body_part_table.add_row({
+                    'body_part': f"{body_part} - {study_type}",  # Combined display
+                    'studies': str(st_data["studies"]),
+                    'rvu': f"{st_data['rvu']:.1f}",
+                    'avg_rvu': f"{st_avg_rvu:.2f}",
+                    'pct_studies': f"{st_pct_studies:.1f}%",
+                    'pct_rvu': f"{st_pct_rvu:.1f}%"
+                })
+            else:
+                # Multiple children - show parent header and children
+                avg_rvu = bp_data["rvu"] / bp_data["studies"] if bp_data["studies"] > 0 else 0
+                pct_studies = (bp_data["studies"] / total_studies * 100) if total_studies > 0 else 0
+                pct_rvu = (bp_data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+                
+                # Add body part header row with custom background color (don't use is_total)
+                # Use button background color for headers (works in both themes)
+                theme_colors = self._by_body_part_table.theme_colors
+                header_bg = theme_colors.get("button_bg", "#e1e1e1")
+                
+                self._by_body_part_table.add_row({
+                    'body_part': f"▼ {body_part}",  # Parent category with arrow
+                    'studies': str(bp_data["studies"]),
+                    'rvu': f"{bp_data['rvu']:.1f}",
+                    'avg_rvu': f"{avg_rvu:.2f}",
+                    'pct_studies': f"{pct_studies:.1f}%",
+                    'pct_rvu': f"{pct_rvu:.1f}%"
+                }, cell_colors={col: header_bg for col in ['body_part', 'studies', 'rvu', 'avg_rvu', 'pct_studies', 'pct_rvu']})
+                
+                # Add individual study types (indented with 5 spaces)
+                for study_type in sorted_types:
+                    st_data = bp_data["types"][study_type]
+                    st_avg_rvu = st_data["rvu"] / st_data["studies"] if st_data["studies"] > 0 else 0
+                    st_pct_studies = (st_data["studies"] / total_studies * 100) if total_studies > 0 else 0
+                    st_pct_rvu = (st_data["rvu"] / total_rvu * 100) if total_rvu > 0 else 0
+                    
+                    self._by_body_part_table.add_row({
+                        'body_part': f"     {study_type}",  # 5 spaces for visual separation
+                        'studies': str(st_data["studies"]),
+                        'rvu': f"{st_data['rvu']:.1f}",
+                        'avg_rvu': f"{st_avg_rvu:.2f}",
+                        'pct_studies': f"{st_pct_studies:.1f}%",
+                        'pct_rvu': f"{st_pct_rvu:.1f}%"
+                    })
+        
+        # Add totals row
+        if body_part_groups:
+            total_avg = total_rvu / total_studies if total_studies > 0 else 0
+            self._by_body_part_table.add_row({
+                'body_part': 'TOTAL',
+                'studies': str(total_studies),
+                'rvu': f"{total_rvu:.1f}",
+                'avg_rvu': f"{total_avg:.2f}",
+                'pct_studies': '100%',
+                'pct_rvu': '100%'
+            }, is_total=True)
+        
+        # Update display once after all rows are added
+        logger.debug(f"Calling update_data() on body part table with {len(self._by_body_part_table.rows_data)} rows")
+        self._by_body_part_table.update_data()
+        logger.debug("Body part table update_data() completed")
     
     def _format_duration(self, seconds: float) -> str:
         """Format duration in seconds to a human-readable string (e.g., '5m 30s', '1h 23m')."""

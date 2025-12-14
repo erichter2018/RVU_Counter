@@ -29,35 +29,48 @@
     "pace_comparison_mode": "week_2",
     "efficiency_study_count_mode": "average"
   },
-  "direct_lookups": {
-    "CT 3D IMAGING PROCESSING WITHOUT INDEPENDENT WORKSTATION": 1.75,
-    "CT BRAIN PERFUSION CTA HEAD NECK WITH IV CONTRAST": 4.5,
-    "CT BRAIN PERFUSION CTA HEAD NECK WITHOUT THEN WITH IV CONTRAST": 4.5,
-    "CT EXAM UNLISTED": 1.0,
-    "CT INTERNAL AUDITORY CANAL WITHOUT IV CONTRAST": 1.0,
-    "CT MAXILLOFACIAL WITHOUT IV CONTRAST": 1.0,
-    "CT ORBITS WITH IV CONTRAST": 1.0,
-    "XR ABDOMEN SUPINE AND ERECT WITH CHEST (ABD ACUTE SERIES)": "XR Acute Abdomen",
-    "XA GUIDANCE UPPER GI TRACT G-J TUBE PLACEMENT": 0.3,
-    "XR EXAM UNLISTED": "XR Exam Unlisted",
-    "XR NOSE TO RECTUM FOREIGN BODY PEDIATRIC": "XR Other"
-  },
+  "direct_lookups": {},
   "rvu_table": {
     "MRI Brain": 2.3,
+    "MRI Spine": 1.75,
+    "MRI Spine Cervical": 1.75,
+    "MRI Spine Thoracic": 1.75,
+    "MRI Spine Lumbar": 1.75,
+    "MRI Spine Complete": 3.0,
+    "MRI Chest": 1.75,
+    "MRI Abdomen": 1.75,
+    "MRI Pelvis": 1.75,
+    "MRI Abdomen Pelvis": 2.5,
+    "MRI Upper Extremity": 1.75,
+    "MRI Lower Extremity": 1.75,
+    "MRI Joint": 1.75,
+    "MRI Cardiac": 2.5,
+    "MRI Breast": 1.75,
+    "MRI Neck": 1.75,
     "MRI Other": 1.75,
     "CT CAP": 3.06,
     "CT CAP Angio": 3.06,
     "CT CAP Angio Combined": 2.68,
     "CT CAP Trauma": 3.0,
     "CT CA": 2.0,
-    "CT CA no P": 2.0,
     "CT AP": 1.68,
+    "CT 3D Imaging Processing": 1.75,
     "CT Other": 1.0,
     "NM Myocardial stress": 1.62,
     "NM Other": 1.0,
     "PET CT": 3.6,
     "Ultrasound transvaginal complete": 1.38,
     "US Arterial Lower Extremity": 1.2,
+    "US Arterial Upper Extremity": 1.2,
+    "US Venous Lower Extremity": 0.68,
+    "US Venous Upper Extremity": 0.68,
+    "US Abdomen": 0.68,
+    "US Pelvis": 0.68,
+    "US Soft Tissue": 0.68,
+    "US Joint": 0.68,
+    "US Breast": 0.68,
+    "US Thyroid": 0.68,
+    "US Neck": 0.68,
     "US Other": 0.68,
     "XR Other": 0.3,
     "XR Chest": 0.3,
@@ -69,11 +82,14 @@
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
-    "CT Spine": 1.0,
+    "CT Spine Cervical": 1.0,
+    "CT Spine Thoracic": 1.0,
     "CT Spine Lumbar": 2.0,
     "CTA Runoff with Abdo/Pelvis": 2.75,
     "Bone Survey": 1.0,
     "CTA Brain and Neck": 3.5,
+    "CTA Brain and Neck with Perfusion": 4.5,
+    "CT Neck Chest": 2.5,
     "CT Brain and Cervical": 1.9,
     "CT TL Spine": 2.0,
     "CT Face": 1.0,
@@ -89,6 +105,9 @@
           "CTA",
           "brain",
           "neck"
+        ],
+        "excluded_keywords": [
+          "perfusion"
         ]
       },
       {
@@ -97,6 +116,9 @@
           "head",
           "neck",
           "angiography"
+        ],
+        "excluded_keywords": [
+          "perfusion"
         ]
       },
       {
@@ -105,6 +127,41 @@
           "head",
           "neck",
           "angio"
+        ],
+        "excluded_keywords": [
+          "perfusion"
+        ]
+      }
+    ],
+    "CTA Brain and Neck with Perfusion": [
+      {
+        "required_keywords": [
+          "CT",
+          "brain",
+          "perfusion",
+          "CTA",
+          "head",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "brain",
+          "perfusion",
+          "head",
+          "neck",
+          "contrast"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -115,6 +172,11 @@
           "abd",
           "ang",
           "runoff"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -128,6 +190,11 @@
           "ct",
           "abd",
           "pel"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -139,6 +206,11 @@
           "angiography",
           "abd",
           "pel"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -150,6 +222,11 @@
           "abd",
           "pel",
           "trauma"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -158,24 +235,28 @@
         "required_keywords": [
           "CT",
           "ch",
-          "abd"
-        ],
-        "excluded_keywords": [
-          "pel",
-          "ang"
-        ]
-      }
-    ],
-    "CT CA no P": [
-      {
-        "required_keywords": [
-          "CT",
-          "ch",
           "abd",
           "ang"
         ],
         "excluded_keywords": [
-          "pel"
+          "pel",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "ch",
+          "abd"
+        ],
+        "excluded_keywords": [
+          "pel",
+          "ang",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -248,6 +329,11 @@
           "CT",
           "thor",
           "lumb"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -259,7 +345,10 @@
           "recon"
         ],
         "excluded_keywords": [
-          "thor"
+          "thor",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -268,6 +357,11 @@
           "lumbar",
           "spine",
           "recon"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -279,7 +373,10 @@
         ],
         "excluded_keywords": [
           "thor",
-          "recon"
+          "recon",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -289,7 +386,10 @@
           "spine"
         ],
         "excluded_keywords": [
-          "recon"
+          "recon",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -301,7 +401,10 @@
         "excluded_keywords": [
           "thor",
           "recon",
-          "cervical"
+          "cervical",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -312,6 +415,11 @@
           "abd",
           "pel",
           "ch"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -323,13 +431,38 @@
           "pel"
         ],
         "excluded_keywords": [
-          "chest"
+          "chest",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
         "required_keywords": [
           "CT",
           "stone"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      }
+    ],
+    "CT Neck Chest": [
+      {
+        "required_keywords": [
+          "CT",
+          "neck",
+          "chest"
+        ],
+        "excluded_keywords": [
+          "head",
+          "brain",
+          "abd",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -343,7 +476,10 @@
         "excluded_keywords": [
           "CTA",
           "angio",
-          "angiography"
+          "angiography",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -355,7 +491,10 @@
         "excluded_keywords": [
           "CTA",
           "angio",
-          "angiography"
+          "angiography",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -372,7 +511,10 @@
           "cervical",
           "angiography",
           "angio",
-          "without"
+          "without",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -385,7 +527,10 @@
           "CTA",
           "neck",
           "cervical",
-          "without"
+          "without",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -398,7 +543,10 @@
         "excluded_keywords": [
           "CTA",
           "neck",
-          "cervical"
+          "cervical",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       },
       {
@@ -412,7 +560,10 @@
           "angiography",
           "angio",
           "perf",
-          "cervical"
+          "cervical",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -427,7 +578,10 @@
           "brain",
           "angiography",
           "angio",
-          "CTA"
+          "CTA",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -440,19 +594,60 @@
         "excluded_keywords": [
           "neck",
           "abd",
-          "pel"
+          "pel",
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
-    "CT Spine": [
+    "CT Spine Cervical": [
       {
         "required_keywords": [
           "CT",
-          "Spine"
+          "cervical",
+          "spine"
         ],
         "excluded_keywords": [
-          "thor",
-          "lumb"
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "c-spine"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      }
+    ],
+    "CT Spine Thoracic": [
+      {
+        "required_keywords": [
+          "CT",
+          "thoracic",
+          "spine"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "t-spine"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -466,7 +661,14 @@
           "face",
           "orbit",
           "maxil",
-          "sinus"
+          "sinus",
+          "internal auditory canal",
+          "iac"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -496,6 +698,295 @@
         ]
       }
     ],
+    "MRI Spine Complete": [
+      {
+        "required_keywords": [
+          "MRI",
+          "spine",
+          "complete"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "full",
+          "spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "spine",
+          "complete"
+        ]
+      }
+    ],
+    "MRI Spine Cervical": [
+      {
+        "required_keywords": [
+          "MRI",
+          "cervical",
+          "spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "c-spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "cervical",
+          "spine"
+        ]
+      }
+    ],
+    "MRI Spine Thoracic": [
+      {
+        "required_keywords": [
+          "MRI",
+          "thoracic",
+          "spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "t-spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "thoracic",
+          "spine"
+        ]
+      }
+    ],
+    "MRI Spine Lumbar": [
+      {
+        "required_keywords": [
+          "MRI",
+          "lumbar",
+          "spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "l-spine"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "lumbar",
+          "spine"
+        ]
+      }
+    ],
+    "MRI Spine": [
+      {
+        "required_keywords": [
+          "MRI",
+          "spine"
+        ],
+        "excluded_keywords": [
+          "cervical",
+          "thoracic",
+          "lumbar",
+          "complete",
+          "full"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "spine"
+        ],
+        "excluded_keywords": [
+          "cervical",
+          "thoracic",
+          "lumbar",
+          "complete",
+          "full"
+        ]
+      }
+    ],
+    "MRI Abdomen Pelvis": [
+      {
+        "required_keywords": [
+          "MRI",
+          "abdomen",
+          "pelvis"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "abdomen",
+          "pelvis"
+        ]
+      }
+    ],
+    "MRI Abdomen": [
+      {
+        "required_keywords": [
+          "MRI",
+          "abdomen"
+        ],
+        "excluded_keywords": [
+          "pelvis"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "abdomen"
+        ],
+        "excluded_keywords": [
+          "pelvis"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI"
+        ],
+        "any_of_keywords": [
+          "liver",
+          "kidney",
+          "pancreas",
+          "mrcp",
+          "enterography"
+        ],
+        "excluded_keywords": [
+          "pelvis"
+        ]
+      }
+    ],
+    "MRI Pelvis": [
+      {
+        "required_keywords": [
+          "MRI",
+          "pelvis"
+        ],
+        "excluded_keywords": [
+          "abdomen"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "pelvis"
+        ],
+        "excluded_keywords": [
+          "abdomen"
+        ]
+      }
+    ],
+    "MRI Chest": [
+      {
+        "required_keywords": [
+          "MRI",
+          "chest"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "thorax"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "chest"
+        ]
+      }
+    ],
+    "MRI Upper Extremity": [
+      {
+        "required_keywords": [
+          "MRI"
+        ],
+        "any_of_keywords": [
+          "shoulder",
+          "arm",
+          "elbow",
+          "wrist",
+          "hand"
+        ]
+      }
+    ],
+    "MRI Lower Extremity": [
+      {
+        "required_keywords": [
+          "MRI"
+        ],
+        "any_of_keywords": [
+          "hip",
+          "femur",
+          "knee",
+          "leg",
+          "ankle",
+          "foot"
+        ]
+      }
+    ],
+    "MRI Joint": [
+      {
+        "required_keywords": [
+          "MRI",
+          "joint"
+        ]
+      }
+    ],
+    "MRI Cardiac": [
+      {
+        "required_keywords": [
+          "MRI",
+          "cardiac"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MRI",
+          "heart"
+        ]
+      }
+    ],
+    "MRI Breast": [
+      {
+        "required_keywords": [
+          "MRI",
+          "breast"
+        ]
+      }
+    ],
+    "MRI Neck": [
+      {
+        "required_keywords": [
+          "MRI",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "brain",
+          "head"
+        ]
+      },
+      {
+        "required_keywords": [
+          "MR",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "brain",
+          "head"
+        ]
+      }
+    ],
     "US Arterial Lower Extremity": [
       {
         "required_keywords": [
@@ -503,6 +994,177 @@
           "art",
           "low",
           "ext"
+        ]
+      }
+    ],
+    "US Arterial Upper Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "arterial",
+          "upper",
+          "extremity"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound",
+          "arterial",
+          "upper",
+          "extremity"
+        ]
+      }
+    ],
+    "US Venous Lower Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "venous",
+          "lower",
+          "extremity"
+        ]
+      },
+      {
+        "required_keywords": [
+          "US",
+          "dvt"
+        ]
+      }
+    ],
+    "US Venous Upper Extremity": [
+      {
+        "required_keywords": [
+          "US",
+          "venous",
+          "upper",
+          "extremity"
+        ]
+      }
+    ],
+    "US Abdomen Pelvis": [
+      {
+        "required_keywords": [
+          "US",
+          "abdomen",
+          "pelvis"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound",
+          "abdomen",
+          "pelvis"
+        ]
+      }
+    ],
+    "US Abdomen": [
+      {
+        "required_keywords": [
+          "US"
+        ],
+        "any_of_keywords": [
+          "liver",
+          "kidney",
+          "gallbladder",
+          "spleen",
+          "pancreas"
+        ],
+        "excluded_keywords": [
+          "pelvis",
+          "ovary",
+          "uterus",
+          "prostate",
+          "bladder"
+        ]
+      },
+      {
+        "required_keywords": [
+          "US",
+          "abdomen"
+        ],
+        "excluded_keywords": [
+          "pelvis"
+        ]
+      }
+    ],
+    "US Pelvis": [
+      {
+        "required_keywords": [
+          "US"
+        ],
+        "any_of_keywords": [
+          "pelvis",
+          "bladder",
+          "ovary",
+          "uterus",
+          "prostate"
+        ],
+        "excluded_keywords": [
+          "abdomen",
+          "liver",
+          "kidney"
+        ]
+      }
+    ],
+    "US Soft Tissue": [
+      {
+        "required_keywords": [
+          "US",
+          "soft",
+          "tissue"
+        ]
+      }
+    ],
+    "US Joint": [
+      {
+        "required_keywords": [
+          "US",
+          "joint"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound",
+          "joint"
+        ]
+      }
+    ],
+    "US Breast": [
+      {
+        "required_keywords": [
+          "US",
+          "breast"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound",
+          "breast"
+        ]
+      }
+    ],
+    "US Thyroid": [
+      {
+        "required_keywords": [
+          "US",
+          "thyroid"
+        ]
+      },
+      {
+        "required_keywords": [
+          "ultrasound",
+          "thyroid"
+        ]
+      }
+    ],
+    "US Neck": [
+      {
+        "required_keywords": [
+          "US",
+          "neck"
+        ],
+        "excluded_keywords": [
+          "thyroid"
         ]
       }
     ],
@@ -546,6 +1208,21 @@
         ]
       }
     ],
+    "XR Acute Abdomen": [
+      {
+        "required_keywords": [
+          "XR",
+          "abdomen",
+          "supine",
+          "erect",
+          "chest"
+        ],
+        "any_of_keywords": [
+          "acute",
+          "series"
+        ]
+      }
+    ],
     "XR Abdomen": [
       {
         "required_keywords": [
@@ -563,6 +1240,14 @@
         ]
       }
     ],
+    "Bone Survey": [
+      {
+        "required_keywords": [
+          "bone",
+          "survey"
+        ]
+      }
+    ],
     "XR Chest": [
       {
         "required_keywords": [
@@ -575,6 +1260,9 @@
       {
         "required_keywords": [
           "XR"
+        ],
+        "excluded_keywords": [
+          "bone survey"
         ],
         "any_of_keywords": [
           "knee",
@@ -633,10 +1321,18 @@
         ]
       }
     ],
-    "CT Other": [
+    "CT 3D Imaging Processing": [
       {
         "required_keywords": [
-          "CT"
+          "CT",
+          "3D",
+          "imaging",
+          "processing"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
         ]
       }
     ],
@@ -679,7 +1375,50 @@
     "XR Other": [
       {
         "required_keywords": [
+          "XA",
+          "guidance"
+        ]
+      },
+      {
+        "required_keywords": [
+          "XR",
+          "nose",
+          "rectum",
+          "foreign",
+          "body"
+        ]
+      },
+      {
+        "required_keywords": [
           "XR"
+        ]
+      }
+    ],
+    "CT Other": [
+      {
+        "required_keywords": [
+          "CT",
+          "exam",
+          "unlisted"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray",
+          "XA",
+          "xa"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray",
+          "XA",
+          "xa"
         ]
       }
     ]

@@ -79,28 +79,26 @@ def find_column_index(headers, target_names):
 def check_procedure_match(procedure_text, rvu_table, classification_rules, direct_lookups):
     """
     Check what study type and RVU would be assigned to this procedure.
-    Simulates the match_study_type function from RVUCounter.pyw
+    Mirrors the match_study_type function from RVUCounter.pyw to ensure consistency.
     """
     if not procedure_text:
-        return None, None
+        return "Unknown", 0.0
+    
+    if rvu_table is None:
+        rvu_table = {}
+    if classification_rules is None:
+        classification_rules = {}
+    if direct_lookups is None:
+        direct_lookups = {}
     
     procedure_lower = procedure_text.lower().strip()
     procedure_stripped = procedure_text.strip()
     
-    # FIRST: Check direct lookups (exact match, case-insensitive)
-    if direct_lookups:
-        for lookup_proc, lookup_value in direct_lookups.items():
-            if lookup_proc.lower().strip() == procedure_lower:
-                if isinstance(lookup_value, str):
-                    # Maps to a study type - look up RVU from rvu_table
-                    study_type_name = lookup_value
-                    rvu_value = rvu_table.get(study_type_name, 0.0)
-                    return study_type_name, rvu_value
-                else:
-                    # Legacy: direct RVU value, return procedure name as study type
-                    return procedure_stripped, lookup_value
+    # Check classification rules
+    classification_match_name = None
+    classification_match_rvu = None
     
-    # SECOND: Check classification rules
+    # FIRST: Check user-defined classification rules (highest priority)
     for study_type, rules_list in classification_rules.items():
         if not isinstance(rules_list, list):
             continue
@@ -110,64 +108,131 @@ def check_procedure_match(procedure_text, rvu_table, classification_rules, direc
             excluded_keywords = rule.get("excluded_keywords", [])
             any_of_keywords = rule.get("any_of_keywords", [])
             
-            # Check excluded keywords
-            if excluded_keywords:
-                if study_type == "CT Spine":
-                    # Special case: all excluded must be present
-                    all_excluded = all(kw.lower() in procedure_lower for kw in excluded_keywords)
-                    if all_excluded:
-                        continue
-                else:
-                    # Any excluded keyword present = skip
-                    if any(kw.lower() in procedure_lower for kw in excluded_keywords):
-                        continue
+            # Special case for "CT Spine": exclude only if ALL excluded keywords are present
+            if study_type == "CT Spine" and excluded_keywords:
+                all_excluded = all(keyword.lower() in procedure_lower for keyword in excluded_keywords)
+                if all_excluded:
+                    continue
+            # For other rules: exclude if any excluded keyword is present
+            elif excluded_keywords:
+                any_excluded = any(keyword.lower() in procedure_lower for keyword in excluded_keywords)
+                if any_excluded:
+                    continue
             
-            # Check required keywords
+            # Check if all required keywords are present
             required_match = True
             if required_keywords:
-                required_match = all(kw.lower() in procedure_lower for kw in required_keywords)
+                required_match = all(keyword.lower() in procedure_lower for keyword in required_keywords)
             
-            # Check any_of keywords
+            # Check if at least one of any_of_keywords is present
             any_of_match = True
             if any_of_keywords:
-                any_of_match = any(kw.lower() in procedure_lower for kw in any_of_keywords)
+                any_of_match = any(keyword.lower() in procedure_lower for keyword in any_of_keywords)
             
+            # Match if all required keywords are present AND (any_of_keywords match OR no any_of_keywords specified)
             if required_match and any_of_match:
                 rvu = rvu_table.get(study_type, 0.0)
-                return study_type, rvu
+                classification_match_name = study_type
+                classification_match_rvu = rvu
+                break
+        
+        if classification_match_name:
+            break
     
-    # THIRD: Try exact match in RVU table
+    # If classification rule matched, return it immediately
+    if classification_match_name:
+        return classification_match_name, classification_match_rvu
+    
+    # THIRD: Try exact match
     for study_type, rvu in rvu_table.items():
         if study_type.lower() == procedure_lower:
             return study_type, rvu
     
-    # FOURTH: Try keyword matching
-    if "ct cap" in procedure_lower:
-        return "CT CAP", rvu_table.get("CT CAP", 3.06)
-    if "ct ap" in procedure_lower or ("ct" in procedure_lower and "abd" in procedure_lower and "pel" in procedure_lower and "chest" not in procedure_lower):
-        return "CT AP", rvu_table.get("CT AP", 1.68)
-    if "cta" in procedure_lower:
-        if "brain" in procedure_lower and "neck" in procedure_lower:
-            return "CTA Brain and Neck", rvu_table.get("CTA Brain and Neck", 3.5)
-        if "brain" in procedure_lower or "head" in procedure_lower:
-            return "CTA Brain", rvu_table.get("CTA Brain", 1.75)
-        if "neck" in procedure_lower:
-            return "CTA Neck", rvu_table.get("CTA Neck", 1.75)
-        return "CTA Brain", rvu_table.get("CTA Brain", 1.75)
-    if "ultrasound" in procedure_lower or ("us" in procedure_lower and " " in procedure_lower):
-        return "US Other", rvu_table.get("US Other", 0.68)
-    if "mri" in procedure_lower or "mr " in procedure_lower:
-        if "brain" in procedure_lower or "head" in procedure_lower:
-            return "MRI Brain", rvu_table.get("MRI Brain", 2.3)
-        return "MRI Other", rvu_table.get("MRI Other", 1.75)
-    if "x-ray" in procedure_lower or ("xr" in procedure_lower and " " in procedure_lower):
-        return "XR Other", rvu_table.get("XR Other", 0.3)
+    # FOURTH: Try keyword matching (look up RVU values from rvu_table)
+    keyword_study_types = {
+        "ct cap": "CT CAP",
+        "ct ap": "CT AP",
+        "cta": "CTA Brain",  # Default CTA
+        "ultrasound": "US Other",  # Check "ultrasound" before "us"
+        "mri": "MRI Other",
+        "mr ": "MRI Other",
+        "us ": "US Other",
+        "x-ray": "XR Other",
+        "xr ": "XR Other",
+        "xr\t": "XR Other",  # XR with tab
+        "nuclear": "NM Other",
+        "nm ": "NM Other",
+    }
     
-    # Fallback to CT Other if starts with CT
-    if procedure_lower.startswith("ct "):
-        return "CT Other", rvu_table.get("CT Other", 1.0)
+    for keyword in sorted(keyword_study_types.keys(), key=len, reverse=True):
+        if keyword in procedure_lower:
+            study_type = keyword_study_types[keyword]
+            rvu = rvu_table.get(study_type, 0.0)
+            return study_type, rvu
     
-    return None, None
+    # FIFTH: Check prefix (look up RVU values from rvu_table)
+    # IMPORTANT: Check XA before CT (since "xa" starts with "x" which could match "xr")
+    if len(procedure_lower) >= 2:
+        first_two = procedure_lower[:2]
+        # Check for 3-character prefixes first (XA, CTA) before 2-character
+        if len(procedure_lower) >= 3:
+            first_three = procedure_lower[:3]
+            if first_three == "xa " or first_three == "xa\t":
+                # XA is fluoroscopy (XR modality)
+                return "XR Other", rvu_table.get("XR Other", 0.3)
+            elif first_three == "cta":
+                # CTA - will be handled by classification rules or keyword matching
+                pass
+        
+        prefix_study_types = {
+            "xr": "XR Other",
+            "x-": "XR Other",
+            "ct": "CT Other",
+            "mr": "MRI Other",
+            "us": "US Other",
+            "nm": "NM Other",
+        }
+        if first_two in prefix_study_types:
+            study_type = prefix_study_types[first_two]
+            rvu = rvu_table.get(study_type, 0.0)
+            return study_type, rvu
+    
+    # SIXTH: Try partial matches (most specific first)
+    matches = []
+    other_matches = []
+    pet_ct_match = None
+    
+    for study_type, rvu in rvu_table.items():
+        study_lower = study_type.lower()
+        
+        # Special handling for PET CT
+        if study_lower == "pet ct":
+            if "pet" in procedure_lower and "ct" in procedure_lower:
+                pet_ct_match = (study_type, rvu)
+            continue
+        
+        if study_lower in procedure_lower or procedure_lower in study_lower:
+            score = len(study_type)
+            if " other" in study_lower or study_lower.endswith(" other"):
+                other_matches.append((score, study_type, rvu))
+            else:
+                matches.append((score, study_type, rvu))
+    
+    # Return most specific non-"Other" match if found
+    if matches:
+        matches.sort(reverse=True)  # Highest score first
+        return matches[0][1], matches[0][2]
+    
+    # If no specific match, try "Other" types as fallback
+    if other_matches:
+        other_matches.sort(reverse=True)  # Highest score first
+        return other_matches[0][1], other_matches[0][2]
+    
+    # Absolute last resort: PET CT
+    if pet_ct_match:
+        return pet_ct_match
+    
+    return "Unknown", 0.0
 
 
 def process_excel_file(excel_path, settings):
