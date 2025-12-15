@@ -6,10 +6,10 @@ echo.
 echo Looking for source files in parent directory...
 echo.
 
-REM Check if rvu_settings.json exists in parent directory
-if not exist "..\rvu_settings.json" (
-    echo ERROR: rvu_settings.json not found in parent directory!
-    echo Please ensure rvu_settings.json is present in the parent folder.
+REM Check if rvu_settings.yaml exists in parent directory
+if not exist "..\rvu_settings.yaml" (
+    echo ERROR: rvu_settings.yaml not found in parent directory!
+    echo Please ensure rvu_settings.yaml is present in the parent folder.
     pause
     exit /b 1
 )
@@ -23,11 +23,11 @@ if not exist "..\check_rvu_excel_files.py" (
 
 REM Run PyInstaller from parent directory, outputting to packaging folder
 echo Building executable...
-echo Bundling rvu_settings.json from parent directory...
+echo Bundling rvu_settings.yaml from parent directory...
 set PARENT_DIR=%~dp0..
 pushd "%PARENT_DIR%"
-set ABS_JSON=%CD%\rvu_settings.json
-pyinstaller --onefile --console --add-data "%ABS_JSON%;." --name "RVU Excel Checker" --distpath "packaging\dist" --workpath "packaging\build" --specpath "packaging" --clean check_rvu_excel_files.py
+set ABS_YAML=%CD%\rvu_settings.yaml
+pyinstaller --onefile --console --add-data "%ABS_YAML%;." --name "RVU Excel Checker" --distpath "packaging\dist" --workpath "packaging\build" --specpath "packaging" --clean check_rvu_excel_files.py
 popd
 
 if %ERRORLEVEL% NEQ 0 (

@@ -3,13 +3,13 @@
 Fix Database Script for RVU Counter
 
 This script identifies and fixes incorrectly matched RVU records in the database
-by comparing stored study_type and rvu values against current rvu_settings.json rules.
+by comparing stored study_type and rvu values against current rvu_settings.yaml rules.
 
 Usage:
     python fix_database.py
 
 The script will:
-1. Load rvu_settings.json from the current directory
+1. Load rvu_settings.yaml from the current directory
 2. Connect to rvu_records.db in the current directory
 3. Identify records with mismatched study_type or rvu values
 4. Display a summary and ask for confirmation before fixing
@@ -19,12 +19,13 @@ import sqlite3
 import json
 import os
 import sys
+import yaml
 from pathlib import Path
 from typing import Tuple, Dict, List, Optional
 
 
 def load_rvu_settings(settings_path: Path) -> Dict:
-    """Load RVU settings from JSON file.
+    """Load RVU settings from YAML file.
     
     When running as frozen executable, checks sys._MEIPASS first for bundled file,
     then falls back to the settings_path provided.
@@ -32,11 +33,11 @@ def load_rvu_settings(settings_path: Path) -> Dict:
     # Handle PyInstaller bundled files
     if getattr(sys, 'frozen', False):
         # Running as compiled executable - check bundled location first
-        bundled_path = Path(sys._MEIPASS) / "rvu_settings.json"
+        bundled_path = Path(sys._MEIPASS) / "rvu_settings.yaml"
         if bundled_path.exists():
             try:
                 with open(bundled_path, 'r', encoding='utf-8') as f:
-                    settings = json.load(f)
+                    settings = yaml.safe_load(f)
                 print(f"Loaded bundled settings from {bundled_path}")
                 return settings
             except Exception as e:
@@ -48,13 +49,13 @@ def load_rvu_settings(settings_path: Path) -> Dict:
         print(f"ERROR: {settings_path} not found!")
         if getattr(sys, 'frozen', False):
             print(f"  Running as frozen executable")
-            print(f"  Checked bundled location: {Path(sys._MEIPASS) / 'rvu_settings.json'}")
+            print(f"  Checked bundled location: {Path(sys._MEIPASS) / 'rvu_settings.yaml'}")
             print(f"  sys._MEIPASS: {sys._MEIPASS}")
         sys.exit(1)
     
     try:
         with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
+            settings = yaml.safe_load(f)
         print(f"Loaded settings from {settings_path}")
         return settings
     except Exception as e:
@@ -364,13 +365,23 @@ def print_summary(mismatches: List[Dict]) -> bool:
     return False  # Return False to indicate mismatches found
 
 
-def fix_database(db_path: Path, mismatches: List[Dict]) -> int:
-    """Fix mismatched records in the database. Returns number of records updated."""
+def fix_database(db_path: Path, mismatches: List[Dict]) -> Tuple[int, float]:
+    """Fix mismatched records in the database. 
+    
+    Returns:
+        Tuple of (number of records updated, total RVU difference)
+    """
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     updated_count = 0
+    total_rvu_difference = 0.0
+    
     for m in mismatches:
+        # Calculate RVU difference for this record
+        rvu_diff = m['new_rvu'] - m['stored_rvu']
+        total_rvu_difference += rvu_diff
+        
         cursor.execute('''
             UPDATE records
             SET study_type = ?, rvu = ?
@@ -381,7 +392,7 @@ def fix_database(db_path: Path, mismatches: List[Dict]) -> int:
     conn.commit()
     conn.close()
     
-    return updated_count
+    return updated_count, total_rvu_difference
 
 
 def main():
@@ -401,7 +412,7 @@ def main():
     print(f"\nWorking directory: {work_dir}")
     
     # Find required files
-    settings_path = work_dir / "rvu_settings.json"
+    settings_path = work_dir / "rvu_settings.yaml"
     db_path = work_dir / "rvu_records.db"
     
     # Load settings
@@ -423,13 +434,26 @@ def main():
     
     if response == 'Y':
         print("\nFixing database...")
-        updated_count = fix_database(db_path, mismatches)
+        updated_count, total_rvu_difference = fix_database(db_path, mismatches)
+        
+        print(f"\n{'='*80}")
+        print(f"SUMMARY OF CHANGES")
+        print(f"{'='*80}")
+        print(f"Records updated: {updated_count}")
+        if total_rvu_difference > 0:
+            print(f"Total RVU change: +{total_rvu_difference:.2f} RVU")
+        elif total_rvu_difference < 0:
+            print(f"Total RVU change: {total_rvu_difference:.2f} RVU")
+        else:
+            print(f"Total RVU change: 0.00 RVU (no net change)")
+        print(f"{'='*80}")
         print(f"\n✓ Successfully updated {updated_count} records!")
         print(f"\nDatabase has been fixed. You may want to verify the changes.")
     else:
         print("\nNo changes made to the database.")
     
     print("\n" + "=" * 80)
+    input("\nPress Enter to exit...")
 
 
 if __name__ == "__main__":

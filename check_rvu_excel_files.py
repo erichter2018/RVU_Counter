@@ -1,12 +1,13 @@
 """
 RVU Comparison Script
 Scans all Excel files in the current directory and compares procedures/RVUs
-against rvu_settings.json rules, generating a report for each file.
+against rvu_settings.yaml rules, generating a report for each file.
 """
 
 import json
 import os
 import sys
+import yaml
 from pathlib import Path
 from datetime import datetime
 
@@ -17,8 +18,8 @@ except ImportError:
     sys.exit(1)
 
 
-def load_rvu_settings(settings_file='rvu_settings.json'):
-    """Load RVU settings from JSON file."""
+def load_rvu_settings(settings_file='rvu_settings.yaml'):
+    """Load RVU settings from YAML file."""
     # Handle PyInstaller bundled files
     if getattr(sys, 'frozen', False):
         # Running as compiled executable
@@ -37,7 +38,7 @@ def load_rvu_settings(settings_file='rvu_settings.json'):
     
     try:
         with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = json.load(f)
+            settings = yaml.safe_load(f)
         return settings
     except FileNotFoundError:
         print(f"ERROR: {settings_file} not found")
@@ -55,8 +56,8 @@ def load_rvu_settings(settings_file='rvu_settings.json'):
             print(f"  Checked: {settings_path}")
         print(f"  Also checked working directory: {Path.cwd() / settings_file}")
         sys.exit(1)
-    except json.JSONDecodeError as e:
-        print(f"ERROR: Invalid JSON in {settings_file}: {e}")
+    except yaml.YAMLError as e:
+        print(f"ERROR: Invalid YAML in {settings_file}: {e}")
         sys.exit(1)
 
 
@@ -490,7 +491,7 @@ def main():
     print(f"Working directory: {work_dir}\n")
     
     # Load settings
-    print("Loading rvu_settings.json...")
+    print("Loading rvu_settings.yaml...")
     settings = load_rvu_settings()
     print("Settings loaded successfully.\n")
     

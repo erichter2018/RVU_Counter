@@ -14,6 +14,8 @@ import os
 import sys
 import shutil
 import sqlite3
+import yaml
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
@@ -27,6 +29,37 @@ try:
 except ImportError as e:
     HAS_TKCALENDAR = False
     print(f"Warning: tkcalendar not available: {e}")
+
+
+# Custom YAML Dumper for compact formatting
+class CompactYAMLDumper(yaml.SafeDumper):
+    """Custom YAML dumper that keeps keyword lists and hourly rates inline."""
+    pass
+
+def is_hourly_rate_dict(d):
+    """Check if a dict contains hourly rate keys (12am, 1am, etc.)."""
+    if not isinstance(d, dict):
+        return False
+    keys = list(d.keys())
+    return len(keys) > 0 and any(isinstance(k, str) and (k.endswith('am') or k.endswith('pm')) for k in keys[:5])
+
+def represent_dict_compact(dumper, data):
+    """Custom dict representer that makes certain lists inline."""
+    node_pairs = []
+    for key, value in data.items():
+        # Make keyword lists inline
+        if isinstance(value, list) and key in ['required_keywords', 'excluded_keywords', 'any_of_keywords']:
+            value_node = dumper.represent_sequence('tag:yaml.org,2002:seq', value, flow_style=True)
+        # Make hourly rate dicts inline
+        elif is_hourly_rate_dict(value):
+            value_node = dumper.represent_mapping('tag:yaml.org,2002:map', value, flow_style=True)
+        else:
+            value_node = dumper.represent_data(value)
+        node_pairs.append((dumper.represent_data(key), value_node))
+    return yaml.nodes.MappingNode('tag:yaml.org,2002:map', node_pairs)
+
+CompactYAMLDumper.add_representer(dict, represent_dict_compact)
+CompactYAMLDumper.add_representer(OrderedDict, represent_dict_compact)
 
 
 # Configure logging with FIFO-style maintenance (max 10MB, single file, remove oldest entries)
@@ -1105,7 +1138,7 @@ class RecordsDatabase:
         logger.info(f"Exported database to JSON: {filepath}")
 
 
-# RVU Lookup Table - REMOVED: Now using rvu_settings.json as single source of truth
+# RVU Lookup Table - REMOVED: Now using rvu_settings.yaml as single source of truth
 # All RVU values must come from the loaded JSON file
 
 
@@ -2400,7 +2433,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     Args:
         procedure_text: The procedure text to match
-        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.json)
+        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.yaml)
         classification_rules: Classification rules dictionary (optional)
         direct_lookups: Direct lookup dictionary (optional)
     
@@ -2412,7 +2445,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     # Require rvu_table - it must be provided from loaded settings
     if rvu_table is None:
-        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.json")
+        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.yaml")
         return "Unknown", 0.0
     
     if classification_rules is None:
@@ -3236,16 +3269,22 @@ class RVUData:
     def __init__(self, base_dir: str = None):
         settings_dir, data_dir = get_app_paths()
         
+        # Track if running as frozen app
+        self.is_frozen = getattr(sys, 'frozen', False)
+        
         # Settings file (RVU tables, rules, rates, user preferences, window positions)
-        self.settings_file = os.path.join(data_dir, "rvu_settings.json")
+        # When running as script: use script directory (single source of truth)
+        # When frozen: use data_dir (can't write to bundled location)
+        if self.is_frozen:
+            self.settings_file = os.path.join(data_dir, "rvu_settings.yaml")
+        else:
+            self.settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.yaml")
+        
         # SQLite database for records (replaces rvu_records.json)
         self.db_file = os.path.join(data_dir, "rvu_records.db")
         # Legacy JSON file paths (for migration)
         self.records_file = os.path.join(data_dir, "rvu_records.json")
         self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
-        
-        # Track if running as frozen app
-        self.is_frozen = getattr(sys, 'frozen', False)
         
         logger.info(f"Settings file: {self.settings_file}")
         logger.info(f"Database file: {self.db_file}")
@@ -3348,159 +3387,48 @@ class RVUData:
     def load_settings(self) -> dict:
         """Load settings, RVU table, classification rules, and window positions.
         
-        Intelligently merges user settings with new defaults:
-        - Preserves: settings, window_positions, backup, compensation_rates
-        - Updates: rvu_table, classification_rules, direct_lookups (to get bug fixes)
-        - Adds: any new settings keys from the new version
+        Simply loads rvu_settings.yaml - no merging, no defaults.
+        The YAML file is the single source of truth.
+        
+        When frozen: loads from bundled file first, falls back to data_dir file
+        When script: loads from script directory file
         """
-        # Get bundled/default settings from the settings file
-        # Priority: 1) Bundled file (if frozen), 2) Local file (if script)
-        # There are NO hardcoded defaults - the settings file MUST exist
-        default_data = None
+        # Determine which file to load
+        settings_file_to_load = None
         
         # Try bundled file first (when frozen)
         if self.is_frozen:
-            try:
-                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
-                if os.path.exists(bundled_settings_file):
-                    with open(bundled_settings_file, 'r') as f:
-                        default_data = json.load(f)
-                        logger.info(f"Loaded bundled settings from {bundled_settings_file}")
-            except Exception as e:
-                logger.error(f"Error loading bundled settings file: {e}")
+            bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.yaml")
+            if os.path.exists(bundled_settings_file):
+                settings_file_to_load = bundled_settings_file
+                logger.info(f"Loading bundled settings from {bundled_settings_file}")
         
-        # Try local file (when running as script, or if bundled file not found)
-        if default_data is None:
-            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.json")
-            if os.path.exists(local_settings_file):
-                try:
-                    with open(local_settings_file, 'r') as f:
-                        default_data = json.load(f)
-                        logger.info(f"Loaded default settings from local file: {local_settings_file}")
-                except Exception as e:
-                    logger.error(f"Error loading local settings file: {e}")
+        # Use self.settings_file (script directory when script, data_dir when frozen and no bundled)
+        if settings_file_to_load is None:
+            if os.path.exists(self.settings_file):
+                settings_file_to_load = self.settings_file
+                logger.info(f"Loading settings from {self.settings_file}")
         
         # Settings file MUST exist - fail if it doesn't
-        if default_data is None:
+        if settings_file_to_load is None or not os.path.exists(settings_file_to_load):
             error_msg = (
-                f"CRITICAL ERROR: Could not load settings file!\n"
-                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.json')}\n"
-                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.json')}\n"
-                f"The settings file must be bundled with the app or present in the script directory."
+                f"CRITICAL ERROR: Could not find settings file!\n"
+                f"Expected: {self.settings_file}\n"
+                f"Or bundled: {os.path.join(sys._MEIPASS, 'rvu_settings.yaml') if self.is_frozen else 'N/A'}\n"
+                f"The settings file must exist."
             )
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         
-        # Try to load user's existing settings file
-        user_data = None
-        if os.path.exists(self.settings_file):
-            try:
-                with open(self.settings_file, 'r') as f:
-                    user_data = json.load(f)
-                    logger.info(f"Loaded user settings from {self.settings_file}")
-            except Exception as e:
-                logger.error(f"Error loading user settings file: {e}")
-        
-        # If no user settings exist, use defaults and save them
-        if user_data is None:
-            logger.info("No existing user settings found, using defaults")
-            # Save the default settings for future use
-            try:
-                with open(self.settings_file, 'w') as f:
-                    json.dump(default_data, f, indent=2, default=str)
-                logger.info(f"Created new settings file at {self.settings_file}")
-            except Exception as e:
-                logger.error(f"Error saving default settings: {e}")
-            return default_data
-        
-        # Merge user settings with defaults intelligently
-        merged_data = {}
-        
-        # Preserve user's settings (user preferences)
-        merged_data["settings"] = user_data.get("settings", {})
-        # Add any new settings keys from default that user doesn't have
-        for key, value in default_data.get("settings", {}).items():
-            if key not in merged_data["settings"]:
-                merged_data["settings"][key] = value
-                logger.debug(f"Added new settings key '{key}' from default")
-        
-        # Preserve user's window positions
-        merged_data["window_positions"] = user_data.get("window_positions", {})
-        # Add any new window position keys from default
-        for key, value in default_data.get("window_positions", {}).items():
-            if key not in merged_data["window_positions"]:
-                merged_data["window_positions"][key] = value
-                logger.debug(f"Added new window position '{key}' from default")
-        
-        # Preserve user's backup settings
-        merged_data["backup"] = user_data.get("backup", {})
-        # Add any new backup settings keys from default
-        for key, value in default_data.get("backup", {}).items():
-            if key not in merged_data["backup"]:
-                merged_data["backup"][key] = value
-                logger.debug(f"Added new backup setting '{key}' from default")
-        
-        # Preserve user's compensation rates
-        merged_data["compensation_rates"] = user_data.get("compensation_rates", {})
-        # Add any new compensation rate keys from default (nested merge)
-        default_comp = default_data.get("compensation_rates", {})
-        if default_comp:
-            for day_type in ["weekday", "weekend"]:
-                if day_type not in merged_data["compensation_rates"]:
-                    merged_data["compensation_rates"][day_type] = default_comp.get(day_type, {})
-                else:
-                    for role in ["assoc", "partner"]:
-                        if role not in merged_data["compensation_rates"][day_type]:
-                            if day_type in default_comp and role in default_comp[day_type]:
-                                merged_data["compensation_rates"][day_type][role] = default_comp[day_type][role]
-        
-        # RVU table - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_rvu_table = user_data.get("rvu_table", {})
-        if user_rvu_table:
-            merged_data["rvu_table"] = user_rvu_table.copy()
-            logger.info(f"Preserved user RVU table with {len(user_rvu_table)} entries (no defaults added)")
-        else:
-            # Only use defaults from JSON file if user has NO rvu_table at all
-            merged_data["rvu_table"] = default_data.get("rvu_table", {})
-            if merged_data["rvu_table"]:
-                logger.info("No user RVU table found, using defaults from rvu_settings.json")
-            else:
-                logger.warning("No RVU table found in user or default settings file!")
-        
-        # Classification rules - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_classification_rules = user_data.get("classification_rules", {})
-        if user_classification_rules:
-            merged_data["classification_rules"] = user_classification_rules.copy()
-            logger.info(f"Preserved user classification rules with {len(user_classification_rules)} study types (no defaults added)")
-        else:
-            # Only use defaults if user has NO classification_rules at all
-            default_classification_rules = default_data.get("classification_rules", {})
-            merged_data["classification_rules"] = default_classification_rules.copy() if default_classification_rules else {}
-            logger.info("No user classification rules found, using defaults")
-        
-        # Direct lookups - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_direct_lookups = user_data.get("direct_lookups", {})
-        if user_direct_lookups:
-            merged_data["direct_lookups"] = user_direct_lookups.copy()
-            logger.info(f"Preserved user direct lookups with {len(user_direct_lookups)} entries (no defaults added)")
-        else:
-            # Only use defaults if user has NO direct_lookups at all
-            default_direct_lookups = default_data.get("direct_lookups", {})
-            merged_data["direct_lookups"] = default_direct_lookups.copy() if default_direct_lookups else {}
-            logger.info("No user direct lookups found, using defaults")
-        
-        # Save merged settings back to file
+        # Load the settings file directly - no merging, just use what's in the file
         try:
-            with open(self.settings_file, 'w') as f:
-                json.dump(merged_data, f, indent=2, default=str)
-            logger.info(f"Saved merged settings to {self.settings_file}")
+            with open(settings_file_to_load, 'r') as f:
+                data = yaml.safe_load(f)
+            logger.info(f"Loaded settings from {settings_file_to_load} - using as single source of truth, no merging")
+            return data
         except Exception as e:
-            logger.error(f"Error saving merged settings: {e}")
-        
-        return merged_data
+            logger.error(f"Error loading settings file: {e}")
+            raise
     
     def _validate_window_positions(self, data: dict) -> dict:
         """Validate window positions and reset invalid ones to safe defaults.
@@ -3707,7 +3635,7 @@ class RVUData:
                 "backup": self.settings_data.get("backup", {})
             }
             with open(self.settings_file, 'w') as f:
-                json.dump(settings_to_save, f, indent=2, default=str)
+                yaml.dump(settings_to_save, f, Dumper=CompactYAMLDumper, default_flow_style=False, sort_keys=False, allow_unicode=True, width=150, indent=2)
             logger.info(f"Saved settings to {self.settings_file}")
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
@@ -8092,21 +8020,24 @@ class RVUCounterApp:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
-                if show_time and duration_text:
-                    # Calculate available width for accession
-                    frame_width = self.root.winfo_width()
-                    if frame_width > 100:
-                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
-                        duration_chars = 8
-                        prefix_chars = len("Accession: ")
-                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
-                        usable_width = max(frame_width - reserved, 50)
-                        char_width = 8 * 0.75
-                        max_chars = int(usable_width / char_width)
-                        max_chars = max(10, min(max_chars, 100))
-                        
-                        if len(acc_display) > max_chars:
-                            acc_display = self._truncate_text(acc_display, max_chars)
+                frame_width = self.root.winfo_width()
+                if frame_width > 100:
+                    # Calculate space needed for duration and prefix
+                    prefix_chars = len("Accession: ")
+                    char_width = 7
+                    # Reserve space for prefix, duration (if shown), and ~5 spaces padding
+                    if show_time and duration_text:
+                        duration_chars = len(duration_text)
+                        reserved = (prefix_chars + duration_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                    else:
+                        reserved = (prefix_chars + 5) * char_width + 15
+                    
+                    usable_width = max(frame_width - reserved, 35)
+                    max_chars = int(usable_width / char_width)
+                    max_chars = max(10, min(max_chars, 100))
+                    
+                    if len(acc_display) > max_chars:
+                        acc_display = self._truncate_text(acc_display, max_chars)
                 
                 # Display based on duplicate status
                 # Show "already recorded" for accession line, but still show duration and other fields
@@ -8130,8 +8061,20 @@ class RVUCounterApp:
                 if is_mosaic_multi:
                     # Mosaic multi-accession - show summary
                     if self.current_procedure and self.current_procedure != "Multiple studies":
-                        # Show the first procedure
-                        self.debug_procedure_label.config(text=f"Procedure: {self.current_procedure}", foreground="gray")
+                        # Show the first procedure with dynamic truncation
+                        procedure_text = self.current_procedure
+                        frame_width = self.root.winfo_width()
+                        if frame_width > 100:
+                            prefix_chars = len("Procedure: ")
+                            char_width = 8 * 0.75
+                            reserved = prefix_chars * char_width + 10
+                            usable_width = max(frame_width - reserved, 50)
+                            max_chars = int(usable_width / char_width)
+                            max_chars = max(20, min(max_chars, 150))
+                            
+                            if len(procedure_text) > max_chars:
+                                procedure_text = self._truncate_text(procedure_text, max_chars)
+                        self.debug_procedure_label.config(text=f"Procedure: {procedure_text}", foreground="gray")
                     else:
                         # Show summary
                         self.debug_procedure_label.config(text=f"Procedure: {len(self.current_multiple_accessions)} studies", foreground="gray")
@@ -8157,7 +8100,19 @@ class RVUCounterApp:
                 else:
                     # Duplicate multi-accession - already completed, extract modality from study type
                     if self.current_study_type.startswith("Multiple"):
-                        self.debug_procedure_label.config(text=f"Procedure: {self.current_study_type}", foreground="gray")
+                        procedure_text = self.current_study_type
+                        frame_width = self.root.winfo_width()
+                        if frame_width > 100:
+                            prefix_chars = len("Procedure: ")
+                            char_width = 7
+                            reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                            usable_width = max(frame_width - reserved, 35)
+                            max_chars = int(usable_width / char_width)
+                            max_chars = max(15, min(max_chars, 120))
+                            
+                            if len(procedure_text) > max_chars:
+                                procedure_text = self._truncate_text(procedure_text, max_chars)
+                        self.debug_procedure_label.config(text=f"Procedure: {procedure_text}", foreground="gray")
                     else:
                         # Get modality from current procedure
                         classification_rules = self.data_manager.data.get("classification_rules", {})
@@ -8180,21 +8135,24 @@ class RVUCounterApp:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
-                if show_time and duration_text:
-                    # Calculate available width for accession
-                    frame_width = self.root.winfo_width()
-                    if frame_width > 100:
-                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
-                        duration_chars = 8
-                        prefix_chars = len("Accession: ")
-                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
-                        usable_width = max(frame_width - reserved, 50)
-                        char_width = 8 * 0.75
-                        max_chars = int(usable_width / char_width)
-                        max_chars = max(10, min(max_chars, 100))
-                        
-                        if len(accession_text) > max_chars:
-                            accession_text = self._truncate_text(accession_text, max_chars)
+                frame_width = self.root.winfo_width()
+                if frame_width > 100:
+                    # Calculate space needed for duration and prefix
+                    prefix_chars = len("Accession: ")
+                    char_width = 7
+                    # Reserve space for prefix, duration (if shown), and ~5 spaces padding
+                    if show_time and duration_text:
+                        duration_chars = len(duration_text)
+                        reserved = (prefix_chars + duration_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                    else:
+                        reserved = (prefix_chars + 5) * char_width + 15
+                    
+                    usable_width = max(frame_width - reserved, 35)
+                    max_chars = int(usable_width / char_width)
+                    max_chars = max(10, min(max_chars, 100))
+                    
+                    if len(accession_text) > max_chars:
+                        accession_text = self._truncate_text(accession_text, max_chars)
                 
                 # If duplicate, show "already recorded" in red instead of accession
                 # But still show duration and other fields normally
@@ -8206,17 +8164,60 @@ class RVUCounterApp:
                 # Always show duration (even for duplicates - shows how long user has been viewing)
                 self.debug_duration_label.config(text=duration_text if show_time else "")
                 
-                # No truncation for procedure - show full name
+                # Dynamic truncation for procedure based on available width
                 procedure_display = self.current_procedure if self.current_procedure else '-'
+                if self.current_procedure:
+                    frame_width = self.root.winfo_width()
+                    if frame_width > 100:
+                        prefix_chars = len("Procedure: ")
+                        char_width = 7
+                        reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                        usable_width = max(frame_width - reserved, 35)
+                        max_chars = int(usable_width / char_width)
+                        max_chars = max(15, min(max_chars, 120))
+                        
+                        if len(procedure_display) > max_chars:
+                            procedure_display = self._truncate_text(procedure_display, max_chars)
+                
                 self.debug_procedure_label.config(text=f"Procedure: {procedure_display}", foreground="gray")
             
-            self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
+            # Dynamic truncation for patient class based on available width
+            patient_class_display = self.current_patient_class if self.current_patient_class else '-'
+            if self.current_patient_class:
+                frame_width = self.root.winfo_width()
+                if frame_width > 100:
+                    prefix_chars = len("Patient Class: ")
+                    char_width = 7
+                    reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                    usable_width = max(frame_width - reserved, 35)
+                    max_chars = int(usable_width / char_width)
+                    max_chars = max(10, min(max_chars, 80))
+                    
+                    if len(patient_class_display) > max_chars:
+                        patient_class_display = self._truncate_text(patient_class_display, max_chars)
+            
+            self.debug_patient_class_label.config(text=f"Patient Class: {patient_class_display}")
             
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                # Aggressive truncation for Current Study to ensure RVU label always stays visible
-                # Truncate very aggressively so "..." is right next to RVU with minimal space
-                study_type_display = self._truncate_text(self.current_study_type, 10)  # Very aggressive to fit RVU
+                # Dynamic truncation for study type based on available width
+                study_type_display = self.current_study_type
+                frame_width = self.root.winfo_width()
+                if frame_width > 100:
+                    # Reserve space for: "Study Type: " prefix, RVU label, and ~5 spaces between ellipsis and RVU
+                    prefix_chars = len("Study Type: ")
+                    rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
+                    rvu_text = f"{rvu_value:.1f} RVU"
+                    rvu_chars = len(rvu_text)
+                    char_width = 7
+                    reserved = (prefix_chars + rvu_chars + 5) * char_width + 15  # 5 spaces + minimal padding
+                    usable_width = max(frame_width - reserved, 35)
+                    max_chars = int(usable_width / char_width)
+                    max_chars = max(10, min(max_chars, 80))  # Min 10 chars, max 80
+                    
+                    if len(study_type_display) > max_chars:
+                        study_type_display = self._truncate_text(study_type_display, max_chars)
+                
                 # Show prefix
                 self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
                 # Check if incomplete (starts with "incomplete") - show in red
@@ -8224,7 +8225,6 @@ class RVUCounterApp:
                     self.debug_study_type_label.config(text=study_type_display, foreground="red")
                 else:
                     self.debug_study_type_label.config(text=study_type_display, foreground="gray")
-                rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
                 self.debug_study_rvu_label.config(text=f"{rvu_value:.1f} RVU")
             else:
                 self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
@@ -11731,12 +11731,13 @@ class StatisticsWindow:
                 study_type = f"{modality} Other" if modality else "(Unknown)"
             
             # Group "CT Spine Lumbar" and "CT Spine Lumbar Recon" with "CT Spine" for display purposes
-            # Group "CT CAP Angio", "CT CAP Trauma", and "CT CA" with "CT CAP" for display purposes
+            # Group "CT CAP Trauma" and "CT CA" with "CT CAP" for display purposes
             # Keep the original RVU value, but group them together
+            # Note: CTA CAP is kept separate from CT CAP
             grouping_key = study_type
             if study_type == "CT Spine Lumbar" or study_type == "CT Spine Lumbar Recon":
                 grouping_key = "CT Spine"
-            elif study_type == "CT CAP Angio" or study_type == "CT CAP Angio Combined" or study_type == "CT CAP Trauma" or study_type == "CT CA":
+            elif study_type == "CT CAP Trauma" or study_type == "CT CA":
                 grouping_key = "CT CAP"
             
             rvu = record.get("rvu", 0)
@@ -11784,10 +11785,9 @@ class StatisticsWindow:
         """Map study types to modality-specific anatomical groups for hierarchical display."""
         study_lower = study_type.lower()
         
-        # Determine modality first
+        # Determine modality first - CT and CTA are both CT for body part grouping
         if study_type.startswith('CT ') or study_type.startswith('CTA '):
-            # === CT STUDIES ===
-            is_cta = study_type.startswith('CTA')
+            # === CT STUDIES (including CTA - they're grouped together) ===
             
             # Check for body region combinations first
             has_chest = ('chest' in study_lower or ' cap' in study_lower or ' ca ' in study_lower or study_lower.endswith(' ca'))
@@ -11796,42 +11796,42 @@ class StatisticsWindow:
             
             # CTA Runoff with Abdo/Pelvis - special case
             if 'runoff' in study_lower and ('abdomen' in study_lower or 'pelvis' in study_lower or 'abdo' in study_lower):
-                return "CTA: Abdomen/Pelvis"
+                return "CT: Abdomen/Pelvis"
             
-            # CT/CTA Body (Chest+Abdomen combinations ± Pelvis)
+            # CT Body (Chest+Abdomen combinations ± Pelvis) - includes CTA
             elif has_chest and has_abdomen:
-                return "CTA: Body" if is_cta else "CT: Body"
+                return "CT: Body"
             
-            # CT/CTA Abdomen/Pelvis (no chest)
+            # CT Abdomen/Pelvis (no chest) - includes CTA
             elif has_abdomen and not has_chest:
-                return "CTA: Abdomen/Pelvis" if is_cta else "CT: Abdomen/Pelvis"
+                return "CT: Abdomen/Pelvis"
             
-            # CT/CTA Chest alone
+            # CT Chest alone - includes CTA
             elif has_chest and not has_abdomen:
-                return "CTA: Chest" if is_cta else "CT: Chest"
+                return "CT: Chest"
             
-            # CT/CTA Brain
+            # CT Brain - includes CTA
             elif any(kw in study_lower for kw in ['brain', 'head', 'face', 'sinus', 'orbit', 'temporal', 'maxillofacial']):
-                return "CTA: Brain" if is_cta else "CT: Brain"
+                return "CT: Brain"
             
-            # CT/CTA Neck (without brain/head)
+            # CT Neck (without brain/head) - includes CTA
             elif 'neck' in study_lower:
-                return "CTA: Neck" if is_cta else "CT: Neck"
+                return "CT: Neck"
             
-            # CT/CTA Spine
+            # CT Spine - includes CTA
             elif any(kw in study_lower for kw in ['spine', 'cervical', 'thoracic', 'lumbar', 'sacrum', 'coccyx']):
-                return "CTA: Spine" if is_cta else "CT: Spine"
+                return "CT: Spine"
             
-            # CT/CTA MSK
+            # CT MSK - includes CTA
             elif any(kw in study_lower for kw in ['shoulder', 'arm', 'elbow', 'wrist', 'hand', 'hip', 'femur', 'knee', 'leg', 'ankle', 'foot', 'joint', 'bone']):
-                return "CTA: MSK" if is_cta else "CT: MSK"
+                return "CT: MSK"
             
-            # CT/CTA Pelvis alone (no abdomen) - MSK
+            # CT Pelvis alone (no abdomen) - MSK - includes CTA
             elif has_pelvis and not has_abdomen:
-                return "CTA: MSK" if is_cta else "CT: MSK"
+                return "CT: MSK"
             
             else:
-                return "CTA: Other" if is_cta else "CT: Other"
+                return "CT: Other"
         
         elif study_type.startswith('MR') or study_type.startswith('MRI'):
             # === MRI STUDIES ===
@@ -11996,33 +11996,23 @@ class StatisticsWindow:
         
         # Sort body parts by modality priority, then by specific order
         def body_part_sort_key(body_part):
-            """Sort by modality (CT, CTA, XR, US, MRI, NM, other), then by specific body part order."""
+            """Sort by modality (CT, XR, US, MRI, NM, other), then by specific body part order."""
             # Determine modality priority based on prefix
-            if body_part.startswith('CT:') or body_part.startswith('CTA:'):
-                # Treat CTA as immediately after CT (same priority level)
-                is_cta = body_part.startswith('CTA:')
+            # Note: CTA categories are now grouped with CT (same category), so we only check for CT:
+            if body_part.startswith('CT:'):
                 modality_priority = 0
                 
-                # Special ordering: CT Body, CT Abdomen/Pelvis, CT Chest, then CTA equivalents, then others
+                # Special ordering: CT Body, CT Abdomen/Pelvis, CT Chest, then others
                 if body_part == 'CT: Body':
                     sub_priority = 0
                 elif body_part == 'CT: Abdomen/Pelvis':
                     sub_priority = 1
                 elif body_part == 'CT: Chest':
                     sub_priority = 2
-                elif body_part == 'CTA: Body':
-                    sub_priority = 3
-                elif body_part == 'CTA: Abdomen/Pelvis':
-                    sub_priority = 4
-                elif body_part == 'CTA: Chest':
-                    sub_priority = 5
                 else:
-                    # For other CT/CTA categories, CTA comes after CT
-                    base_name = body_part.replace('CTA:', '').replace('CT:', '')
-                    if is_cta:
-                        sub_priority = 100 + ord(base_name[0]) if base_name else 100  # CTA after CT
-                    else:
-                        sub_priority = 50 + ord(base_name[0]) if base_name else 50  # CT before CTA
+                    # For other CT categories, sort alphabetically
+                    base_name = body_part.replace('CT: ', '').replace('CT:', '')
+                    sub_priority = 50 + ord(base_name[0]) if base_name else 50
             elif body_part.startswith('XR:'):
                 modality_priority = 1
                 sub_priority = 0

@@ -52,6 +52,8 @@
     "CT CAP Angio": 3.06,
     "CT CAP Angio Combined": 2.68,
     "CT CAP Trauma": 3.0,
+    "CTA CAP": 3.06,
+    "CTA AP": 1.68,
     "CT CA": 2.0,
     "CT AP": 1.68,
     "CT 3D Imaging Processing": 1.75,
@@ -79,6 +81,7 @@
     "CT Spine Lumbar Recon": 1.0,
     "XR Exam Unlisted": 0.68,
     "CT Chest": 1.0,
+    "CTA Chest": 1.0,
     "CTA Brain": 1.75,
     "CTA Neck": 1.75,
     "CT Neck": 1.5,
@@ -408,6 +411,92 @@
         ]
       }
     ],
+    "CTA CAP": [
+      {
+        "required_keywords": [
+          "CTA",
+          "abd",
+          "pel",
+          "ch"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "ch",
+          "angio"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "ch",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      }
+    ],
+    "CTA AP": [
+      {
+        "required_keywords": [
+          "CTA",
+          "abd",
+          "pel"
+        ],
+        "excluded_keywords": [
+          "chest",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "angio"
+        ],
+        "excluded_keywords": [
+          "chest",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "abd",
+          "pel",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "chest",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      }
+    ],
     "CT CAP": [
       {
         "required_keywords": [
@@ -419,7 +508,9 @@
         "excluded_keywords": [
           "XR",
           "xr",
-          "x-ray"
+          "x-ray",
+          "angio",
+          "angiography"
         ]
       }
     ],
@@ -434,7 +525,9 @@
           "chest",
           "XR",
           "xr",
-          "x-ray"
+          "x-ray",
+          "angio",
+          "angiography"
         ]
       },
       {
@@ -460,6 +553,52 @@
           "head",
           "brain",
           "abd",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      }
+    ],
+    "CTA Chest": [
+      {
+        "required_keywords": [
+          "CTA",
+          "chest"
+        ],
+        "excluded_keywords": [
+          "neck",
+          "abd",
+          "pel",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "chest",
+          "angio"
+        ],
+        "excluded_keywords": [
+          "neck",
+          "abd",
+          "pel",
+          "XR",
+          "xr",
+          "x-ray"
+        ]
+      },
+      {
+        "required_keywords": [
+          "CT",
+          "chest",
+          "angiography"
+        ],
+        "excluded_keywords": [
+          "neck",
+          "abd",
+          "pel",
           "XR",
           "xr",
           "x-ray"
