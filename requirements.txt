@@ -3,4 +3,6 @@ pywin32==306
 keyboard==0.13.5
 tkcalendar==1.6.1
 pyyaml==6.0.3
-openpyxl 
+openpyxl
+matplotlib>=3.5.0
+numpy>=1.21.0 

@@ -14,8 +14,6 @@ import os
 import sys
 import shutil
 import sqlite3
-import yaml
-from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import threading
@@ -30,36 +28,18 @@ except ImportError as e:
     HAS_TKCALENDAR = False
     print(f"Warning: tkcalendar not available: {e}")
 
-
-# Custom YAML Dumper for compact formatting
-class CompactYAMLDumper(yaml.SafeDumper):
-    """Custom YAML dumper that keeps keyword lists and hourly rates inline."""
-    pass
-
-def is_hourly_rate_dict(d):
-    """Check if a dict contains hourly rate keys (12am, 1am, etc.)."""
-    if not isinstance(d, dict):
-        return False
-    keys = list(d.keys())
-    return len(keys) > 0 and any(isinstance(k, str) and (k.endswith('am') or k.endswith('pm')) for k in keys[:5])
-
-def represent_dict_compact(dumper, data):
-    """Custom dict representer that makes certain lists inline."""
-    node_pairs = []
-    for key, value in data.items():
-        # Make keyword lists inline
-        if isinstance(value, list) and key in ['required_keywords', 'excluded_keywords', 'any_of_keywords']:
-            value_node = dumper.represent_sequence('tag:yaml.org,2002:seq', value, flow_style=True)
-        # Make hourly rate dicts inline
-        elif is_hourly_rate_dict(value):
-            value_node = dumper.represent_mapping('tag:yaml.org,2002:map', value, flow_style=True)
-        else:
-            value_node = dumper.represent_data(value)
-        node_pairs.append((dumper.represent_data(key), value_node))
-    return yaml.nodes.MappingNode('tag:yaml.org,2002:map', node_pairs)
-
-CompactYAMLDumper.add_representer(dict, represent_dict_compact)
-CompactYAMLDumper.add_representer(OrderedDict, represent_dict_compact)
+# Try to import matplotlib for graphing
+try:
+    import matplotlib
+    matplotlib.use('TkAgg')  # Use TkAgg backend for Tkinter integration
+    import matplotlib.pyplot as plt
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    from matplotlib.figure import Figure
+    import numpy as np
+    HAS_MATPLOTLIB = True
+except ImportError as e:
+    HAS_MATPLOTLIB = False
+    print(f"Warning: matplotlib not available: {e}")
 
 
 # Configure logging with FIFO-style maintenance (max 10MB, single file, remove oldest entries)
@@ -1138,7 +1118,7 @@ class RecordsDatabase:
         logger.info(f"Exported database to JSON: {filepath}")
 
 
-# RVU Lookup Table - REMOVED: Now using rvu_settings.yaml as single source of truth
+# RVU Lookup Table - REMOVED: Now using rvu_settings.json as single source of truth
 # All RVU values must come from the loaded JSON file
 
 
@@ -2433,7 +2413,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     Args:
         procedure_text: The procedure text to match
-        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.yaml)
+        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.json)
         classification_rules: Classification rules dictionary (optional)
         direct_lookups: Direct lookup dictionary (optional)
     
@@ -2445,7 +2425,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     # Require rvu_table - it must be provided from loaded settings
     if rvu_table is None:
-        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.yaml")
+        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.json")
         return "Unknown", 0.0
     
     if classification_rules is None:
@@ -3269,22 +3249,16 @@ class RVUData:
     def __init__(self, base_dir: str = None):
         settings_dir, data_dir = get_app_paths()
         
-        # Track if running as frozen app
-        self.is_frozen = getattr(sys, 'frozen', False)
-        
         # Settings file (RVU tables, rules, rates, user preferences, window positions)
-        # When running as script: use script directory (single source of truth)
-        # When frozen: use data_dir (can't write to bundled location)
-        if self.is_frozen:
-            self.settings_file = os.path.join(data_dir, "rvu_settings.yaml")
-        else:
-            self.settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.yaml")
-        
+        self.settings_file = os.path.join(data_dir, "rvu_settings.json")
         # SQLite database for records (replaces rvu_records.json)
         self.db_file = os.path.join(data_dir, "rvu_records.db")
         # Legacy JSON file paths (for migration)
         self.records_file = os.path.join(data_dir, "rvu_records.json")
         self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
+        
+        # Track if running as frozen app
+        self.is_frozen = getattr(sys, 'frozen', False)
         
         logger.info(f"Settings file: {self.settings_file}")
         logger.info(f"Database file: {self.db_file}")
@@ -3387,48 +3361,159 @@ class RVUData:
     def load_settings(self) -> dict:
         """Load settings, RVU table, classification rules, and window positions.
         
-        Simply loads rvu_settings.yaml - no merging, no defaults.
-        The YAML file is the single source of truth.
-        
-        When frozen: loads from bundled file first, falls back to data_dir file
-        When script: loads from script directory file
+        Intelligently merges user settings with new defaults:
+        - Preserves: settings, window_positions, backup, compensation_rates
+        - Updates: rvu_table, classification_rules, direct_lookups (to get bug fixes)
+        - Adds: any new settings keys from the new version
         """
-        # Determine which file to load
-        settings_file_to_load = None
+        # Get bundled/default settings from the settings file
+        # Priority: 1) Bundled file (if frozen), 2) Local file (if script)
+        # There are NO hardcoded defaults - the settings file MUST exist
+        default_data = None
         
         # Try bundled file first (when frozen)
         if self.is_frozen:
-            bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.yaml")
-            if os.path.exists(bundled_settings_file):
-                settings_file_to_load = bundled_settings_file
-                logger.info(f"Loading bundled settings from {bundled_settings_file}")
+            try:
+                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
+                if os.path.exists(bundled_settings_file):
+                    with open(bundled_settings_file, 'r') as f:
+                        default_data = json.load(f)
+                        logger.info(f"Loaded bundled settings from {bundled_settings_file}")
+            except Exception as e:
+                logger.error(f"Error loading bundled settings file: {e}")
         
-        # Use self.settings_file (script directory when script, data_dir when frozen and no bundled)
-        if settings_file_to_load is None:
-            if os.path.exists(self.settings_file):
-                settings_file_to_load = self.settings_file
-                logger.info(f"Loading settings from {self.settings_file}")
+        # Try local file (when running as script, or if bundled file not found)
+        if default_data is None:
+            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.json")
+            if os.path.exists(local_settings_file):
+                try:
+                    with open(local_settings_file, 'r') as f:
+                        default_data = json.load(f)
+                        logger.info(f"Loaded default settings from local file: {local_settings_file}")
+                except Exception as e:
+                    logger.error(f"Error loading local settings file: {e}")
         
         # Settings file MUST exist - fail if it doesn't
-        if settings_file_to_load is None or not os.path.exists(settings_file_to_load):
+        if default_data is None:
             error_msg = (
-                f"CRITICAL ERROR: Could not find settings file!\n"
-                f"Expected: {self.settings_file}\n"
-                f"Or bundled: {os.path.join(sys._MEIPASS, 'rvu_settings.yaml') if self.is_frozen else 'N/A'}\n"
-                f"The settings file must exist."
+                f"CRITICAL ERROR: Could not load settings file!\n"
+                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.json')}\n"
+                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.json')}\n"
+                f"The settings file must be bundled with the app or present in the script directory."
             )
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
         
-        # Load the settings file directly - no merging, just use what's in the file
+        # Try to load user's existing settings file
+        user_data = None
+        if os.path.exists(self.settings_file):
+            try:
+                with open(self.settings_file, 'r') as f:
+                    user_data = json.load(f)
+                    logger.info(f"Loaded user settings from {self.settings_file}")
+            except Exception as e:
+                logger.error(f"Error loading user settings file: {e}")
+        
+        # If no user settings exist, use defaults and save them
+        if user_data is None:
+            logger.info("No existing user settings found, using defaults")
+            # Save the default settings for future use
+            try:
+                with open(self.settings_file, 'w') as f:
+                    json.dump(default_data, f, indent=2, default=str)
+                logger.info(f"Created new settings file at {self.settings_file}")
+            except Exception as e:
+                logger.error(f"Error saving default settings: {e}")
+            return default_data
+        
+        # Merge user settings with defaults intelligently
+        merged_data = {}
+        
+        # Preserve user's settings (user preferences)
+        merged_data["settings"] = user_data.get("settings", {})
+        # Add any new settings keys from default that user doesn't have
+        for key, value in default_data.get("settings", {}).items():
+            if key not in merged_data["settings"]:
+                merged_data["settings"][key] = value
+                logger.debug(f"Added new settings key '{key}' from default")
+        
+        # Preserve user's window positions
+        merged_data["window_positions"] = user_data.get("window_positions", {})
+        # Add any new window position keys from default
+        for key, value in default_data.get("window_positions", {}).items():
+            if key not in merged_data["window_positions"]:
+                merged_data["window_positions"][key] = value
+                logger.debug(f"Added new window position '{key}' from default")
+        
+        # Preserve user's backup settings
+        merged_data["backup"] = user_data.get("backup", {})
+        # Add any new backup settings keys from default
+        for key, value in default_data.get("backup", {}).items():
+            if key not in merged_data["backup"]:
+                merged_data["backup"][key] = value
+                logger.debug(f"Added new backup setting '{key}' from default")
+        
+        # Preserve user's compensation rates
+        merged_data["compensation_rates"] = user_data.get("compensation_rates", {})
+        # Add any new compensation rate keys from default (nested merge)
+        default_comp = default_data.get("compensation_rates", {})
+        if default_comp:
+            for day_type in ["weekday", "weekend"]:
+                if day_type not in merged_data["compensation_rates"]:
+                    merged_data["compensation_rates"][day_type] = default_comp.get(day_type, {})
+                else:
+                    for role in ["assoc", "partner"]:
+                        if role not in merged_data["compensation_rates"][day_type]:
+                            if day_type in default_comp and role in default_comp[day_type]:
+                                merged_data["compensation_rates"][day_type][role] = default_comp[day_type][role]
+        
+        # RVU table - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_rvu_table = user_data.get("rvu_table", {})
+        if user_rvu_table:
+            merged_data["rvu_table"] = user_rvu_table.copy()
+            logger.info(f"Preserved user RVU table with {len(user_rvu_table)} entries (no defaults added)")
+        else:
+            # Only use defaults from JSON file if user has NO rvu_table at all
+            merged_data["rvu_table"] = default_data.get("rvu_table", {})
+            if merged_data["rvu_table"]:
+                logger.info("No user RVU table found, using defaults from rvu_settings.json")
+            else:
+                logger.warning("No RVU table found in user or default settings file!")
+        
+        # Classification rules - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_classification_rules = user_data.get("classification_rules", {})
+        if user_classification_rules:
+            merged_data["classification_rules"] = user_classification_rules.copy()
+            logger.info(f"Preserved user classification rules with {len(user_classification_rules)} study types (no defaults added)")
+        else:
+            # Only use defaults if user has NO classification_rules at all
+            default_classification_rules = default_data.get("classification_rules", {})
+            merged_data["classification_rules"] = default_classification_rules.copy() if default_classification_rules else {}
+            logger.info("No user classification rules found, using defaults")
+        
+        # Direct lookups - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
+        # User's file is the source of truth - don't add anything from hardcoded defaults
+        user_direct_lookups = user_data.get("direct_lookups", {})
+        if user_direct_lookups:
+            merged_data["direct_lookups"] = user_direct_lookups.copy()
+            logger.info(f"Preserved user direct lookups with {len(user_direct_lookups)} entries (no defaults added)")
+        else:
+            # Only use defaults if user has NO direct_lookups at all
+            default_direct_lookups = default_data.get("direct_lookups", {})
+            merged_data["direct_lookups"] = default_direct_lookups.copy() if default_direct_lookups else {}
+            logger.info("No user direct lookups found, using defaults")
+        
+        # Save merged settings back to file
         try:
-            with open(settings_file_to_load, 'r') as f:
-                data = yaml.safe_load(f)
-            logger.info(f"Loaded settings from {settings_file_to_load} - using as single source of truth, no merging")
-            return data
+            with open(self.settings_file, 'w') as f:
+                json.dump(merged_data, f, indent=2, default=str)
+            logger.info(f"Saved merged settings to {self.settings_file}")
         except Exception as e:
-            logger.error(f"Error loading settings file: {e}")
-            raise
+            logger.error(f"Error saving merged settings: {e}")
+        
+        return merged_data
     
     def _validate_window_positions(self, data: dict) -> dict:
         """Validate window positions and reset invalid ones to safe defaults.
@@ -3635,7 +3720,7 @@ class RVUData:
                 "backup": self.settings_data.get("backup", {})
             }
             with open(self.settings_file, 'w') as f:
-                yaml.dump(settings_to_save, f, Dumper=CompactYAMLDumper, default_flow_style=False, sort_keys=False, allow_unicode=True, width=150, indent=2)
+                json.dump(settings_to_save, f, indent=2, default=str)
             logger.info(f"Saved settings to {self.settings_file}")
         except Exception as e:
             logger.error(f"Error saving settings: {e}")
@@ -4672,16 +4757,17 @@ class RVUCounterApp:
             
             current_time = datetime.now()
             
-            # Use actual shift start time if available, otherwise fall back to reference
-            if self.shift_start:
-                reference_start = self.shift_start
-            else:
-                reference_start = self._get_reference_shift_start(current_time)
+            # ALWAYS use reference time (e.g., 11pm) for pace comparison
+            # This normalizes all shifts to the same starting point for fair comparison
+            reference_start = self._get_reference_shift_start(current_time)
             
-            # Elapsed time since shift start in minutes
+            # Elapsed time since reference start (11pm) in minutes
             elapsed_minutes = (current_time - reference_start).total_seconds() / 60
             if elapsed_minutes < 0:
                 elapsed_minutes = 0
+            
+            logger.info(f"[PACE] Current time: {current_time.strftime('%H:%M:%S')}, "
+                       f"Reference (11pm): {reference_start.strftime('%H:%M:%S')}, Elapsed: {elapsed_minutes:.1f}min")
             
             # Get prior shift data (returns tuple: rvu_at_elapsed, total_rvu)
             prior_data = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes)
@@ -4719,16 +4805,26 @@ class RVUCounterApp:
             prior_marker_pos = int((prior_rvu_at_elapsed / max_scale) * container_width)
             
             # Update bar colors based on ahead/behind
+            dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+            
             if diff >= 0:
                 current_bar_color = "#5DADE2"  # Slightly darker light blue for bar (ahead)
-                current_text_color = "#2874A6"  # Darker blue for text
+                if dark_mode:
+                    current_text_color = "#87CEEB"  # Bright sky blue for dark mode (matches pace bar)
+                    status_color = "#87CEEB"  # Bright sky blue for status text
+                else:
+                    current_text_color = "#2874A6"  # Darker blue for light mode
+                    status_color = "#2874A6"  # Darker blue for status text
                 status_text = f"▲ +{diff:.1f} ahead"
-                status_color = "#2874A6"  # Darker blue for status text
             else:
                 current_bar_color = "#c62828"  # Red for bar (behind)
-                current_text_color = "#B71C1C"  # Slightly darker red for text
+                if dark_mode:
+                    current_text_color = "#ef5350"  # Brighter red for dark mode
+                    status_color = "#ef5350"  # Brighter red for status text
+                else:
+                    current_text_color = "#B71C1C"  # Darker red for light mode
+                    status_color = "#B71C1C"  # Darker red for status text
                 status_text = f"▼ {diff:.1f} behind"
-                status_color = "#B71C1C"  # Darker red for status text
             
             # Update current bar (top) - fills from left
             self.pace_bar_current.config(bg=current_bar_color)
@@ -4779,6 +4875,8 @@ class RVUCounterApp:
                 compare_label = "Week:"  # Week's best
             elif self.pace_comparison_mode == 'best_ever':
                 compare_label = "Best:"  # All time best
+            elif self.pace_comparison_mode == 'custom':
+                compare_label = "Custom:"  # User-selected shift
             elif self.pace_comparison_mode and self.pace_comparison_mode.startswith('week_'):
                 # Show 3-letter day abbreviation for specific week shift
                 if self.pace_comparison_shift:
@@ -4889,6 +4987,13 @@ class RVUCounterApp:
                 btn.pack(fill=tk.X, pady=1)
                 btn.bind("<Button-1>", lambda e: make_selection('best_ever', best_ever))
                 add_hover(btn, bg_color, dark_mode)
+            
+            # Custom shift selector
+            custom_btn = tk.Label(frame, text=f"  Custom: Select any shift...", 
+                                 font=("Arial", 8), bg=bg_color, fg=fg_color, anchor=tk.W)
+            custom_btn.pack(fill=tk.X, pady=1)
+            custom_btn.bind("<Button-1>", lambda e: self._open_custom_shift_selector(popup, make_selection, close_popup))
+            add_hover(custom_btn, bg_color, dark_mode)
             
             # --- THIS WEEK SECTION ---
             if shifts_this_week:
@@ -5017,6 +5122,216 @@ class RVUCounterApp:
             
         except Exception as e:
             logger.error(f"Error opening pace comparison selector: {e}", exc_info=True)
+    
+    def _open_custom_shift_selector(self, parent_popup, make_selection_callback, close_parent_callback):
+        """Open a modal to browse and select any historical shift."""
+        try:
+            # Create second modal
+            custom_popup = tk.Toplevel(self.root)
+            custom_popup.title("Select Custom Shift")
+            custom_popup.transient(parent_popup)
+            
+            # Calculate position
+            modal_width = 280
+            modal_height = 400
+            
+            # Try to load saved position first
+            saved_pos = self.data_manager.data.get("window_positions", {}).get("custom_shift_selector", None)
+            
+            if saved_pos:
+                x = saved_pos.get('x', 0)
+                y = saved_pos.get('y', 0)
+                logger.debug(f"Loading saved custom shift selector position: ({x}, {y})")
+            else:
+                # Default: position next to parent popup
+                x = parent_popup.winfo_rootx() + parent_popup.winfo_width() + 10
+                y = parent_popup.winfo_rooty()
+            
+            # Get screen dimensions
+            screen_width = self.root.winfo_screenwidth()
+            screen_height = self.root.winfo_screenheight()
+            
+            # Ensure modal stays on screen
+            # If it would go off the right edge, position it to the left of parent instead
+            if x + modal_width > screen_width:
+                x = parent_popup.winfo_rootx() - modal_width - 10
+                # If that's also off-screen (left edge), center it
+                if x < 0:
+                    x = (screen_width - modal_width) // 2
+            
+            # Ensure it doesn't go off the bottom
+            if y + modal_height > screen_height:
+                y = screen_height - modal_height - 40  # Leave room for taskbar
+                if y < 0:
+                    y = 20  # Minimum top padding
+            
+            # Ensure it doesn't go off the top
+            if y < 0:
+                y = 20
+            
+            custom_popup.geometry(f"{modal_width}x{modal_height}+{x}+{y}")
+            
+            # Track position for saving
+            custom_popup._last_saved_x = x
+            custom_popup._last_saved_y = y
+            
+            # Position saving functions
+            def on_configure(event):
+                """Track window movement and save position with debouncing."""
+                if event.widget == custom_popup:
+                    try:
+                        current_x = custom_popup.winfo_x()
+                        current_y = custom_popup.winfo_y()
+                        # Debounce: save after 200ms of no movement
+                        if hasattr(custom_popup, '_save_timer'):
+                            custom_popup.after_cancel(custom_popup._save_timer)
+                        custom_popup._save_timer = custom_popup.after(200, 
+                            lambda: save_custom_selector_position(current_x, current_y))
+                    except Exception as e:
+                        logger.debug(f"Error tracking custom selector position: {e}")
+            
+            def save_custom_selector_position(x=None, y=None):
+                """Save custom shift selector position."""
+                try:
+                    if x is None:
+                        x = custom_popup.winfo_x()
+                    if y is None:
+                        y = custom_popup.winfo_y()
+                    
+                    # Only save if position actually changed
+                    if hasattr(custom_popup, '_last_saved_x') and hasattr(custom_popup, '_last_saved_y'):
+                        if x == custom_popup._last_saved_x and y == custom_popup._last_saved_y:
+                            return
+                    
+                    if "window_positions" not in self.data_manager.data:
+                        self.data_manager.data["window_positions"] = {}
+                    self.data_manager.data["window_positions"]["custom_shift_selector"] = {
+                        "x": x,
+                        "y": y
+                    }
+                    custom_popup._last_saved_x = x
+                    custom_popup._last_saved_y = y
+                    self.data_manager.save(save_records=False)
+                    logger.debug(f"Saved custom shift selector position: ({x}, {y})")
+                except Exception as e:
+                    logger.error(f"Error saving custom selector position: {e}")
+            
+            # Bind position tracking
+            custom_popup.bind("<Configure>", on_configure)
+            
+            # Apply theme
+            dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+            bg_color = "#2d2d2d" if dark_mode else "white"
+            fg_color = "#ffffff" if dark_mode else "black"
+            border_color = "#555555" if dark_mode else "#cccccc"
+            custom_popup.configure(bg=border_color)
+            
+            frame = tk.Frame(custom_popup, bg=bg_color, padx=8, pady=5)
+            frame.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
+            
+            # Title
+            tk.Label(frame, text="Select any prior shift:", font=("Arial", 9, "bold"),
+                    bg=bg_color, fg=fg_color, anchor=tk.W).pack(fill=tk.X, pady=(0, 5))
+            
+            # Scrollable list frame
+            list_frame = tk.Frame(frame, bg=bg_color)
+            list_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Canvas for scrolling
+            canvas = tk.Canvas(list_frame, bg=bg_color, highlightthickness=0)
+            scrollbar = tk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
+            scrollable_frame = tk.Frame(canvas, bg=bg_color)
+            
+            scrollable_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Get all historical shifts
+            all_shifts = self.data_manager.data.get("shifts", [])
+            
+            if not all_shifts:
+                tk.Label(scrollable_frame, text="No historical shifts found", 
+                        font=("Arial", 8), bg=bg_color, fg="gray", anchor=tk.W).pack(fill=tk.X, pady=10)
+            else:
+                # Sort by date (newest first)
+                sorted_shifts = sorted(all_shifts, 
+                                      key=lambda s: s.get('shift_start', ''), 
+                                      reverse=True)
+                
+                # Helper for hover effect
+                def add_hover(widget):
+                    widget.bind("<Enter>", lambda e: e.widget.config(bg="#e0e0e0" if not dark_mode else "#404040"))
+                    widget.bind("<Leave>", lambda e: e.widget.config(bg=bg_color))
+                
+                # Add each shift as a clickable entry
+                for shift in sorted_shifts:
+                    if not shift.get("records"):
+                        continue  # Skip shifts with no records
+                    
+                    # Calculate shift info
+                    try:
+                        shift_start = datetime.fromisoformat(shift.get('shift_start', ''))
+                        date_str = shift_start.strftime('%a %b %d, %Y')  # "Mon Dec 07, 2025"
+                        time_str = shift_start.strftime('%I:%M %p').lstrip('0')  # "11:01 PM"
+                    except:
+                        date_str = "Unknown date"
+                        time_str = ""
+                    
+                    total_rvu = sum(r.get('rvu', 0) for r in shift.get('records', []))
+                    record_count = len(shift.get('records', []))
+                    
+                    # Create shift button
+                    shift_text = f"{date_str} {time_str}\n  ({record_count}, {total_rvu:.1f} RVU)"
+                    
+                    def make_custom_selection(s=shift):
+                        """Close both modals and set custom comparison."""
+                        custom_popup.destroy()
+                        make_selection_callback('custom', s)
+                    
+                    btn = tk.Label(scrollable_frame, text=shift_text,
+                                  font=("Arial", 8), bg=bg_color, fg=fg_color, 
+                                  anchor=tk.W, justify=tk.LEFT, padx=5, pady=3,
+                                  relief=tk.FLAT, borderwidth=1)
+                    btn.pack(fill=tk.X, pady=1)
+                    btn.bind("<Button-1>", lambda e, s=shift: make_custom_selection(s))
+                    add_hover(btn)
+            
+            # Close button
+            close_btn = tk.Label(frame, text="Cancel", font=("Arial", 8),
+                                bg=bg_color, fg="gray", anchor=tk.CENTER)
+            close_btn.pack(fill=tk.X, pady=(8, 0))
+            close_btn.bind("<Button-1>", lambda e: custom_popup.destroy())
+            
+            # Enable mouse wheel scrolling
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            
+            # Cleanup on close
+            def on_closing():
+                # Cancel any pending save timer
+                if hasattr(custom_popup, '_save_timer'):
+                    try:
+                        custom_popup.after_cancel(custom_popup._save_timer)
+                    except:
+                        pass
+                # Save final position
+                save_custom_selector_position()
+                # Cleanup bindings
+                canvas.unbind_all("<MouseWheel>")
+                custom_popup.destroy()
+            
+            custom_popup.protocol("WM_DELETE_WINDOW", on_closing)
+            
+        except Exception as e:
+            logger.error(f"Error opening custom shift selector: {e}", exc_info=True)
     
     def _get_pace_comparison_options(self):
         """Get shifts available for pace comparison.
@@ -5215,6 +5530,7 @@ class RVUCounterApp:
         - 'prior', 'best_week', 'best_ever', 'week_N': Actual historical shifts
         """
         try:
+            logger.info(f"[PACE] _get_prior_shift_rvu_at_elapsed_time: mode={self.pace_comparison_mode}, elapsed={elapsed_minutes:.1f}min, cached_shift={self.pace_comparison_shift is not None}")
             # Handle 'goal' mode - theoretical pace
             if self.pace_comparison_mode == 'goal':
                 goal_rvu_h = self.data_manager.data["settings"].get("pace_goal_rvu_per_hour", 15.0)
@@ -5233,24 +5549,34 @@ class RVUCounterApp:
             # Determine which shift to use for comparison
             comparison_shift = None
             
-            if self.pace_comparison_shift and self.pace_comparison_mode != 'prior':
-                # Use cached comparison shift
+            if self.pace_comparison_shift and self.pace_comparison_shift.get("records"):
+                # Use cached comparison shift (set when user selects from popup) if it has records
                 comparison_shift = self.pace_comparison_shift
-            else:
-                # Default: use prior shift (most recent valid one)
+                logger.info(f"[PACE] Using cached comparison shift: mode={self.pace_comparison_mode}, records={len(comparison_shift.get('records', []))}")
+            
+            if not comparison_shift:
+                # No cached shift or cached shift has no records - find prior shift (most recent valid one)
                 historical_shifts = self.data_manager.data.get("shifts", [])
                 if not historical_shifts:
+                    logger.warning("No historical shifts available for comparison")
                     return None
                 
                 for shift in historical_shifts:
-                    if shift.get("shift_start") and shift.get("records"):
+                    if shift.get("shift_start"):
                         # Check if it's a valid shift hour
                         try:
                             shift_start = datetime.fromisoformat(shift["shift_start"])
                             if self._is_valid_shift_hour(shift_start.hour):
-                                comparison_shift = shift
-                                break
-                        except:
+                                # Verify shift has records
+                                records = shift.get("records", [])
+                                if records:
+                                    comparison_shift = shift
+                                    logger.debug(f"Found comparison shift: start={shift_start.isoformat()}, records={len(records)}")
+                                    break
+                                else:
+                                    logger.debug(f"Skipping shift with no records: start={shift_start.isoformat()}")
+                        except Exception as e:
+                            logger.debug(f"Error processing shift: {e}")
                             pass
             
             if not comparison_shift:
@@ -5259,43 +5585,65 @@ class RVUCounterApp:
             # Get comparison shift's actual start time
             prior_start = datetime.fromisoformat(comparison_shift["shift_start"])
             
-            # Get current shift's actual start time
-            current_start = self.shift_start if self.shift_start else datetime.now()
+            # Use reference time approach: normalize to typical shift start hour (e.g., 11pm)
+            # This ensures fair comparison even if shifts started at slightly different times
+            start_hour = self.typical_shift_start_hour
             
-            # Check if shifts started at similar times (within 2 hours of same hour)
-            # If so, use the old approach (reference time based on typical start hour)
-            # If not, use elapsed time from actual shift starts
-            start_hour_diff = abs(prior_start.hour - current_start.hour)
-            if start_hour_diff > 12:
-                start_hour_diff = 24 - start_hour_diff  # Handle wraparound
+            # Create reference time for prior shift (e.g., 11pm on the day of shift)
+            prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
             
-            use_elapsed_from_actual_start = start_hour_diff > 2
+            # Handle case where shift started after midnight (e.g., 1am) but reference is 11pm
+            if prior_start.hour < start_hour:
+                # Shift started after midnight, so reference 11pm is on previous day
+                prior_reference = prior_reference - timedelta(days=1)
             
-            if use_elapsed_from_actual_start:
-                # Shifts started at different times - use elapsed time from actual starts
-                # Calculate what time in the prior shift corresponds to our elapsed time
-                target_time = prior_start + timedelta(minutes=elapsed_minutes)
-            else:
-                # Shifts started at similar times - use reference time approach
-                start_hour = self.typical_shift_start_hour
-                prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-                if prior_start.hour < start_hour:
-                    # Started after midnight, so reference is previous day's shift start
-                    prior_reference = prior_reference - timedelta(days=1)
-                target_time = prior_reference + timedelta(minutes=elapsed_minutes)
+            # Calculate target time: reference (11pm) + elapsed minutes
+            target_time = prior_reference + timedelta(minutes=elapsed_minutes)
+            
+            logger.info(f"[PACE] Prior shift: actual_start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
+                       f"reference_11pm={prior_reference.strftime('%Y-%m-%d %H:%M:%S')}, "
+                       f"target_time={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # Sum RVU for all records finished before target_time
             rvu_at_elapsed = 0.0
             total_rvu = 0.0
-            for record in comparison_shift.get("records", []):
+            records = comparison_shift.get("records", [])
+            
+            if not records:
+                logger.warning(f"Comparison shift has no records. Shift start: {comparison_shift.get('shift_start')}")
+                return None
+            
+            records_before_target = 0
+            records_after_target = 0
+            
+            for record in records:
+                rvu = record.get("rvu", 0) or 0
+                total_rvu += rvu  # Always add to total
+                
+                time_finished_str = record.get("time_finished", "")
+                if not time_finished_str:
+                    # Skip records without time_finished, but still count toward total
+                    logger.debug(f"Record missing time_finished: accession={record.get('accession')}, rvu={rvu}")
+                    continue
+                
                 try:
-                    rvu = record.get("rvu", 0)
-                    total_rvu += rvu  # Always add to total
-                    time_finished = datetime.fromisoformat(record.get("time_finished", ""))
+                    time_finished = datetime.fromisoformat(time_finished_str)
                     if time_finished <= target_time:
                         rvu_at_elapsed += rvu
-                except:
-                    total_rvu += record.get("rvu", 0)  # Still count toward total even if time parse fails
+                        records_before_target += 1
+                        logger.info(f"[PACE]   ✓ BEFORE: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
+                    else:
+                        records_after_target += 1
+                        if records_after_target <= 3:  # Only log first 3 after-target records to avoid spam
+                            logger.info(f"[PACE]   ✗ AFTER: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
+                except (ValueError, TypeError) as e:
+                    # Skip records with invalid time_finished format
+                    logger.debug(f"Failed to parse time_finished '{time_finished_str}': {e}")
+                    continue
+            
+            logger.info(f"[PACE] ═══ RESULT ═══ Elapsed: {elapsed_minutes:.1f}min | Target: {target_time.strftime('%H:%M:%S')} | "
+                       f"RVU at elapsed: {rvu_at_elapsed:.1f} | Total RVU: {total_rvu:.1f} | "
+                       f"Records before/after: {records_before_target}/{records_after_target}")
             
             return (rvu_at_elapsed, total_rvu)
             
@@ -8020,24 +8368,21 @@ class RVUCounterApp:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
-                frame_width = self.root.winfo_width()
-                if frame_width > 100:
-                    # Calculate space needed for duration and prefix
-                    prefix_chars = len("Accession: ")
-                    char_width = 7
-                    # Reserve space for prefix, duration (if shown), and ~5 spaces padding
-                    if show_time and duration_text:
-                        duration_chars = len(duration_text)
-                        reserved = (prefix_chars + duration_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                    else:
-                        reserved = (prefix_chars + 5) * char_width + 15
-                    
-                    usable_width = max(frame_width - reserved, 35)
-                    max_chars = int(usable_width / char_width)
-                    max_chars = max(10, min(max_chars, 100))
-                    
-                    if len(acc_display) > max_chars:
-                        acc_display = self._truncate_text(acc_display, max_chars)
+                if show_time and duration_text:
+                    # Calculate available width for accession
+                    frame_width = self.root.winfo_width()
+                    if frame_width > 100:
+                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
+                        duration_chars = 8
+                        prefix_chars = len("Accession: ")
+                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
+                        usable_width = max(frame_width - reserved, 50)
+                        char_width = 8 * 0.75
+                        max_chars = int(usable_width / char_width)
+                        max_chars = max(10, min(max_chars, 100))
+                        
+                        if len(acc_display) > max_chars:
+                            acc_display = self._truncate_text(acc_display, max_chars)
                 
                 # Display based on duplicate status
                 # Show "already recorded" for accession line, but still show duration and other fields
@@ -8061,20 +8406,8 @@ class RVUCounterApp:
                 if is_mosaic_multi:
                     # Mosaic multi-accession - show summary
                     if self.current_procedure and self.current_procedure != "Multiple studies":
-                        # Show the first procedure with dynamic truncation
-                        procedure_text = self.current_procedure
-                        frame_width = self.root.winfo_width()
-                        if frame_width > 100:
-                            prefix_chars = len("Procedure: ")
-                            char_width = 8 * 0.75
-                            reserved = prefix_chars * char_width + 10
-                            usable_width = max(frame_width - reserved, 50)
-                            max_chars = int(usable_width / char_width)
-                            max_chars = max(20, min(max_chars, 150))
-                            
-                            if len(procedure_text) > max_chars:
-                                procedure_text = self._truncate_text(procedure_text, max_chars)
-                        self.debug_procedure_label.config(text=f"Procedure: {procedure_text}", foreground="gray")
+                        # Show the first procedure
+                        self.debug_procedure_label.config(text=f"Procedure: {self.current_procedure}", foreground="gray")
                     else:
                         # Show summary
                         self.debug_procedure_label.config(text=f"Procedure: {len(self.current_multiple_accessions)} studies", foreground="gray")
@@ -8100,19 +8433,7 @@ class RVUCounterApp:
                 else:
                     # Duplicate multi-accession - already completed, extract modality from study type
                     if self.current_study_type.startswith("Multiple"):
-                        procedure_text = self.current_study_type
-                        frame_width = self.root.winfo_width()
-                        if frame_width > 100:
-                            prefix_chars = len("Procedure: ")
-                            char_width = 7
-                            reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                            usable_width = max(frame_width - reserved, 35)
-                            max_chars = int(usable_width / char_width)
-                            max_chars = max(15, min(max_chars, 120))
-                            
-                            if len(procedure_text) > max_chars:
-                                procedure_text = self._truncate_text(procedure_text, max_chars)
-                        self.debug_procedure_label.config(text=f"Procedure: {procedure_text}", foreground="gray")
+                        self.debug_procedure_label.config(text=f"Procedure: {self.current_study_type}", foreground="gray")
                     else:
                         # Get modality from current procedure
                         classification_rules = self.data_manager.data.get("classification_rules", {})
@@ -8135,24 +8456,21 @@ class RVUCounterApp:
                     duration_text = self._get_current_study_duration()
                 
                 # Truncate accession if needed to make room for duration
-                frame_width = self.root.winfo_width()
-                if frame_width > 100:
-                    # Calculate space needed for duration and prefix
-                    prefix_chars = len("Accession: ")
-                    char_width = 7
-                    # Reserve space for prefix, duration (if shown), and ~5 spaces padding
-                    if show_time and duration_text:
-                        duration_chars = len(duration_text)
-                        reserved = (prefix_chars + duration_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                    else:
-                        reserved = (prefix_chars + 5) * char_width + 15
-                    
-                    usable_width = max(frame_width - reserved, 35)
-                    max_chars = int(usable_width / char_width)
-                    max_chars = max(10, min(max_chars, 100))
-                    
-                    if len(accession_text) > max_chars:
-                        accession_text = self._truncate_text(accession_text, max_chars)
+                if show_time and duration_text:
+                    # Calculate available width for accession
+                    frame_width = self.root.winfo_width()
+                    if frame_width > 100:
+                        # Estimate space needed for duration (roughly 8-10 chars like "12m 34s")
+                        duration_chars = 8
+                        prefix_chars = len("Accession: ")
+                        reserved = 95 + (duration_chars * 6)  # Reserve space for duration
+                        usable_width = max(frame_width - reserved, 50)
+                        char_width = 8 * 0.75
+                        max_chars = int(usable_width / char_width)
+                        max_chars = max(10, min(max_chars, 100))
+                        
+                        if len(accession_text) > max_chars:
+                            accession_text = self._truncate_text(accession_text, max_chars)
                 
                 # If duplicate, show "already recorded" in red instead of accession
                 # But still show duration and other fields normally
@@ -8164,60 +8482,23 @@ class RVUCounterApp:
                 # Always show duration (even for duplicates - shows how long user has been viewing)
                 self.debug_duration_label.config(text=duration_text if show_time else "")
                 
-                # Dynamic truncation for procedure based on available width
+                # No truncation for procedure - show full name
                 procedure_display = self.current_procedure if self.current_procedure else '-'
-                if self.current_procedure:
-                    frame_width = self.root.winfo_width()
-                    if frame_width > 100:
-                        prefix_chars = len("Procedure: ")
-                        char_width = 7
-                        reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                        usable_width = max(frame_width - reserved, 35)
-                        max_chars = int(usable_width / char_width)
-                        max_chars = max(15, min(max_chars, 120))
-                        
-                        if len(procedure_display) > max_chars:
-                            procedure_display = self._truncate_text(procedure_display, max_chars)
-                
                 self.debug_procedure_label.config(text=f"Procedure: {procedure_display}", foreground="gray")
             
-            # Dynamic truncation for patient class based on available width
-            patient_class_display = self.current_patient_class if self.current_patient_class else '-'
-            if self.current_patient_class:
-                frame_width = self.root.winfo_width()
-                if frame_width > 100:
-                    prefix_chars = len("Patient Class: ")
-                    char_width = 7
-                    reserved = (prefix_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                    usable_width = max(frame_width - reserved, 35)
-                    max_chars = int(usable_width / char_width)
-                    max_chars = max(10, min(max_chars, 80))
-                    
-                    if len(patient_class_display) > max_chars:
-                        patient_class_display = self._truncate_text(patient_class_display, max_chars)
-            
-            self.debug_patient_class_label.config(text=f"Patient Class: {patient_class_display}")
+            self.debug_patient_class_label.config(text=f"Patient Class: {self.current_patient_class if self.current_patient_class else '-'}")
             
             # Display study type with RVU on the right (separate labels for alignment)
             if self.current_study_type:
-                # Dynamic truncation for study type based on available width
-                study_type_display = self.current_study_type
+                # Dynamic truncation based on window width to balance readability with RVU visibility
                 frame_width = self.root.winfo_width()
-                if frame_width > 100:
-                    # Reserve space for: "Study Type: " prefix, RVU label, and ~5 spaces between ellipsis and RVU
-                    prefix_chars = len("Study Type: ")
-                    rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
-                    rvu_text = f"{rvu_value:.1f} RVU"
-                    rvu_chars = len(rvu_text)
-                    char_width = 7
-                    reserved = (prefix_chars + rvu_chars + 5) * char_width + 15  # 5 spaces + minimal padding
-                    usable_width = max(frame_width - reserved, 35)
-                    max_chars = int(usable_width / char_width)
-                    max_chars = max(10, min(max_chars, 80))  # Min 10 chars, max 80
-                    
-                    if len(study_type_display) > max_chars:
-                        study_type_display = self._truncate_text(study_type_display, max_chars)
-                
+                # Calculate available space: window width minus prefix, RVU, and margins
+                # Estimate: "Study Type: " (13 chars) + RVU " 99.9 RVU" (9 chars) + margins (30px)
+                available_width = max(frame_width - 180, 80)  # At least 80px
+                char_width = 7.5  # Average char width in pixels for Arial 7
+                max_chars = int(available_width / char_width)
+                max_chars = max(15, min(max_chars, 35))  # Between 15-35 chars
+                study_type_display = self._truncate_text(self.current_study_type, max_chars)
                 # Show prefix
                 self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
                 # Check if incomplete (starts with "incomplete") - show in red
@@ -8225,6 +8506,7 @@ class RVUCounterApp:
                     self.debug_study_type_label.config(text=study_type_display, foreground="red")
                 else:
                     self.debug_study_type_label.config(text=study_type_display, foreground="gray")
+                rvu_value = self.current_study_rvu if self.current_study_rvu is not None else 0.0
                 self.debug_study_rvu_label.config(text=f"{rvu_value:.1f} RVU")
             else:
                 self.debug_study_type_prefix_label.config(text="Study Type: ", foreground="gray")
@@ -10168,6 +10450,11 @@ class StatisticsWindow:
         self.projection_extra_days = tk.IntVar(value=0)
         self.projection_extra_hours = tk.IntVar(value=0)
         
+        # Comparison mode variables
+        self.comparison_shift1_index = None  # Index in shifts list for first shift (current/newer)
+        self.comparison_shift2_index = None  # Index in shifts list for second shift (prior/older)
+        self.comparison_graph_mode = tk.StringVar(value="accumulation")  # accumulation or average
+        
         # Track previous period to show/hide custom date frame
         self.previous_period = "current_shift"
         
@@ -10260,8 +10547,32 @@ class StatisticsWindow:
                     except:
                         current_dt = datetime.now()
                     
-                    cal = Calendar(cal_dialog, selectmode='day', 
-                                 year=current_dt.year, month=current_dt.month, day=current_dt.day)
+                    # Apply theme colors to calendar
+                    colors = self.app.get_theme_colors()
+                    is_dark = colors['bg'] == '#2b2b2b'
+                    
+                    if is_dark:
+                        # Dark mode calendar styling
+                        cal = Calendar(cal_dialog, selectmode='day', 
+                                     year=current_dt.year, month=current_dt.month, day=current_dt.day,
+                                     background='#2b2b2b',
+                                     foreground='white',
+                                     headersbackground='#1e1e1e',
+                                     headersforeground='white',
+                                     selectbackground='#0078d7',
+                                     selectforeground='white',
+                                     normalbackground='#2b2b2b',
+                                     normalforeground='white',
+                                     weekendbackground='#353535',
+                                     weekendforeground='white',
+                                     othermonthforeground='#666666',
+                                     othermonthbackground='#2b2b2b',
+                                     othermonthweforeground='#666666',
+                                     othermonthwebackground='#2b2b2b')
+                    else:
+                        # Light mode calendar (default)
+                        cal = Calendar(cal_dialog, selectmode='day', 
+                                     year=current_dt.year, month=current_dt.month, day=current_dt.day)
                     cal.pack(padx=10, pady=10)
                     
                     def set_start_date():
@@ -10324,8 +10635,32 @@ class StatisticsWindow:
                     except:
                         current_dt = datetime.now()
                     
-                    cal = Calendar(cal_dialog, selectmode='day',
-                                 year=current_dt.year, month=current_dt.month, day=current_dt.day)
+                    # Apply theme colors to calendar
+                    colors = self.app.get_theme_colors()
+                    is_dark = colors['bg'] == '#2b2b2b'
+                    
+                    if is_dark:
+                        # Dark mode calendar styling
+                        cal = Calendar(cal_dialog, selectmode='day',
+                                     year=current_dt.year, month=current_dt.month, day=current_dt.day,
+                                     background='#2b2b2b',
+                                     foreground='white',
+                                     headersbackground='#1e1e1e',
+                                     headersforeground='white',
+                                     selectbackground='#0078d7',
+                                     selectforeground='white',
+                                     normalbackground='#2b2b2b',
+                                     normalforeground='white',
+                                     weekendbackground='#353535',
+                                     weekendforeground='white',
+                                     othermonthforeground='#666666',
+                                     othermonthbackground='#2b2b2b',
+                                     othermonthweforeground='#666666',
+                                     othermonthwebackground='#2b2b2b')
+                    else:
+                        # Light mode calendar (default)
+                        cal = Calendar(cal_dialog, selectmode='day',
+                                     year=current_dt.year, month=current_dt.month, day=current_dt.day)
                     cal.pack(padx=10, pady=10)
                     
                     def set_end_date():
@@ -10366,6 +10701,25 @@ class StatisticsWindow:
         
         # Initially hide the custom date frame (don't pack it yet)
         # It will be shown when custom_date_range is selected
+        
+        # Comparison Section (only visible in comparison view)
+        comparison_frame = ttk.LabelFrame(left_panel, text="Shift Comparison", padding="8")
+        self.comparison_frame = comparison_frame  # Store reference to show/hide
+        
+        ttk.Label(comparison_frame, text="Shift 1:", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(0, 2))
+        self.comparison_shift1_var = tk.StringVar()
+        self.comparison_shift1_combo = ttk.Combobox(comparison_frame, state="readonly", width=25)
+        self.comparison_shift1_combo.pack(fill=tk.X, pady=(0, 10))
+        self.comparison_shift1_combo.bind("<<ComboboxSelected>>", lambda e: self.on_comparison_shift_selected(e))
+        
+        ttk.Label(comparison_frame, text="Shift 2:", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(0, 2))
+        self.comparison_shift2_var = tk.StringVar()
+        self.comparison_shift2_combo = ttk.Combobox(comparison_frame, state="readonly", width=25)
+        self.comparison_shift2_combo.pack(fill=tk.X, pady=(0, 10))
+        self.comparison_shift2_combo.bind("<<ComboboxSelected>>", lambda e: self.on_comparison_shift_selected(e))
+        
+        # Initially hide comparison section (only show when comparison view is selected)
+        comparison_frame.pack_forget()
         
         # Shifts List Section (with delete capability)
         shifts_frame = ttk.LabelFrame(left_panel, text="All Shifts", padding="8")
@@ -10411,6 +10765,8 @@ class StatisticsWindow:
                        value="by_body_part", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="All Studies", variable=self.view_mode,
                        value="all_studies", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(view_frame, text="Comparison", variable=self.view_mode,
+                       value="comparison", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         ttk.Radiobutton(view_frame, text="Summary", variable=self.view_mode,
                        value="summary", command=self.refresh_data).pack(side=tk.LEFT, padx=5)
         
@@ -10580,12 +10936,12 @@ class StatisticsWindow:
                 except:
                     label_text = shift.get("date", "Unknown")
             
-            # Study count
+            # Study count and RVU
             records = shift.get("records", [])
             count = len(records)
             total_rvu = sum(r.get("rvu", 0) for r in records)
             
-            # Shift button (clickable frame with left-justified name and right-justified count)
+            # Shift button (clickable frame with left-justified name and right-justified count/RVU)
             btn_frame = ttk.Frame(shift_frame)
             btn_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2))
             
@@ -10597,8 +10953,8 @@ class StatisticsWindow:
             spacer = ttk.Frame(btn_frame)
             spacer.pack(side=tk.LEFT, fill=tk.X, expand=True)
             
-            # Right-justified count
-            count_label = ttk.Label(btn_frame, text=f"({count})", anchor=tk.E, cursor="hand2")
+            # Right-justified count and RVU
+            count_label = ttk.Label(btn_frame, text=f"({count}, {total_rvu:.1f} RVU)", anchor=tk.E, cursor="hand2")
             count_label.pack(side=tk.RIGHT)
             
             # Make the entire frame clickable
@@ -11187,12 +11543,17 @@ class StatisticsWindow:
                     # No date range, just add shift count
                     period_desc = f"{period_desc} ({shift_count} shift{'s' if shift_count != 1 else ''})"
         
+        # Set period label (override for comparison mode later if needed)
         self.period_label.config(text=period_desc)
         
         # Expand multi-accession records into individual modality records for statistics
         records = self._expand_multi_accession_records(records)
         
         view_mode = self.view_mode.get()
+        
+        # Override period label for comparison mode
+        if view_mode == "comparison":
+            self.period_label.config(text="Shift Comparison")
         
         # Hide tree for all views (all use Canvas now)
         self.tree.pack_forget()
@@ -11267,6 +11628,49 @@ class StatisticsWindow:
                     self.projection_settings_frame.pack_forget()
             except:
                 pass
+        
+        # Show/hide comparison section in left panel based on view mode
+        if hasattr(self, 'comparison_frame'):
+            if view_mode == "comparison":
+                # Show comparison section when in comparison view
+                try:
+                    # Find shifts list frame to pack before it
+                    left_panel = self.comparison_frame.master
+                    for widget in left_panel.winfo_children():
+                        if isinstance(widget, ttk.LabelFrame) and widget.cget("text") == "All Shifts":
+                            self.comparison_frame.pack(fill=tk.X, pady=(0, 10), before=widget)
+                            break
+                    # Populate comparison comboboxes only if not already populated
+                    if not hasattr(self, '_comparison_shifts_populated') or not self._comparison_shifts_populated:
+                        self._populate_comparison_shifts(preserve_selection=False)
+                        self._comparison_shifts_populated = True
+                except Exception as e:
+                    logger.error(f"Error showing comparison frame: {e}")
+            else:
+                # Hide comparison section in other views
+                try:
+                    self.comparison_frame.pack_forget()
+                except:
+                    pass
+                
+                # Clean up ALL comparison-related stored data
+                cleanup_attrs = [
+                    '_comparison_canvas_widgets',
+                    '_comparison_data1',
+                    '_comparison_data2', 
+                    '_comparison_scroll_canvas',
+                    '_comparison_scrollable_frame',
+                    '_comparison_mousewheel_canvas',
+                    '_comparison_mousewheel_frame',
+                    '_comparison_mousewheel_callback'
+                ]
+                
+                for attr in cleanup_attrs:
+                    if hasattr(self, attr):
+                        try:
+                            delattr(self, attr)
+                        except:
+                            pass
         
         # Show/hide efficiency checkboxes based on view mode
         if view_mode == "efficiency":
@@ -11387,6 +11791,10 @@ class StatisticsWindow:
                 self._display_compensation(records)
         elif view_mode == "summary":
             self._display_summary(records)
+        elif view_mode == "comparison":
+            self._display_comparison()
+            # Summary is handled within _display_comparison, skip default summary update
+            return
         
         # Update summary
         total_studies = len(records)
@@ -11731,13 +12139,12 @@ class StatisticsWindow:
                 study_type = f"{modality} Other" if modality else "(Unknown)"
             
             # Group "CT Spine Lumbar" and "CT Spine Lumbar Recon" with "CT Spine" for display purposes
-            # Group "CT CAP Trauma" and "CT CA" with "CT CAP" for display purposes
+            # Group "CT CAP Angio", "CT CAP Trauma", and "CT CA" with "CT CAP" for display purposes
             # Keep the original RVU value, but group them together
-            # Note: CTA CAP is kept separate from CT CAP
             grouping_key = study_type
             if study_type == "CT Spine Lumbar" or study_type == "CT Spine Lumbar Recon":
                 grouping_key = "CT Spine"
-            elif study_type == "CT CAP Trauma" or study_type == "CT CA":
+            elif study_type == "CT CAP Angio" or study_type == "CT CAP Angio Combined" or study_type == "CT CAP Trauma" or study_type == "CT CA":
                 grouping_key = "CT CAP"
             
             rvu = record.get("rvu", 0)
@@ -11785,9 +12192,10 @@ class StatisticsWindow:
         """Map study types to modality-specific anatomical groups for hierarchical display."""
         study_lower = study_type.lower()
         
-        # Determine modality first - CT and CTA are both CT for body part grouping
+        # Determine modality first
         if study_type.startswith('CT ') or study_type.startswith('CTA '):
-            # === CT STUDIES (including CTA - they're grouped together) ===
+            # === CT STUDIES ===
+            is_cta = study_type.startswith('CTA')
             
             # Check for body region combinations first
             has_chest = ('chest' in study_lower or ' cap' in study_lower or ' ca ' in study_lower or study_lower.endswith(' ca'))
@@ -11796,42 +12204,42 @@ class StatisticsWindow:
             
             # CTA Runoff with Abdo/Pelvis - special case
             if 'runoff' in study_lower and ('abdomen' in study_lower or 'pelvis' in study_lower or 'abdo' in study_lower):
-                return "CT: Abdomen/Pelvis"
+                return "CTA: Abdomen/Pelvis"
             
-            # CT Body (Chest+Abdomen combinations ± Pelvis) - includes CTA
+            # CT/CTA Body (Chest+Abdomen combinations ± Pelvis)
             elif has_chest and has_abdomen:
-                return "CT: Body"
+                return "CTA: Body" if is_cta else "CT: Body"
             
-            # CT Abdomen/Pelvis (no chest) - includes CTA
+            # CT/CTA Abdomen/Pelvis (no chest)
             elif has_abdomen and not has_chest:
-                return "CT: Abdomen/Pelvis"
+                return "CTA: Abdomen/Pelvis" if is_cta else "CT: Abdomen/Pelvis"
             
-            # CT Chest alone - includes CTA
+            # CT/CTA Chest alone
             elif has_chest and not has_abdomen:
-                return "CT: Chest"
+                return "CTA: Chest" if is_cta else "CT: Chest"
             
-            # CT Brain - includes CTA
+            # CT/CTA Brain
             elif any(kw in study_lower for kw in ['brain', 'head', 'face', 'sinus', 'orbit', 'temporal', 'maxillofacial']):
-                return "CT: Brain"
+                return "CTA: Brain" if is_cta else "CT: Brain"
             
-            # CT Neck (without brain/head) - includes CTA
+            # CT/CTA Neck (without brain/head)
             elif 'neck' in study_lower:
-                return "CT: Neck"
+                return "CTA: Neck" if is_cta else "CT: Neck"
             
-            # CT Spine - includes CTA
+            # CT/CTA Spine
             elif any(kw in study_lower for kw in ['spine', 'cervical', 'thoracic', 'lumbar', 'sacrum', 'coccyx']):
-                return "CT: Spine"
+                return "CTA: Spine" if is_cta else "CT: Spine"
             
-            # CT MSK - includes CTA
+            # CT/CTA MSK
             elif any(kw in study_lower for kw in ['shoulder', 'arm', 'elbow', 'wrist', 'hand', 'hip', 'femur', 'knee', 'leg', 'ankle', 'foot', 'joint', 'bone']):
-                return "CT: MSK"
+                return "CTA: MSK" if is_cta else "CT: MSK"
             
-            # CT Pelvis alone (no abdomen) - MSK - includes CTA
+            # CT/CTA Pelvis alone (no abdomen) - MSK
             elif has_pelvis and not has_abdomen:
-                return "CT: MSK"
+                return "CTA: MSK" if is_cta else "CT: MSK"
             
             else:
-                return "CT: Other"
+                return "CTA: Other" if is_cta else "CT: Other"
         
         elif study_type.startswith('MR') or study_type.startswith('MRI'):
             # === MRI STUDIES ===
@@ -11996,23 +12404,33 @@ class StatisticsWindow:
         
         # Sort body parts by modality priority, then by specific order
         def body_part_sort_key(body_part):
-            """Sort by modality (CT, XR, US, MRI, NM, other), then by specific body part order."""
+            """Sort by modality (CT, CTA, XR, US, MRI, NM, other), then by specific body part order."""
             # Determine modality priority based on prefix
-            # Note: CTA categories are now grouped with CT (same category), so we only check for CT:
-            if body_part.startswith('CT:'):
+            if body_part.startswith('CT:') or body_part.startswith('CTA:'):
+                # Treat CTA as immediately after CT (same priority level)
+                is_cta = body_part.startswith('CTA:')
                 modality_priority = 0
                 
-                # Special ordering: CT Body, CT Abdomen/Pelvis, CT Chest, then others
+                # Special ordering: CT Body, CT Abdomen/Pelvis, CT Chest, then CTA equivalents, then others
                 if body_part == 'CT: Body':
                     sub_priority = 0
                 elif body_part == 'CT: Abdomen/Pelvis':
                     sub_priority = 1
                 elif body_part == 'CT: Chest':
                     sub_priority = 2
+                elif body_part == 'CTA: Body':
+                    sub_priority = 3
+                elif body_part == 'CTA: Abdomen/Pelvis':
+                    sub_priority = 4
+                elif body_part == 'CTA: Chest':
+                    sub_priority = 5
                 else:
-                    # For other CT categories, sort alphabetically
-                    base_name = body_part.replace('CT: ', '').replace('CT:', '')
-                    sub_priority = 50 + ord(base_name[0]) if base_name else 50
+                    # For other CT/CTA categories, CTA comes after CT
+                    base_name = body_part.replace('CTA:', '').replace('CT:', '')
+                    if is_cta:
+                        sub_priority = 100 + ord(base_name[0]) if base_name else 100  # CTA after CT
+                    else:
+                        sub_priority = 50 + ord(base_name[0]) if base_name else 50  # CT before CTA
             elif body_part.startswith('XR:'):
                 modality_priority = 1
                 sub_priority = 0
@@ -14916,6 +15334,867 @@ class StatisticsWindow:
                 total_hours += (end - start).total_seconds() / 3600
         
         return total_hours
+    
+    def _populate_comparison_shifts(self, preserve_selection=True):
+        """Populate the comparison shift comboboxes with available shifts.
+        
+        Args:
+            preserve_selection: If True, keeps current selections if they're still valid
+        """
+        try:
+            # Save current selections if preserving
+            current_idx1 = self.comparison_shift1_index if preserve_selection else None
+            current_idx2 = self.comparison_shift2_index if preserve_selection else None
+            
+            # Get all shifts from database (including current if it exists)
+            all_shifts = []
+            
+            # Get current shift if it exists
+            current_shift = self.data_manager.db.get_current_shift()
+            if current_shift:
+                all_shifts.append(current_shift)
+            
+            # Get historical shifts
+            historical_shifts = self.data_manager.db.get_all_shifts()
+            all_shifts.extend(historical_shifts)
+            
+            if not all_shifts:
+                return
+            
+            # Format shift options for display
+            shift_options = []
+            for i, shift in enumerate(all_shifts):
+                start = datetime.fromisoformat(shift['shift_start'])
+                
+                # Label with "Current" or date/time
+                if shift.get('is_current'):
+                    label = f"Current - {start.strftime('%a %m/%d %I:%M%p')}"
+                else:
+                    label = start.strftime("%a %m/%d %I:%M%p")
+                
+                # Get records for this shift and calculate stats
+                records = self.data_manager.db.get_records_for_shift(shift['id'])
+                # Expand multi-accession records
+                records = self._expand_multi_accession_records(records)
+                
+                study_count = len(records)
+                total_rvu = sum(r.get('rvu', 0) for r in records)
+                
+                display_text = f"{label} - {total_rvu:.1f} RVU ({study_count} studies)"
+                shift_options.append(display_text)
+            
+            # Store the shifts list for later reference
+            self.comparison_shifts_list = all_shifts
+            
+            # Update comboboxes
+            self.comparison_shift1_combo['values'] = shift_options
+            self.comparison_shift2_combo['values'] = shift_options
+            
+            # Set selections: use preserved selections if valid, otherwise defaults
+            if preserve_selection and current_idx1 is not None and current_idx1 < len(all_shifts):
+                self.comparison_shift1_index = current_idx1
+            elif len(all_shifts) >= 1:
+                self.comparison_shift1_index = 0
+            
+            if preserve_selection and current_idx2 is not None and current_idx2 < len(all_shifts):
+                self.comparison_shift2_index = current_idx2
+            elif len(all_shifts) >= 2:
+                self.comparison_shift2_index = 1
+            
+            # Set default selections if not already set
+            if self.comparison_shift1_index is None and len(all_shifts) >= 1:
+                self.comparison_shift1_index = 0
+            if self.comparison_shift2_index is None and len(all_shifts) >= 2:
+                self.comparison_shift2_index = 1
+            
+            # Apply selections to comboboxes
+            if self.comparison_shift1_index is not None and self.comparison_shift1_index < len(shift_options):
+                self.comparison_shift1_combo.current(self.comparison_shift1_index)
+            
+            if self.comparison_shift2_index is not None and self.comparison_shift2_index < len(shift_options):
+                self.comparison_shift2_combo.current(self.comparison_shift2_index)
+            
+        except Exception as e:
+            logger.error(f"Error populating comparison shifts: {e}")
+    
+    def on_comparison_shift_selected(self, event=None):
+        """Handle shift selection change in comparison mode."""
+        try:
+            # Get current selections
+            idx1 = self.comparison_shift1_combo.current()
+            idx2 = self.comparison_shift2_combo.current()
+            
+            # Only update if valid indices
+            if idx1 >= 0:
+                self.comparison_shift1_index = idx1
+            if idx2 >= 0:
+                self.comparison_shift2_index = idx2
+            
+            # Refresh the comparison view
+            if self.view_mode.get() == "comparison":
+                self._display_comparison()
+                        
+        except Exception as e:
+            logger.error(f"Error handling comparison shift selection: {e}")
+    
+    def _update_comparison_graphs(self, changed_element: str):
+        """Update comparison graphs with scroll position preservation.
+        
+        Simple approach: save scroll position, do full redraw, restore position.
+        """
+        try:
+            # Get current scroll position if available
+            canvas = getattr(self, '_comparison_scroll_canvas', None)
+            scroll_pos = canvas.yview()[0] if canvas else 0
+            
+            # Do full redraw (simpler and more reliable than incremental)
+            self._display_comparison()
+            
+            # Restore scroll position after a brief delay to ensure widgets are rendered
+            if canvas:
+                self.window.after(10, lambda: self._restore_scroll_position(scroll_pos))
+                
+        except Exception as e:
+            logger.error(f"Error updating comparison graphs: {e}")
+            self._display_comparison()
+    
+    def _restore_scroll_position(self, position):
+        """Restore scroll position after redraw."""
+        try:
+            canvas = getattr(self, '_comparison_scroll_canvas', None)
+            if canvas:
+                canvas.yview_moveto(position)
+        except:
+            pass
+    
+    def _display_comparison(self):
+        """Display shift comparison view with graphs and numerical comparisons."""
+        if not HAS_MATPLOTLIB:
+            # Show message if matplotlib is not available
+            error_label = ttk.Label(self.table_frame, 
+                                   text="Matplotlib is required for comparison view.\nPlease install: pip install matplotlib",
+                                   font=("Arial", 12), foreground="red")
+            error_label.pack(pady=50)
+            self.summary_label.config(text="Comparison view unavailable")
+            return
+        
+        # Get the two shifts to compare from the stored list
+        shifts = getattr(self, 'comparison_shifts_list', [])
+        if not shifts:
+            error_label = ttk.Label(self.table_frame, 
+                                   text="No shifts available for comparison",
+                                   font=("Arial", 12), foreground="red")
+            error_label.pack(pady=50)
+            self.summary_label.config(text="No shifts available")
+            return
+        
+        if len(shifts) < 2:
+            error_label = ttk.Label(self.table_frame, 
+                                   text="At least two shifts are required for comparison.\nComplete more shifts to use this feature.",
+                                   font=("Arial", 12), foreground="orange")
+            error_label.pack(pady=50)
+            self.summary_label.config(text="Need at least 2 shifts to compare")
+            return
+        
+        if self.comparison_shift1_index is None or self.comparison_shift2_index is None:
+            self.summary_label.config(text="Please select two shifts to compare")
+            return
+        
+        if self.comparison_shift1_index >= len(shifts) or self.comparison_shift2_index >= len(shifts):
+            self.summary_label.config(text="Invalid shift selection")
+            return
+        
+        shift1 = shifts[self.comparison_shift1_index]
+        shift2 = shifts[self.comparison_shift2_index]
+        
+        # Get records for each shift
+        records1 = self.data_manager.db.get_records_for_shift(shift1['id'])
+        records2 = self.data_manager.db.get_records_for_shift(shift2['id'])
+        
+        # Expand multi-accession records
+        records1 = self._expand_multi_accession_records(records1)
+        records2 = self._expand_multi_accession_records(records2)
+        
+        # Clear existing content
+        for widget in self.table_frame.winfo_children():
+            widget.destroy()
+        
+        # Create scrollable frame for content
+        canvas = tk.Canvas(self.table_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(self.table_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        # Store references for incremental updates
+        self._comparison_scroll_canvas = canvas
+        self._comparison_scrollable_frame = scrollable_frame
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Enable mouse wheel scrolling when mouse is over the canvas or its children
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Helper to bind mousewheel to a widget and all its children recursively
+        def bind_mousewheel_recursive(widget):
+            widget.bind("<MouseWheel>", on_mousewheel)
+            for child in widget.winfo_children():
+                bind_mousewheel_recursive(child)
+        
+        # Bind to the canvas and all widgets in scrollable_frame
+        canvas.bind("<MouseWheel>", on_mousewheel)
+        bind_mousewheel_recursive(scrollable_frame)
+        
+        # Store reference to unbind later if needed
+        self._comparison_mousewheel_canvas = canvas
+        self._comparison_mousewheel_frame = scrollable_frame
+        self._comparison_mousewheel_callback = on_mousewheel
+        
+        # Initialize modality selection if not exists
+        if not hasattr(self, 'comparison_modality_filter'):
+            self.comparison_modality_filter = tk.StringVar(value="all")
+        
+        # Get theme colors for dark mode support
+        theme_colors = self.app.get_theme_colors()
+        is_dark = theme_colors['bg'] == '#2b2b2b'
+        
+        # Calculate figure width based on available space (no controls panel anymore)
+        window_width = self.window.winfo_width() if self.window.winfo_width() > 1 else 1350
+        available_width = (window_width - 320) / 100  # Just left panel + padding
+        fig_width = max(8, min(available_width, 12))  # Better width range
+        
+        selected_modality = self.comparison_modality_filter.get()
+        
+        # Process data for graphs and store for incremental updates
+        data1 = self._process_shift_data_for_comparison(shift1, records1)
+        data2 = self._process_shift_data_for_comparison(shift2, records2)
+        
+        # Store for incremental graph updates
+        self._comparison_data1 = data1
+        self._comparison_data2 = data2
+        
+        # Get rounded shift start times for x-axis display
+        shift1_start_rounded = data1['shift_start_rounded']
+        shift2_start_rounded = data2['shift_start_rounded']
+        
+        # Determine if shifts have matching times (compare rounded hours)
+        use_actual_time = shift1_start_rounded.hour == shift2_start_rounded.hour
+        
+        # Align time ranges: ignore stragglers and use common max hour
+        # For typical night shifts (11pm-8am = 9 hours), cap at 9 hours
+        # Otherwise, use min of both max_hours to ignore stragglers
+        ideal_max_hour = 9  # 11pm to 8am
+        max_hour1 = data1['max_hour']
+        max_hour2 = data2['max_hour']
+        
+        # If both shifts are close to ideal length, use ideal; otherwise use minimum to avoid stragglers
+        if max_hour1 >= ideal_max_hour - 1 and max_hour2 >= ideal_max_hour - 1:
+            common_max_hour = ideal_max_hour
+        else:
+            # Use minimum + 1 to allow some flexibility but cut stragglers
+            common_max_hour = min(max_hour1, max_hour2) + 1
+        
+        # Pad/trim data to common length
+        self._align_shift_data(data1, common_max_hour)
+        self._align_shift_data(data2, common_max_hour)
+        
+        # Store canvas widgets for cleanup
+        canvas_widgets = []
+        
+        # === FIRST FIGURE: RVU Graphs (Graph 1 & 2) ===
+        # Control panel above first two graphs
+        toggle_frame1 = ttk.Frame(scrollable_frame)
+        toggle_frame1.pack(fill=tk.X, padx=10, pady=(5, 2))
+        ttk.Label(toggle_frame1, text="Graph Mode:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Radiobutton(toggle_frame1, text="Accumulation", variable=self.comparison_graph_mode,
+                       value="accumulation", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+        ttk.Radiobutton(toggle_frame1, text="Average", variable=self.comparison_graph_mode,
+                       value="average", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+        
+        # Create first figure with 2 subplots
+        fig1 = Figure(figsize=(fig_width, 8), dpi=100)
+        fig1.patch.set_facecolor(theme_colors['bg'])
+        
+        ax1 = fig1.add_subplot(2, 1, 1)  # RVU accumulation
+        ax2 = fig1.add_subplot(2, 1, 2)  # Delta from average RVU
+        
+        # Apply dark mode colors
+        for ax in [ax1, ax2]:
+            ax.set_facecolor(theme_colors['bg'])
+            ax.tick_params(colors=theme_colors['fg'])
+            ax.xaxis.label.set_color(theme_colors['fg'])
+            ax.yaxis.label.set_color(theme_colors['fg'])
+            ax.title.set_color(theme_colors['fg'])
+            for spine in ax.spines.values():
+                spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+        
+        # Plot 1: RVU Accumulation/Average
+        self._plot_rvu_progression(ax1, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+        
+        # Plot 2: Delta from Average RVU
+        self._plot_rvu_delta(ax2, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+        
+        fig1.tight_layout(pad=2.5)
+        
+        # Embed first figure
+        canvas_widget1 = FigureCanvasTkAgg(fig1, master=scrollable_frame)
+        canvas_widget1.draw()
+        canvas_widget1.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        canvas_widgets.append(canvas_widget1)
+        
+        # === SECOND FIGURE: Study Count Graph (Graph 3) ===
+        # Control panel above third graph
+        toggle_frame2 = ttk.Frame(scrollable_frame)
+        toggle_frame2.pack(fill=tk.X, padx=10, pady=(5, 2))
+        ttk.Label(toggle_frame2, text="Modality Filter:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+        
+        # Get all unique modalities from both shifts
+        all_modalities_set = set()
+        for mod_dict in [data1['modality_cumulative'], data2['modality_cumulative']]:
+            all_modalities_set.update(mod_dict.keys())
+        all_modalities = sorted(list(all_modalities_set))
+        
+        # "All" option
+        ttk.Radiobutton(toggle_frame2, text="All", variable=self.comparison_modality_filter,
+                       value="all", command=lambda: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
+        
+        # Individual modality options (limit to 6 for space)
+        for modality in all_modalities[:6]:
+            ttk.Radiobutton(toggle_frame2, text=modality, variable=self.comparison_modality_filter,
+                           value=modality, command=lambda m=modality: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
+        
+        # Create second figure with 1 subplot
+        fig2 = Figure(figsize=(fig_width, 4), dpi=100)
+        fig2.patch.set_facecolor(theme_colors['bg'])
+        
+        ax3 = fig2.add_subplot(1, 1, 1)  # Study count
+        
+        # Apply dark mode colors
+        ax3.set_facecolor(theme_colors['bg'])
+        ax3.tick_params(colors=theme_colors['fg'])
+        ax3.xaxis.label.set_color(theme_colors['fg'])
+        ax3.yaxis.label.set_color(theme_colors['fg'])
+        ax3.title.set_color(theme_colors['fg'])
+        for spine in ax3.spines.values():
+            spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+        
+        # Plot 3: Study count (summed if "all", by modality if specific)
+        if selected_modality == "all":
+            # Sum all modalities = total studies
+            self._plot_total_studies(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+        else:
+            self._plot_modality_progression(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, selected_modality, theme_colors)
+        
+        fig2.tight_layout(pad=2.5)
+        
+        # Embed second figure
+        canvas_widget2 = FigureCanvasTkAgg(fig2, master=scrollable_frame)
+        canvas_widget2.draw()
+        canvas_widget2.get_tk_widget().pack(fill=tk.BOTH, expand=True, padx=10, pady=(5, 10))
+        canvas_widgets.append(canvas_widget2)
+        
+        # Store references for cleanup
+        self._comparison_canvas_widgets = canvas_widgets
+        
+        # Re-bind mousewheel to newly created widgets (matplotlib canvases)
+        if hasattr(self, '_comparison_mousewheel_callback'):
+            def bind_mousewheel_recursive(widget):
+                widget.bind("<MouseWheel>", self._comparison_mousewheel_callback)
+                for child in widget.winfo_children():
+                    bind_mousewheel_recursive(child)
+            
+            bind_mousewheel_recursive(scrollable_frame)
+        
+        # Numerical comparison below graphs
+        comparison_frame = ttk.LabelFrame(scrollable_frame, text="Numerical Comparison", padding="10")
+        comparison_frame.pack(fill=tk.X, padx=10, pady=(10, 0))
+        
+        # Create comparison table (use original shift start times for display)
+        shift1_start = datetime.fromisoformat(shift1['shift_start'])
+        shift2_start = datetime.fromisoformat(shift2['shift_start'])
+        self._create_comparison_table(comparison_frame, shift1, shift2, records1, records2, 
+                                     shift1_start, shift2_start)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Update summary
+        total1 = len(records1)
+        total2 = len(records2)
+        rvu1 = sum(r.get("rvu", 0) for r in records1)
+        rvu2 = sum(r.get("rvu", 0) for r in records2)
+        
+        self.summary_label.config(
+            text=f"Current: {total1} studies, {rvu1:.1f} RVU  |  Prior: {total2} studies, {rvu2:.1f} RVU"
+        )
+    
+    def _align_shift_data(self, data: dict, target_max_hour: int):
+        """Align shift data to a target maximum hour by padding or trimming."""
+        current_max = data['max_hour']
+        
+        if current_max < target_max_hour:
+            # Pad with zeros/last values
+            padding_needed = target_max_hour - current_max
+            last_rvu = data['cumulative_rvu'][-1] if data['cumulative_rvu'] else 0
+            last_studies = data['cumulative_studies'][-1] if data['cumulative_studies'] else 0
+            
+            for _ in range(padding_needed):
+                data['cumulative_rvu'].append(last_rvu)
+                data['cumulative_studies'].append(last_studies)
+                # Pad averages (recalculate)
+                hour = len(data['avg_rvu'])
+                data['avg_rvu'].append(last_rvu / (hour + 1) if hour >= 0 else 0)
+                data['avg_studies'].append(last_studies / (hour + 1) if hour >= 0 else 0)
+                
+                # Pad modality data
+                for modality in data['modality_cumulative']:
+                    last_val = data['modality_cumulative'][modality][-1] if data['modality_cumulative'][modality] else 0
+                    data['modality_cumulative'][modality].append(last_val)
+        
+        elif current_max > target_max_hour:
+            # Trim excess data
+            data['cumulative_rvu'] = data['cumulative_rvu'][:target_max_hour + 1]
+            data['cumulative_studies'] = data['cumulative_studies'][:target_max_hour + 1]
+            data['avg_rvu'] = data['avg_rvu'][:target_max_hour + 1]
+            data['avg_studies'] = data['avg_studies'][:target_max_hour + 1]
+            
+            for modality in data['modality_cumulative']:
+                data['modality_cumulative'][modality] = data['modality_cumulative'][modality][:target_max_hour + 1]
+        
+        # Update max_hour
+        data['max_hour'] = target_max_hour
+    
+    def _process_shift_data_for_comparison(self, shift: dict, records: List[dict]) -> dict:
+        """Process shift data into hourly buckets for comparison graphs."""
+        shift_start = datetime.fromisoformat(shift['shift_start'])
+        
+        # Normalize shift to standard 11pm start
+        # If shift starts between 9pm-1am, round to 11pm
+        # If shift starts outside this range, just round to nearest hour
+        hour = shift_start.hour
+        if 21 <= hour <= 23 or 0 <= hour <= 1:
+            # Round to 11pm of the appropriate day
+            if hour <= 1:  # After midnight, use previous day's 11pm
+                shift_start_rounded = shift_start.replace(hour=23, minute=0, second=0, microsecond=0) - timedelta(days=1)
+            else:
+                shift_start_rounded = shift_start.replace(hour=23, minute=0, second=0, microsecond=0)
+        else:
+            # For other start times, just round down to nearest hour
+            shift_start_rounded = shift_start.replace(minute=0, second=0, microsecond=0)
+        
+        # Initialize hourly data structures
+        hourly_data = {}
+        
+        for record in records:
+            time_finished = datetime.fromisoformat(record['time_finished'])
+            elapsed_hours = (time_finished - shift_start_rounded).total_seconds() / 3600
+            hour_bucket = int(elapsed_hours)  # 0, 1, 2, etc.
+            
+            if hour_bucket not in hourly_data:
+                hourly_data[hour_bucket] = {
+                    'rvu': 0,
+                    'study_count': 0,
+                    'modalities': {}
+                }
+            
+            hourly_data[hour_bucket]['rvu'] += record.get('rvu', 0)
+            hourly_data[hour_bucket]['study_count'] += 1
+            
+            # Track by modality - extract from study_type
+            study_type = record.get('study_type', 'Unknown')
+            modality = study_type.split()[0] if study_type else "Unknown"
+            # Handle "Multiple XR" -> extract "XR"
+            if modality == "Multiple" and len(study_type.split()) > 1:
+                modality = study_type.split()[1]
+            
+            if modality not in hourly_data[hour_bucket]['modalities']:
+                hourly_data[hour_bucket]['modalities'][modality] = 0
+            hourly_data[hour_bucket]['modalities'][modality] += 1
+        
+        # Calculate cumulative and average data
+        max_hour = max(hourly_data.keys()) if hourly_data else 0
+        cumulative_rvu = []
+        cumulative_studies = []
+        avg_rvu = []
+        avg_studies = []
+        modality_cumulative = {}
+        
+        for hour in range(max_hour + 1):
+            if hour in hourly_data:
+                # Accumulation
+                prev_rvu = cumulative_rvu[-1] if cumulative_rvu else 0
+                prev_studies = cumulative_studies[-1] if cumulative_studies else 0
+                cumulative_rvu.append(prev_rvu + hourly_data[hour]['rvu'])
+                cumulative_studies.append(prev_studies + hourly_data[hour]['study_count'])
+                
+                # Average (per hour up to this point)
+                avg_rvu.append(cumulative_rvu[-1] / (hour + 1))
+                avg_studies.append(cumulative_studies[-1] / (hour + 1))
+                
+                # Modality cumulative
+                for modality, count in hourly_data[hour]['modalities'].items():
+                    if modality not in modality_cumulative:
+                        modality_cumulative[modality] = []
+                    prev_count = modality_cumulative[modality][-1] if modality_cumulative[modality] else 0
+                    modality_cumulative[modality].append(prev_count + count)
+            else:
+                # No studies in this hour, carry forward previous values
+                cumulative_rvu.append(cumulative_rvu[-1] if cumulative_rvu else 0)
+                cumulative_studies.append(cumulative_studies[-1] if cumulative_studies else 0)
+                avg_rvu.append(cumulative_rvu[-1] / (hour + 1) if cumulative_rvu else 0)
+                avg_studies.append(cumulative_studies[-1] / (hour + 1) if cumulative_studies else 0)
+                
+                for modality in modality_cumulative:
+                    modality_cumulative[modality].append(modality_cumulative[modality][-1] if modality_cumulative[modality] else 0)
+        
+        # Calculate average RVU per study for the shift
+        total_rvu = sum(r.get('rvu', 0) for r in records)
+        total_studies = len(records)
+        avg_rvu_per_study = total_rvu / total_studies if total_studies > 0 else 0
+        
+        return {
+            'hourly_data': hourly_data,
+            'cumulative_rvu': cumulative_rvu,
+            'cumulative_studies': cumulative_studies,
+            'avg_rvu': avg_rvu,
+            'avg_studies': avg_studies,
+            'modality_cumulative': modality_cumulative,
+            'avg_rvu_per_study': avg_rvu_per_study,
+            'max_hour': max_hour,
+            'shift_start_rounded': shift_start_rounded
+        }
+    
+    def _plot_rvu_progression(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
+                             shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
+        """Plot RVU accumulation or average progression."""
+        mode = self.comparison_graph_mode.get()
+        
+        if mode == "accumulation":
+            y1 = data1['cumulative_rvu']
+            y2 = data2['cumulative_rvu']
+            ylabel = "Cumulative RVU"
+            title = "RVU Accumulation"
+        else:
+            y1 = data1['avg_rvu']
+            y2 = data2['avg_rvu']
+            ylabel = "Average RVU per Hour"
+            title = "RVU Average per Hour"
+        
+        hours1 = list(range(len(y1)))
+        hours2 = list(range(len(y2)))
+        
+        if use_actual_time:
+            x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
+            x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+        else:
+            x1 = [f"Hour {h}" for h in hours1]
+            x2 = [f"Hour {h}" for h in hours2]
+        
+        ax.plot(range(len(y1)), y1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
+        ax.plot(range(len(y2)), y2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
+        
+        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.set_title(title, fontsize=12, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Set x-axis to start at zero with no left padding
+        max_len = max(len(x1), len(x2))
+        if max_len > 0:
+            ax.set_xlim(0, max_len - 1)
+            ax.margins(x=0.01)
+        
+        # Set x-axis labels (show every other hour for readability)
+        if max_len > 0:
+            step = max(1, max_len // 8)
+            ax.set_xticks(range(0, max_len, step))
+            ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
+                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
+    
+    def _plot_rvu_delta(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
+                       shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
+        """Plot hourly RVU delta from average."""
+        # Calculate average RVU per hour for each shift
+        total_hours1 = data1['max_hour'] + 1 if data1['max_hour'] >= 0 else 1
+        total_hours2 = data2['max_hour'] + 1 if data2['max_hour'] >= 0 else 1
+        total_rvu1 = data1['cumulative_rvu'][-1] if data1['cumulative_rvu'] else 0
+        total_rvu2 = data2['cumulative_rvu'][-1] if data2['cumulative_rvu'] else 0
+        avg_rvu_per_hour1 = total_rvu1 / total_hours1 if total_hours1 > 0 else 0
+        avg_rvu_per_hour2 = total_rvu2 / total_hours2 if total_hours2 > 0 else 0
+        
+        # Calculate hourly RVU (RVU earned in each specific hour)
+        delta1 = []
+        delta2 = []
+        
+        for hour in range(len(data1['cumulative_rvu'])):
+            if hour == 0:
+                hourly_rvu = data1['cumulative_rvu'][0]
+            else:
+                hourly_rvu = data1['cumulative_rvu'][hour] - data1['cumulative_rvu'][hour-1]
+            delta1.append(hourly_rvu - avg_rvu_per_hour1)
+        
+        for hour in range(len(data2['cumulative_rvu'])):
+            if hour == 0:
+                hourly_rvu = data2['cumulative_rvu'][0]
+            else:
+                hourly_rvu = data2['cumulative_rvu'][hour] - data2['cumulative_rvu'][hour-1]
+            delta2.append(hourly_rvu - avg_rvu_per_hour2)
+        
+        hours1 = list(range(len(delta1)))
+        hours2 = list(range(len(delta2)))
+        
+        if use_actual_time:
+            x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
+            x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+        else:
+            x1 = [f"Hour {h}" for h in hours1]
+            x2 = [f"Hour {h}" for h in hours2]
+        
+        ax.plot(range(len(delta1)), delta1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
+        ax.plot(range(len(delta2)), delta2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
+        ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
+        
+        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        ax.set_ylabel("Hourly RVU Delta from Average", fontsize=10)
+        ax.set_title("Hourly RVU Delta", fontsize=12, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Set x-axis to start at zero with no left padding
+        max_len = max(len(x1), len(x2))
+        if max_len > 0:
+            ax.set_xlim(0, max_len - 1)
+            ax.margins(x=0.01)
+        
+        # Set x-axis labels
+        if max_len > 0:
+            step = max(1, max_len // 8)
+            ax.set_xticks(range(0, max_len, step))
+            ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
+                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
+    
+    def _plot_modality_progression(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
+                                   shift2_start: datetime, use_actual_time: bool, modality_filter: str = "all", theme_colors: dict = None):
+        """Plot study accumulation by modality."""
+        mode = self.comparison_graph_mode.get()
+        
+        # Determine which modalities to plot based on filter
+        if modality_filter == "all":
+            # Get all modalities from both shifts, sorted by total count
+            all_modalities = {}
+            for mod_dict in [data1['modality_cumulative'], data2['modality_cumulative']]:
+                for modality, counts in mod_dict.items():
+                    if modality not in all_modalities:
+                        all_modalities[modality] = 0
+                    all_modalities[modality] += max(counts) if counts else 0
+            
+            # Sort by count and plot all modalities (limit to 8 for readability)
+            sorted_modalities = sorted(all_modalities.items(), key=lambda x: x[1], reverse=True)
+            modalities_to_plot = [m[0] for m in sorted_modalities[:8]]
+            title_suffix = " (All)" if len(sorted_modalities) <= 8 else " (Top 8)"
+        else:
+            # Plot only the selected modality
+            modalities_to_plot = [modality_filter]
+            title_suffix = f" ({modality_filter})"
+        
+        if not modalities_to_plot:
+            ax.text(0.5, 0.5, 'No modality data available', ha='center', va='center', transform=ax.transAxes)
+            return
+        
+        # Plot each modality
+        colors_current = ['#4472C4', '#70AD47', '#FFC000', '#E74C3C', '#9B59B6']
+        colors_prior = ['#9966CC', '#C06090', '#FF9966', '#F39C12', '#3498DB']
+        
+        for i, modality in enumerate(modalities_to_plot):
+            color_idx = i % len(colors_current)
+            
+            if modality in data1['modality_cumulative']:
+                y1 = data1['modality_cumulative'][modality]
+                if mode == "average":
+                    y1 = [count / (hour + 1) for hour, count in enumerate(y1)]
+                ax.plot(range(len(y1)), y1, color=colors_current[color_idx], linewidth=1.5, 
+                       marker='o', markersize=4, label=f'{modality} (Shift 1)', alpha=0.8)
+            
+            if modality in data2['modality_cumulative']:
+                y2 = data2['modality_cumulative'][modality]
+                if mode == "average":
+                    y2 = [count / (hour + 1) for hour, count in enumerate(y2)]
+                ax.plot(range(len(y2)), y2, color=colors_prior[color_idx], linewidth=1.5, 
+                       marker='s', markersize=4, label=f'{modality} (Shift 2)', alpha=0.8, linestyle='--')
+        
+        ylabel = "Average Studies per Hour" if mode == "average" else "Cumulative Studies"
+        title = f"Study Count by Modality{title_suffix}"
+        
+        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.set_title(title, fontsize=12, fontweight='bold')
+        ax.legend(fontsize=8, loc='best')
+        grid_color = theme_colors['fg'] if theme_colors else 'gray'
+        ax.grid(True, alpha=0.2, color=grid_color)
+        
+        # Set x-axis to start at zero with no left padding
+        max_len = max(len(data1['cumulative_rvu']), len(data2['cumulative_rvu']))
+        if max_len > 0:
+            ax.set_xlim(0, max_len - 1)
+            ax.margins(x=0.01)
+        
+        # Set x-axis labels
+        if max_len > 0:
+            step = max(1, max_len // 8)
+            ax.set_xticks(range(0, max_len, step))
+            if use_actual_time:
+                labels = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in range(0, max_len, step)]
+            else:
+                labels = [f"Hour {h}" for h in range(0, max_len, step)]
+            ax.set_xticklabels(labels, rotation=45, ha='right', fontsize=8)
+    
+    def _plot_total_studies(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
+                           shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
+        """Plot total study accumulation or average."""
+        mode = self.comparison_graph_mode.get()
+        
+        if mode == "accumulation":
+            y1 = data1['cumulative_studies']
+            y2 = data2['cumulative_studies']
+            ylabel = "Cumulative Studies"
+            title = "Total Study Accumulation"
+        else:
+            y1 = data1['avg_studies']
+            y2 = data2['avg_studies']
+            ylabel = "Average Studies per Hour"
+            title = "Average Study Rate"
+        
+        hours1 = list(range(len(y1)))
+        hours2 = list(range(len(y2)))
+        
+        if use_actual_time:
+            x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
+            x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+        else:
+            x1 = [f"Hour {h}" for h in hours1]
+            x2 = [f"Hour {h}" for h in hours2]
+        
+        ax.plot(range(len(y1)), y1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
+        ax.plot(range(len(y2)), y2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
+        
+        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        ax.set_ylabel(ylabel, fontsize=10)
+        ax.set_title(title, fontsize=12, fontweight='bold')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        
+        # Set x-axis to start at zero with tight margins
+        max_len = max(len(x1), len(x2))
+        ax.set_xlim(0, max_len - 1)
+        ax.margins(x=0.01)
+        
+        # Set x-axis labels
+        if max_len > 0:
+            step = max(1, max_len // 8)
+            ax.set_xticks(range(0, max_len, step))
+            ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
+                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
+    
+    def _create_comparison_table(self, parent: ttk.Frame, shift1: dict, shift2: dict, 
+                                records1: List[dict], records2: List[dict],
+                                shift1_start: datetime, shift2_start: datetime):
+        """Create numerical comparison table below graphs."""
+        # Calculate statistics
+        total_rvu1 = sum(r.get('rvu', 0) for r in records1)
+        total_rvu2 = sum(r.get('rvu', 0) for r in records2)
+        total_studies1 = len(records1)
+        total_studies2 = len(records2)
+        
+        # Calculate compensation (reuse the app's calculation if available)
+        total_comp1 = sum(self._calculate_study_compensation(r) for r in records1)
+        total_comp2 = sum(self._calculate_study_compensation(r) for r in records2)
+        
+        # Count by modality - extract from study_type
+        modality_counts1 = {}
+        modality_counts2 = {}
+        for r in records1:
+            study_type = r.get('study_type', 'Unknown')
+            mod = study_type.split()[0] if study_type else "Unknown"
+            if mod == "Multiple" and len(study_type.split()) > 1:
+                mod = study_type.split()[1]
+            modality_counts1[mod] = modality_counts1.get(mod, 0) + 1
+        for r in records2:
+            study_type = r.get('study_type', 'Unknown')
+            mod = study_type.split()[0] if study_type else "Unknown"
+            if mod == "Multiple" and len(study_type.split()) > 1:
+                mod = study_type.split()[1]
+            modality_counts2[mod] = modality_counts2.get(mod, 0) + 1
+        
+        # Create grid layout
+        headers = ["Metric", "Current Shift", "Prior Shift", "Difference"]
+        for col, header in enumerate(headers):
+            label = ttk.Label(parent, text=header, font=("Arial", 10, "bold"))
+            label.grid(row=0, column=col, padx=10, pady=5, sticky=tk.W)
+        
+        row = 1
+        
+        # Shift dates
+        ttk.Label(parent, text="Date/Time:").grid(row=row, column=0, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=shift1_start.strftime("%a %m/%d %I:%M%p")).grid(row=row, column=1, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=shift2_start.strftime("%a %m/%d %I:%M%p")).grid(row=row, column=2, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text="-").grid(row=row, column=3, padx=10, pady=2, sticky=tk.W)
+        row += 1
+        
+        # Total RVU
+        ttk.Label(parent, text="Total RVU:").grid(row=row, column=0, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"{total_rvu1:.2f}").grid(row=row, column=1, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"{total_rvu2:.2f}").grid(row=row, column=2, padx=10, pady=2, sticky=tk.W)
+        diff_rvu = total_rvu1 - total_rvu2
+        diff_color = "green" if diff_rvu > 0 else "red" if diff_rvu < 0 else "black"
+        ttk.Label(parent, text=f"{diff_rvu:+.2f}", foreground=diff_color).grid(row=row, column=3, padx=10, pady=2, sticky=tk.W)
+        row += 1
+        
+        # Total Compensation
+        ttk.Label(parent, text="Total Compensation:").grid(row=row, column=0, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"${total_comp1:,.2f}").grid(row=row, column=1, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"${total_comp2:,.2f}").grid(row=row, column=2, padx=10, pady=2, sticky=tk.W)
+        diff_comp = total_comp1 - total_comp2
+        diff_color = "green" if diff_comp > 0 else "red" if diff_comp < 0 else "black"
+        ttk.Label(parent, text=f"${diff_comp:+,.2f}", foreground=diff_color).grid(row=row, column=3, padx=10, pady=2, sticky=tk.W)
+        row += 1
+        
+        # Total Studies
+        ttk.Label(parent, text="Total Studies:").grid(row=row, column=0, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"{total_studies1}").grid(row=row, column=1, padx=10, pady=2, sticky=tk.W)
+        ttk.Label(parent, text=f"{total_studies2}").grid(row=row, column=2, padx=10, pady=2, sticky=tk.W)
+        diff_studies = total_studies1 - total_studies2
+        diff_color = "green" if diff_studies > 0 else "red" if diff_studies < 0 else "black"
+        ttk.Label(parent, text=f"{diff_studies:+d}", foreground=diff_color).grid(row=row, column=3, padx=10, pady=2, sticky=tk.W)
+        row += 1
+        
+        # Separator
+        ttk.Separator(parent, orient=tk.HORIZONTAL).grid(row=row, column=0, columnspan=4, sticky=tk.EW, pady=10)
+        row += 1
+        
+        # Studies by Modality header
+        ttk.Label(parent, text="Studies by Modality:", font=("Arial", 10, "bold")).grid(row=row, column=0, padx=10, pady=5, sticky=tk.W, columnspan=4)
+        row += 1
+        
+        # Get all unique modalities
+        all_modalities = sorted(set(list(modality_counts1.keys()) + list(modality_counts2.keys())))
+        
+        for modality in all_modalities:
+            count1 = modality_counts1.get(modality, 0)
+            count2 = modality_counts2.get(modality, 0)
+            diff = count1 - count2
+            
+            ttk.Label(parent, text=f"  {modality}:").grid(row=row, column=0, padx=10, pady=2, sticky=tk.W)
+            ttk.Label(parent, text=f"{count1}").grid(row=row, column=1, padx=10, pady=2, sticky=tk.W)
+            ttk.Label(parent, text=f"{count2}").grid(row=row, column=2, padx=10, pady=2, sticky=tk.W)
+            diff_color = "green" if diff > 0 else "red" if diff < 0 else "black"
+            ttk.Label(parent, text=f"{diff:+d}", foreground=diff_color).grid(row=row, column=3, padx=10, pady=2, sticky=tk.W)
+            row += 1
     
     def backup_study_data(self):
         """Create a backup JSON export of the SQLite database with timestamp."""
