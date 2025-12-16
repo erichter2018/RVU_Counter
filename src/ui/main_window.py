@@ -8,6 +8,11 @@ from typing import Optional, TYPE_CHECKING
 import threading
 import time
 
+try:
+    from pywinauto import Desktop
+except ImportError:
+    Desktop = None  # Will handle this gracefully
+
 from ..core.config import APP_VERSION, DEFAULT_SHIFT_LENGTH_HOURS, DEFAULT_MIN_STUDY_SECONDS
 from ..core.platform_utils import (
     get_all_monitor_bounds,
@@ -24,6 +29,68 @@ if TYPE_CHECKING:
     from .statistics_window import StatisticsWindow
 
 logger = logging.getLogger(__name__)
+
+# Module-level globals for PowerScribe/Mosaic detection
+_cached_desktop = None
+_timeout_thread_count = 0
+
+
+def quick_check_powerscribe() -> bool:
+    """Quick check if PowerScribe window exists (fast, no deep inspection)."""
+    global _cached_desktop
+    
+    if Desktop is None:
+        return False
+    
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
+    
+    # Just check if window with PowerScribe title exists
+    for title in ["PowerScribe 360 | Reporting", "PowerScribe 360", "PowerScribe 360 - Reporting", 
+                  "Nuance PowerScribe 360", "Powerscribe 360"]:
+        try:
+            windows = desktop.windows(title=title, visible_only=True)
+            if windows:
+                return True
+        except Exception as e:
+            logger.debug(f"Error checking PowerScribe window '{title}': {e}")
+            continue
+    return False
+
+
+def quick_check_mosaic() -> bool:
+    """Quick check if Mosaic window exists (fast, no deep inspection)."""
+    global _cached_desktop
+    
+    if Desktop is None:
+        return False
+    
+    if _cached_desktop is None:
+        _cached_desktop = Desktop(backend="uia")
+    desktop = _cached_desktop
+    
+    try:
+        all_windows = desktop.windows(visible_only=True)
+        for window in all_windows:
+            try:
+                # Quick title check without deep inspection
+                title = window.window_text()
+                title_lower = title.lower()
+                # Check for MosaicInfoHub variations and Mosaic Reporting
+                if ("mosaicinfohub" in title_lower or 
+                    "mosaic info hub" in title_lower or 
+                    "mosaic infohub" in title_lower or
+                    ("mosaic" in title_lower and "reporting" in title_lower)):
+                    # Exclude test windows
+                    if not any(x in title_lower for x in ["rvu counter", "test", "viewer", "diagnostic"]):
+                        return True
+            except Exception as e:
+                logger.debug(f"Error checking Mosaic window: {e}")
+                continue
+    except Exception as e:
+        logger.debug(f"Error iterating windows for Mosaic check: {e}")
+    return False
 
 class RVUCounterApp:
     """Main application class."""
@@ -266,7 +333,7 @@ class RVUCounterApp:
         # Update backup status display
         self._update_backup_status_display()
         
-        version_text = f"v{VERSION} ({VERSION_DATE})"
+        version_text = f"v{APP_VERSION}"
         self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
         self.version_label.pack(side=tk.LEFT)
         

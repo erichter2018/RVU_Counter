@@ -1,4 +1,4 @@
-﻿"""Data management layer for RVU Counter - handles settings and data persistence."""
+"""Data management layer for RVU Counter - handles settings and data persistence."""
 
 import os
 import sys
@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-from ..core.platform_utils import get_app_paths
+from ..core.platform_utils import get_app_paths, get_all_monitor_bounds, is_point_on_any_monitor, find_nearest_monitor_for_window
 from ..core.config import (
     SETTINGS_FILE_NAME,
     DATABASE_FILE_NAME,
@@ -18,6 +18,7 @@ from ..core.config import (
     OLD_DATA_FILE_NAME
 )
 from .database import RecordsDatabase
+from .backup_manager import BackupManager
 
 logger = logging.getLogger(__name__)
 
@@ -162,12 +163,12 @@ class RVUData:
         
         # Try local file (when running as script, or if bundled file not found)
         if default_data is None:
-            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.yaml")
-            if os.path.exists(local_settings_file):
+            # Use self.settings_file which already has the correct path from get_app_paths()
+            if os.path.exists(self.settings_file):
                 try:
-                    with open(local_settings_file, 'r', encoding='utf-8') as f:
+                    with open(self.settings_file, 'r', encoding='utf-8') as f:
                         default_data = yaml.safe_load(f)
-                        logger.info(f"Loaded default settings from local file: {local_settings_file}")
+                        logger.info(f"Loaded default settings from local file: {self.settings_file}")
                 except Exception as e:
                     logger.error(f"Error loading local settings file: {e}")
         
@@ -175,9 +176,8 @@ class RVUData:
         if default_data is None:
             error_msg = (
                 f"CRITICAL ERROR: Could not load settings file!\n"
-                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.yaml')}\n"
-                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.yaml')}\n"
-                f"The settings file must be bundled with the app or present in the script directory."
+                f"Expected file: {self.settings_file}\n"
+                f"The settings file must be bundled with the app or present in the root directory."
             )
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)

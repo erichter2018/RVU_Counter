@@ -210,7 +210,7 @@ def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> 
 
 def get_app_paths():
     """Get the correct paths for bundled app vs running as script.
-    
+
     Returns:
         tuple: (settings_dir, data_dir)
         - settings_dir: Where bundled settings file is (read-only in bundle)
@@ -225,8 +225,12 @@ def get_app_paths():
         logger.info(f"Running as frozen app: settings={settings_dir}, data={data_dir}")
     else:
         # Running as script
-        settings_dir = os.path.dirname(os.path.abspath(__file__))
-        data_dir = os.path.dirname(os.path.abspath(__file__))
+        # Go up from src/core/ to the root directory
+        script_dir = os.path.dirname(os.path.abspath(__file__))  # src/core/
+        src_dir = os.path.dirname(script_dir)  # src/
+        root_dir = os.path.dirname(src_dir)  # root/
+        settings_dir = root_dir
+        data_dir = root_dir
         logger.info(f"Running as script: settings={settings_dir}, data={data_dir}")
     return settings_dir, data_dir
 
