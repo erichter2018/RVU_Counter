@@ -10,7 +10,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
-from ..core.platform_utils import get_app_paths, get_all_monitor_bounds, is_point_on_any_monitor, find_nearest_monitor_for_window
+from ..core.platform_utils import (
+    get_app_paths,
+    get_all_monitor_bounds,
+    get_primary_monitor_bounds,
+    is_point_on_any_monitor,
+    find_nearest_monitor_for_window
+)
 from ..core.config import (
     SETTINGS_FILE_NAME,
     DATABASE_FILE_NAME,
