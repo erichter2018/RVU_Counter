@@ -1,3 +1,5 @@
 """Custom widgets for RVU Counter UI."""
 
-# Custom widgets will be extracted in next phase
+from .canvas_table import CanvasTable
+
+__all__ = ['CanvasTable']
