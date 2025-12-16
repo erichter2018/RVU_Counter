@@ -2,17 +2,25 @@
 """
 Fix Database Script for RVU Counter
 
-This script identifies and fixes incorrectly matched RVU records in the database
-by comparing stored study_type and rvu values against current rvu_settings.yaml rules.
+This script identifies and fixes issues in the database:
+1. Finds duplicate accession numbers and allows deletion (keeping oldest)
+   - Only considers records as duplicates if they have:
+     * Same accession number
+     * Same study_type
+     * Are within 24 hours of each other (based on time_performed)
+2. Identifies and fixes incorrectly matched RVU records by comparing stored 
+   study_type and rvu values against current rvu_settings.yaml rules.
 
 Usage:
     python fix_database.py
 
 The script will:
-1. Load rvu_settings.yaml from the current directory
-2. Connect to rvu_records.db in the current directory
-3. Identify records with mismatched study_type or rvu values
-4. Display a summary and ask for confirmation before fixing
+1. Check for duplicate accession numbers (matching accession, study_type, and within 24h)
+   and ask to delete them (keeping oldest)
+2. Load rvu_settings.yaml from the current directory
+3. Connect to rvu_records.db in the current directory
+4. Identify records with mismatched study_type or rvu values
+5. Display a summary and ask for confirmation before fixing
 """
 
 import sqlite3
@@ -20,6 +28,7 @@ import json
 import os
 import sys
 import yaml
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple, Dict, List, Optional
 
@@ -365,6 +374,215 @@ def print_summary(mismatches: List[Dict]) -> bool:
     return False  # Return False to indicate mismatches found
 
 
+def find_duplicate_accessions(db_path: Path) -> Dict[str, List[Dict]]:
+    """Find duplicate accession numbers in the database.
+    
+    Only considers records as duplicates if they:
+    1. Have the same accession number
+    2. Have the same study_type
+    3. Are within 24 hours of each other (based on time_performed)
+    
+    Returns:
+        Dictionary mapping "(accession, study_type)" keys to lists of record dictionaries.
+        Only includes groups that have duplicates within 24 hours.
+    """
+    if not db_path.exists():
+        print(f"ERROR: {db_path} not found!")
+        sys.exit(1)
+    
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get all records with accession numbers and timestamps
+    cursor.execute('''
+        SELECT id, accession, procedure, study_type, rvu, time_performed
+        FROM records
+        WHERE accession IS NOT NULL AND accession != ''
+          AND study_type IS NOT NULL AND study_type != ''
+          AND time_performed IS NOT NULL AND time_performed != ''
+        ORDER BY id
+    ''')
+    
+    records = cursor.fetchall()
+    
+    # Group by (accession, study_type) pairs
+    group_key_to_records = {}
+    for record in records:
+        accession = record['accession']
+        study_type = record['study_type']
+        group_key = (accession, study_type)
+        
+        if group_key not in group_key_to_records:
+            group_key_to_records[group_key] = []
+        
+        # Parse time_performed
+        time_performed_str = record['time_performed']
+        try:
+            # Parse ISO format: "2025-11-29T18:06:31.846498"
+            # Handle timezone indicators if present
+            if time_performed_str.endswith('Z'):
+                time_performed_str = time_performed_str[:-1] + '+00:00'
+            time_performed = datetime.fromisoformat(time_performed_str)
+        except (ValueError, AttributeError, TypeError):
+            # Skip records with invalid timestamps
+            continue
+        
+        group_key_to_records[group_key].append({
+            'id': record['id'],
+            'accession': record['accession'],
+            'procedure': record['procedure'],
+            'study_type': record['study_type'],
+            'rvu': record['rvu'],
+            'time_performed': time_performed,
+            'time_performed_str': time_performed_str
+        })
+    
+    # Filter to groups with multiple records and check 24-hour window
+    duplicates = {}
+    for group_key, records_list in group_key_to_records.items():
+        if len(records_list) < 2:
+            continue
+        
+        # Sort by time_performed
+        records_list.sort(key=lambda r: r['time_performed'])
+        
+        # Check if any records are within 24 hours of each other
+        # Group records into clusters where each cluster contains records within 24 hours
+        clusters = []
+        current_cluster = [records_list[0]]
+        
+        for i in range(1, len(records_list)):
+            prev_time = current_cluster[-1]['time_performed']
+            curr_time = records_list[i]['time_performed']
+            time_diff = curr_time - prev_time
+            
+            if time_diff <= timedelta(hours=24):
+                # Within 24 hours, add to current cluster
+                current_cluster.append(records_list[i])
+            else:
+                # More than 24 hours apart, start new cluster
+                if len(current_cluster) > 1:
+                    clusters.append(current_cluster)
+                current_cluster = [records_list[i]]
+        
+        # Don't forget the last cluster
+        if len(current_cluster) > 1:
+            clusters.append(current_cluster)
+        
+        # If we have any clusters with duplicates, add them
+        for cluster in clusters:
+            if len(cluster) > 1:
+                # Use a unique key for this cluster
+                accession, study_type = group_key
+                cluster_key = f"{accession} ({study_type})"
+                # If key already exists, append a number
+                if cluster_key in duplicates:
+                    counter = 2
+                    while f"{cluster_key} - Cluster {counter}" in duplicates:
+                        counter += 1
+                    cluster_key = f"{cluster_key} - Cluster {counter}"
+                duplicates[cluster_key] = cluster
+    
+    conn.close()
+    return duplicates
+
+
+def print_duplicate_summary(duplicates: Dict[str, List[Dict]]) -> bool:
+    """Print a summary of duplicate accession numbers.
+    
+    Returns:
+        True if no duplicates found, False if duplicates found.
+    """
+    if not duplicates:
+        print("\n✓ No duplicate accession numbers found!")
+        print("   (Duplicates must have same accession, same study type, and be within 24 hours)")
+        return True
+    
+    print(f"\n{'='*80}")
+    print(f"FOUND {len(duplicates)} DUPLICATE ACCESSION GROUPS")
+    print(f"{'='*80}\n")
+    print("Note: Only records with same accession, same study type, and within 24 hours are considered duplicates.")
+    print()
+    
+    total_duplicate_records = sum(len(records) for records in duplicates.values())
+    total_to_delete = total_duplicate_records - len(duplicates)  # One record kept per group
+    
+    print(f"Summary:")
+    print(f"  - Duplicate groups found: {len(duplicates)}")
+    print(f"  - Total records with duplicates: {total_duplicate_records}")
+    print(f"  - Records that would be deleted: {total_to_delete}")
+    print(f"  - Records that would be kept: {len(duplicates)} (oldest for each group)")
+    print()
+    
+    # Show first 20 examples
+    print("Examples (showing first 20 duplicate groups):")
+    print("-" * 80)
+    
+    shown = 0
+    for group_key, records in sorted(duplicates.items()):
+        if shown >= 20:
+            break
+        
+        # Sort by time_performed (oldest first)
+        records_sorted = sorted(records, key=lambda r: r['time_performed'])
+        oldest = records_sorted[0]
+        newer = records_sorted[1:]
+        
+        # Calculate time differences
+        oldest_time = oldest['time_performed']
+        
+        print(f"\n{shown + 1}. {group_key}")
+        print(f"   Total occurrences: {len(records)}")
+        print(f"   KEEP (oldest):")
+        print(f"      ID: {oldest['id']}, Time: {oldest['time_performed_str']}")
+        print(f"      Procedure: {oldest['procedure'][:60] if oldest['procedure'] else 'N/A'}...")
+        print(f"      Study Type: {oldest['study_type']}, RVU: {oldest['rvu']:.2f}")
+        print(f"   DELETE (newer, within 24 hours):")
+        for record in newer:
+            time_diff = record['time_performed'] - oldest_time
+            hours_diff = time_diff.total_seconds() / 3600
+            print(f"      ID: {record['id']}, Time: {record['time_performed_str']} ({hours_diff:.1f} hours later)")
+            print(f"      Procedure: {record['procedure'][:60] if record['procedure'] else 'N/A'}...")
+            print(f"      Study Type: {record['study_type']}, RVU: {record['rvu']:.2f}")
+        
+        shown += 1
+    
+    if len(duplicates) > 20:
+        print(f"\n... and {len(duplicates) - 20} more duplicate groups")
+    
+    print(f"\n{'='*80}")
+    return False
+
+
+def delete_duplicate_accessions(db_path: Path, duplicates: Dict[str, List[Dict]]) -> int:
+    """Delete duplicate accession records, keeping the oldest (by time_performed) for each group.
+    
+    Returns:
+        Number of records deleted.
+    """
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    deleted_count = 0
+    
+    for group_key, records in duplicates.items():
+        # Records are already sorted by time_performed (oldest first) from find_duplicate_accessions
+        # Keep the first (oldest) record, delete the rest
+        oldest = records[0]
+        newer_records = records[1:]
+        
+        # Delete newer records
+        for record in newer_records:
+            cursor.execute('DELETE FROM records WHERE id = ?', (record['id'],))
+            deleted_count += 1
+    
+    conn.commit()
+    conn.close()
+    
+    return deleted_count
+
+
 def fix_database(db_path: Path, mismatches: List[Dict]) -> Tuple[int, float]:
     """Fix mismatched records in the database. 
     
@@ -415,10 +633,42 @@ def main():
     settings_path = work_dir / "rvu_settings.yaml"
     db_path = work_dir / "rvu_records.db"
     
+    # Check for duplicate accessions first
+    print("\n" + "=" * 80)
+    print("STEP 1: Checking for duplicate accession numbers...")
+    print("(Same accession + same study type + within 24 hours)")
+    print("=" * 80)
+    
+    duplicates = find_duplicate_accessions(db_path)
+    no_duplicates = print_duplicate_summary(duplicates)
+    
+    if not no_duplicates:
+        # Ask for confirmation to delete duplicates
+        print("\n" + "=" * 80)
+        response = input("\nDo you want to delete duplicate accessions? (Y/N): ").strip().upper()
+        
+        if response == 'Y':
+            print("\nDeleting duplicate accessions (keeping oldest for each)...")
+            deleted_count = delete_duplicate_accessions(db_path, duplicates)
+            
+            print(f"\n{'='*80}")
+            print(f"DUPLICATE DELETION SUMMARY")
+            print(f"{'='*80}")
+            print(f"Records deleted: {deleted_count}")
+            print(f"Accessions cleaned: {len(duplicates)}")
+            print(f"{'='*80}")
+            print(f"\n✓ Successfully deleted {deleted_count} duplicate records!")
+        else:
+            print("\nNo duplicate records deleted.")
+    
     # Load settings
     settings = load_rvu_settings(settings_path)
     
-    # Analyze database
+    # Analyze database for mismatches
+    print("\n" + "=" * 80)
+    print("STEP 2: Checking for mismatched RVU records...")
+    print("=" * 80)
+    
     mismatches = analyze_database(db_path, settings)
     
     # Print summary

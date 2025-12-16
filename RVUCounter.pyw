@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from pywinauto import Desktop
 import json
+import yaml
 import logging
 import os
 import sys
@@ -1118,7 +1119,7 @@ class RecordsDatabase:
         logger.info(f"Exported database to JSON: {filepath}")
 
 
-# RVU Lookup Table - REMOVED: Now using rvu_settings.json as single source of truth
+# RVU Lookup Table - REMOVED: Now using rvu_settings.yaml as single source of truth
 # All RVU values must come from the loaded JSON file
 
 
@@ -2413,7 +2414,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     Args:
         procedure_text: The procedure text to match
-        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.json)
+        rvu_table: RVU table dictionary (REQUIRED - must be provided from rvu_settings.yaml)
         classification_rules: Classification rules dictionary (optional)
         direct_lookups: Direct lookup dictionary (optional)
     
@@ -2425,7 +2426,7 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
     
     # Require rvu_table - it must be provided from loaded settings
     if rvu_table is None:
-        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.json")
+        logger.error("match_study_type called without rvu_table parameter. RVU table must be loaded from rvu_settings.yaml")
         return "Unknown", 0.0
     
     if classification_rules is None:
@@ -3250,7 +3251,7 @@ class RVUData:
         settings_dir, data_dir = get_app_paths()
         
         # Settings file (RVU tables, rules, rates, user preferences, window positions)
-        self.settings_file = os.path.join(data_dir, "rvu_settings.json")
+        self.settings_file = os.path.join(data_dir, "rvu_settings.yaml")
         # SQLite database for records (replaces rvu_records.json)
         self.db_file = os.path.join(data_dir, "rvu_records.db")
         # Legacy JSON file paths (for migration)
@@ -3374,21 +3375,21 @@ class RVUData:
         # Try bundled file first (when frozen)
         if self.is_frozen:
             try:
-                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.json")
+                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.yaml")
                 if os.path.exists(bundled_settings_file):
-                    with open(bundled_settings_file, 'r') as f:
-                        default_data = json.load(f)
+                    with open(bundled_settings_file, 'r', encoding='utf-8') as f:
+                        default_data = yaml.safe_load(f)
                         logger.info(f"Loaded bundled settings from {bundled_settings_file}")
             except Exception as e:
                 logger.error(f"Error loading bundled settings file: {e}")
         
         # Try local file (when running as script, or if bundled file not found)
         if default_data is None:
-            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.json")
+            local_settings_file = os.path.join(os.path.dirname(__file__), "rvu_settings.yaml")
             if os.path.exists(local_settings_file):
                 try:
-                    with open(local_settings_file, 'r') as f:
-                        default_data = json.load(f)
+                    with open(local_settings_file, 'r', encoding='utf-8') as f:
+                        default_data = yaml.safe_load(f)
                         logger.info(f"Loaded default settings from local file: {local_settings_file}")
                 except Exception as e:
                     logger.error(f"Error loading local settings file: {e}")
@@ -3397,8 +3398,8 @@ class RVUData:
         if default_data is None:
             error_msg = (
                 f"CRITICAL ERROR: Could not load settings file!\n"
-                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.json')}\n"
-                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.json')}\n"
+                f"Expected bundled file: {os.path.join(sys._MEIPASS if self.is_frozen else os.path.dirname(__file__), 'rvu_settings.yaml')}\n"
+                f"Or local file: {os.path.join(os.path.dirname(__file__), 'rvu_settings.yaml')}\n"
                 f"The settings file must be bundled with the app or present in the script directory."
             )
             logger.error(error_msg)
@@ -3408,8 +3409,8 @@ class RVUData:
         user_data = None
         if os.path.exists(self.settings_file):
             try:
-                with open(self.settings_file, 'r') as f:
-                    user_data = json.load(f)
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    user_data = yaml.safe_load(f)
                     logger.info(f"Loaded user settings from {self.settings_file}")
             except Exception as e:
                 logger.error(f"Error loading user settings file: {e}")
@@ -3419,8 +3420,8 @@ class RVUData:
             logger.info("No existing user settings found, using defaults")
             # Save the default settings for future use
             try:
-                with open(self.settings_file, 'w') as f:
-                    json.dump(default_data, f, indent=2, default=str)
+                with open(self.settings_file, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(default_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
                 logger.info(f"Created new settings file at {self.settings_file}")
             except Exception as e:
                 logger.error(f"Error saving default settings: {e}")
@@ -3477,7 +3478,7 @@ class RVUData:
             # Only use defaults from JSON file if user has NO rvu_table at all
             merged_data["rvu_table"] = default_data.get("rvu_table", {})
             if merged_data["rvu_table"]:
-                logger.info("No user RVU table found, using defaults from rvu_settings.json")
+                logger.info("No user RVU table found, using defaults from rvu_settings.yaml")
             else:
                 logger.warning("No RVU table found in user or default settings file!")
         
@@ -3507,8 +3508,8 @@ class RVUData:
         
         # Save merged settings back to file
         try:
-            with open(self.settings_file, 'w') as f:
-                json.dump(merged_data, f, indent=2, default=str)
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(merged_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
             logger.info(f"Saved merged settings to {self.settings_file}")
         except Exception as e:
             logger.error(f"Error saving merged settings: {e}")
@@ -3629,12 +3630,17 @@ class RVUData:
                 
                 # Migrate settings to settings file
                 if not os.path.exists(self.settings_file):
-                    # Load default rvu_table from JSON if available
+                    # Load default rvu_table from YAML (or JSON for backwards compatibility) if available
                     default_rvu_table = {}
                     try:
                         if os.path.exists(self.settings_file):
-                            with open(self.settings_file, 'r') as default_f:
-                                default_data = json.load(default_f)
+                            with open(self.settings_file, 'r', encoding='utf-8') as default_f:
+                                # Try YAML first, then JSON for backwards compatibility
+                                try:
+                                    default_data = yaml.safe_load(default_f)
+                                except:
+                                    default_f.seek(0)
+                                    default_data = json.load(default_f)
                                 default_rvu_table = default_data.get("rvu_table", {})
                     except:
                         pass
@@ -3648,8 +3654,8 @@ class RVUData:
                             "settings": {"x": 200, "y": 200}
                         })
                     }
-                    with open(self.settings_file, 'w') as f:
-                        json.dump(settings_data, f, indent=2)
+                    with open(self.settings_file, 'w', encoding='utf-8') as f:
+                        yaml.safe_dump(settings_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
                     logger.info(f"Migrated settings to {self.settings_file}")
                     self.settings_data = settings_data
                 
@@ -3719,8 +3725,8 @@ class RVUData:
                 "window_positions": self.settings_data.get("window_positions", {}),
                 "backup": self.settings_data.get("backup", {})
             }
-            with open(self.settings_file, 'w') as f:
-                json.dump(settings_to_save, f, indent=2, default=str)
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(settings_to_save, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
             logger.info(f"Saved settings to {self.settings_file}")
         except Exception as e:
             logger.error(f"Error saving settings: {e}")

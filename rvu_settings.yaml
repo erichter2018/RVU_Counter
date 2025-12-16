@@ -25,11 +25,13 @@ settings:
   pace_goal_rvu_per_hour: 15.0
   pace_goal_shift_hours: 9.0
   pace_goal_total_rvu: 135.0
-  pace_comparison_mode: week_2
+  pace_comparison_mode: prior
   efficiency_study_count_mode: average
 direct_lookups: {}
 rvu_table:
   MRI Brain: 2.3
+  MRI Brain with MRA and MRV: 4.6
+  MRI Brain with MRA: 6.9
   MRI Spine: 1.75
   MRI Spine Cervical: 1.75
   MRI Spine Thoracic: 1.75
@@ -60,6 +62,8 @@ rvu_table:
   NM Other: 1.0
   PET CT: 3.6
   Ultrasound transvaginal complete: 1.38
+  US Doppler Lower Extremity: 1.2
+  US Doppler Upper Extremity: 1.2
   US Arterial Lower Extremity: 1.2
   US Arterial Upper Extremity: 1.2
   US Venous Lower Extremity: 0.68
@@ -101,6 +105,10 @@ rvu_table:
   XR MSK: 0.3
   XR MSK Bilateral: 0.6
 classification_rules:
+  PET CT:
+  - required_keywords: [PET, CT]
+  - required_keywords: [PT, CT]
+  - required_keywords: [PT/CT]
   CTA Brain and Neck:
   - required_keywords: [CTA, brain, neck]
     excluded_keywords: [perfusion]
@@ -134,6 +142,10 @@ classification_rules:
     excluded_keywords: [neck]
   - required_keywords: [CT, head, perfusion]
     any_of_keywords: [CTA, contrast, angio, angiography]
+    excluded_keywords: [neck]
+  - required_keywords: [CTA, head, perfusion]
+    excluded_keywords: [neck]
+  - required_keywords: [CT, brain, perfusion, CTA, head]
     excluded_keywords: [neck]
   CTA Brain:
   - required_keywords: [CTA, brain]
@@ -189,6 +201,8 @@ classification_rules:
   CT AP:
   - required_keywords: [CT, abd, pel]
     excluded_keywords: [chest, XR, xr, x-ray, angio, angiography]
+  - required_keywords: [CT, abdomen]
+    excluded_keywords: [chest, XR, xr, x-ray, angio, angiography]
   - required_keywords: [CT, stone]
     excluded_keywords: [XR, xr, x-ray]
   CT Neck Chest:
@@ -236,11 +250,28 @@ classification_rules:
   - required_keywords: [CT]
     any_of_keywords: [facial, face, orbit, maxil, sinus, internal auditory canal, iac]
     excluded_keywords: [XR, xr, x-ray]
+  MRI Brain with MRA:
+  - required_keywords: [MR, head, mra]
+    excluded_keywords: [mrv, venography]
+  - required_keywords: [MRI, head, mra]
+    excluded_keywords: [mrv, venography]
+  - required_keywords: [MR, head]
+    any_of_keywords: [mra, angiography]
+    excluded_keywords: [mrv, venography]
+  MRI Brain with MRA and MRV:
+  - required_keywords: [MR, brain]
+    any_of_keywords: [angiography, venography, mrv]
+  - required_keywords: [MRI, brain]
+    any_of_keywords: [angiography, venography, mrv]
   MRI Brain:
   - required_keywords: [MRI, brain]
+    excluded_keywords: [angiography, venography, mra, mrv]
   - required_keywords: [MRI, head]
+    excluded_keywords: [angiography, venography, mra, mrv]
   - required_keywords: [MR, brain]
+    excluded_keywords: [angiography, venography, mra, mrv]
   - required_keywords: [MR, head]
+    excluded_keywords: [angiography, venography, mra, mrv]
   MRI Spine Complete:
   - required_keywords: [MRI, spine, complete]
   - required_keywords: [MRI, full, spine]
@@ -308,6 +339,8 @@ classification_rules:
   MRI Cardiac:
   - required_keywords: [MRI, cardiac]
   - required_keywords: [MRI, heart]
+  - required_keywords: [MR, cardiac]
+  - required_keywords: [MR, heart]
   MRI Breast:
   - required_keywords: [MRI, breast]
   - required_keywords: [MR, breast]
@@ -316,6 +349,13 @@ classification_rules:
     excluded_keywords: [brain, head]
   - required_keywords: [MR, neck]
     excluded_keywords: [brain, head]
+  US Doppler Lower Extremity:
+  - required_keywords: [US, lower, extremity, doppler]
+  - required_keywords: [ultrasound, lower, extremity, doppler]
+  US Doppler Upper Extremity:
+  - required_keywords: [US, upper, extremity, doppler]
+  - required_keywords: [ultrasound, upper, extremity, doppler]
+  - required_keywords: [US, upper, extremity, arteries]
   US Arterial Lower Extremity:
   - required_keywords: [US, art, low, ext]
   US Arterial Upper Extremity:
@@ -334,10 +374,15 @@ classification_rules:
   - required_keywords: [US, OB]
     any_of_keywords: [transvaginal, limited]
   - required_keywords: [US, pregnancy, transvaginal]
+  - required_keywords: [US, less, than, 14, weeks, pregnancy, transvaginal]
+  - required_keywords: [US, pelvis, complete, transvaginal]
+  - required_keywords: [US, pelvis, transabdominal, transvaginal]
   US Abdomen Pelvis:
   - required_keywords: [US, abdomen, pelvis]
     excluded_keywords: [transvaginal]
   - required_keywords: [ultrasound, abdomen, pelvis]
+    excluded_keywords: [transvaginal]
+  - required_keywords: [US, abdomen, pelvis, doppler]
     excluded_keywords: [transvaginal]
   US Abdomen:
   - required_keywords: [US]
@@ -424,8 +469,8 @@ compensation_rates:
       3pm: 34, 4pm: 36, 5pm: 36, 6pm: 36, 7pm: 36, 8pm: 38, 9pm: 39, 10pm: 41, 11pm: 42}
 window_positions:
   main:
-    x: 6588
-    y: -10
+    x: 6592
+    y: 1
     width: 258
     height: 612
   settings:
