@@ -1312,13 +1312,17 @@ class StatisticsWindow:
                     '_comparison_scrollable_frame',
                     '_comparison_mousewheel_canvas',
                     '_comparison_mousewheel_frame',
-                    '_comparison_mousewheel_callback'
+                    '_comparison_mousewheel_callback',
+                    '_comparison_controls_frame',
+                    '_comparison_content_frame',
+                    '_comparison_modality_frame'
                 ]
                 
                 for attr in cleanup_attrs:
                     if hasattr(self, attr):
                         try:
-                            delattr(self, attr)
+                            # Set to None so it gets recreated when switching back
+                            setattr(self, attr, None)
                         except:
                             pass
         
@@ -5088,24 +5092,103 @@ class StatisticsWindow:
             logger.error(f"Error handling comparison shift selection: {e}")
     
     def _update_comparison_graphs(self, changed_element: str):
-        """Update comparison graphs with scroll position preservation.
+        """Update comparison graphs WITHOUT full UI redraw.
         
-        Simple approach: save scroll position, do full redraw, restore position.
+        Only redraws the matplotlib figures, preserving scroll position and UI state.
         """
         try:
-            # Get current scroll position if available
+            # Check if we have the necessary data and widgets
+            if not hasattr(self, '_comparison_data1') or not hasattr(self, '_comparison_data2'):
+                # No cached data, need full redraw
+                self._display_comparison()
+                return
+            
+            if not hasattr(self, '_comparison_canvas_widgets') or not self._comparison_canvas_widgets:
+                # No figure widgets, need full redraw
+                self._display_comparison()
+                return
+            
+            # Get current scroll position
             canvas = getattr(self, '_comparison_scroll_canvas', None)
             scroll_pos = canvas.yview()[0] if canvas else 0
             
-            # Do full redraw (simpler and more reliable than incremental)
-            self._display_comparison()
+            # Get theme colors
+            theme_colors = self.app.get_theme_colors()
+            is_dark = theme_colors['bg'] == '#2b2b2b'
             
-            # Restore scroll position after a brief delay to ensure widgets are rendered
+            # Get the cached data
+            data1 = self._comparison_data1
+            data2 = self._comparison_data2
+            
+            # Get shift start times
+            shift1_start_rounded = data1['shift_start_rounded']
+            shift2_start_rounded = data2['shift_start_rounded']
+            use_actual_time = shift1_start_rounded.hour == shift2_start_rounded.hour
+            
+            # Update figures in-place based on what changed
+            if changed_element in ['mode', 'all']:
+                # Update RVU graphs (first figure - has 2 subplots)
+                if len(self._comparison_canvas_widgets) >= 1:
+                    fig1 = self._comparison_canvas_widgets[0].figure
+                    ax1, ax2 = fig1.axes[0], fig1.axes[1]
+                    
+                    # Clear and redraw axes
+                    ax1.clear()
+                    ax2.clear()
+                    
+                    # Re-apply dark mode colors
+                    for ax in [ax1, ax2]:
+                        ax.set_facecolor(theme_colors['bg'])
+                        ax.tick_params(colors=theme_colors['fg'])
+                        ax.xaxis.label.set_color(theme_colors['fg'])
+                        ax.yaxis.label.set_color(theme_colors['fg'])
+                        ax.title.set_color(theme_colors['fg'])
+                        for spine in ax.spines.values():
+                            spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+                    
+                    # Redraw plots
+                    self._plot_rvu_progression(ax1, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                    self._plot_rvu_delta(ax2, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                    
+                    fig1.tight_layout(pad=2.5)
+                    self._comparison_canvas_widgets[0].draw()
+            
+            if changed_element in ['modality', 'all']:
+                # Update study count graph (second figure)
+                if len(self._comparison_canvas_widgets) >= 2:
+                    fig2 = self._comparison_canvas_widgets[1].figure
+                    ax3 = fig2.axes[0]
+                    
+                    # Clear and redraw
+                    ax3.clear()
+                    
+                    # Re-apply dark mode colors
+                    ax3.set_facecolor(theme_colors['bg'])
+                    ax3.tick_params(colors=theme_colors['fg'])
+                    ax3.xaxis.label.set_color(theme_colors['fg'])
+                    ax3.yaxis.label.set_color(theme_colors['fg'])
+                    ax3.title.set_color(theme_colors['fg'])
+                    for spine in ax3.spines.values():
+                        spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+                    
+                    # Get selected modality
+                    selected_modality = self.comparison_modality_filter.get()
+                    
+                    if selected_modality == "all":
+                        self._plot_total_studies(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                    else:
+                        self._plot_modality_progression(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, selected_modality, theme_colors)
+                    
+                    fig2.tight_layout(pad=2.5)
+                    self._comparison_canvas_widgets[1].draw()
+            
+            # Restore scroll position immediately (widgets already exist)
             if canvas:
-                self.window.after(10, lambda: self._restore_scroll_position(scroll_pos))
+                canvas.yview_moveto(scroll_pos)
                 
         except Exception as e:
-            logger.error(f"Error updating comparison graphs: {e}")
+            logger.error(f"Error updating comparison graphs incrementally: {e}")
+            # Fallback to full redraw
             self._display_comparison()
     
     def _restore_scroll_position(self, position):
@@ -5165,13 +5248,52 @@ class StatisticsWindow:
         records1 = self._expand_multi_accession_records(records1)
         records2 = self._expand_multi_accession_records(records2)
         
-        # Clear existing content
-        for widget in self.table_frame.winfo_children():
-            widget.destroy()
+        # Initialize modality selection if not exists
+        if not hasattr(self, 'comparison_modality_filter'):
+            self.comparison_modality_filter = tk.StringVar(value="all")
         
-        # Create scrollable frame for content
-        canvas = tk.Canvas(self.table_frame, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.table_frame, orient="vertical", command=canvas.yview)
+        # Create persistent control frame OUTSIDE scrollable area (only once)
+        if not hasattr(self, '_comparison_controls_frame') or self._comparison_controls_frame is None:
+            # Clear existing content first
+            for widget in self.table_frame.winfo_children():
+                widget.destroy()
+            
+            # Create control frame at top (fixed, not scrollable)
+            controls_frame = ttk.Frame(self.table_frame)
+            controls_frame.pack(fill=tk.X, padx=10, pady=(5, 5))
+            self._comparison_controls_frame = controls_frame
+            
+            # Graph Mode controls
+            mode_frame = ttk.Frame(controls_frame)
+            mode_frame.pack(fill=tk.X, pady=(0, 5))
+            ttk.Label(mode_frame, text="Graph Mode:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+            ttk.Radiobutton(mode_frame, text="Accumulation", variable=self.comparison_graph_mode,
+                           value="accumulation", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+            ttk.Radiobutton(mode_frame, text="Average", variable=self.comparison_graph_mode,
+                           value="average", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+            
+            # Modality Filter controls (will be populated below)
+            modality_frame = ttk.Frame(controls_frame)
+            modality_frame.pack(fill=tk.X)
+            ttk.Label(modality_frame, text="Modality Filter:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+            self._comparison_modality_frame = modality_frame
+            
+            # Create scrollable content area below controls
+            content_frame = ttk.Frame(self.table_frame)
+            content_frame.pack(fill=tk.BOTH, expand=True)
+            self._comparison_content_frame = content_frame
+        else:
+            # Controls exist, just clear the content area
+            if hasattr(self, '_comparison_content_frame') and self._comparison_content_frame:
+                for widget in self._comparison_content_frame.winfo_children():
+                    widget.destroy()
+        
+        # Get the content frame for scrollable area
+        content_frame = self._comparison_content_frame
+        
+        # Create scrollable frame for graphs
+        canvas = tk.Canvas(content_frame, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
         # Store references for incremental updates
@@ -5204,10 +5326,6 @@ class StatisticsWindow:
         self._comparison_mousewheel_canvas = canvas
         self._comparison_mousewheel_frame = scrollable_frame
         self._comparison_mousewheel_callback = on_mousewheel
-        
-        # Initialize modality selection if not exists
-        if not hasattr(self, 'comparison_modality_filter'):
-            self.comparison_modality_filter = tk.StringVar(value="all")
         
         # Get theme colors for dark mode support
         theme_colors = self.app.get_theme_colors()
@@ -5256,16 +5374,31 @@ class StatisticsWindow:
         # Store canvas widgets for cleanup
         canvas_widgets = []
         
-        # === FIRST FIGURE: RVU Graphs (Graph 1 & 2) ===
-        # Control panel above first two graphs
-        toggle_frame1 = ttk.Frame(scrollable_frame)
-        toggle_frame1.pack(fill=tk.X, padx=10, pady=(5, 2))
-        ttk.Label(toggle_frame1, text="Graph Mode:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
-        ttk.Radiobutton(toggle_frame1, text="Accumulation", variable=self.comparison_graph_mode,
-                       value="accumulation", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
-        ttk.Radiobutton(toggle_frame1, text="Average", variable=self.comparison_graph_mode,
-                       value="average", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+        # Update modality filter radiobuttons in the persistent frame
+        # (Graph Mode controls are already in the persistent frame)
+        if hasattr(self, '_comparison_modality_frame'):
+            modality_frame = self._comparison_modality_frame
+            # Clear old modality radiobuttons (except the label)
+            for widget in modality_frame.winfo_children():
+                if not isinstance(widget, ttk.Label):
+                    widget.destroy()
+            
+            # Get all unique modalities from both shifts
+            all_modalities_set = set()
+            for mod_dict in [data1['modality_cumulative'], data2['modality_cumulative']]:
+                all_modalities_set.update(mod_dict.keys())
+            all_modalities = sorted(list(all_modalities_set))
+            
+            # Add "All" option
+            ttk.Radiobutton(modality_frame, text="All", variable=self.comparison_modality_filter,
+                           value="all", command=lambda: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
+            
+            # Add individual modality options (limit to 6 for space)
+            for modality in all_modalities[:6]:
+                ttk.Radiobutton(modality_frame, text=modality, variable=self.comparison_modality_filter,
+                               value=modality, command=lambda m=modality: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
         
+        # === FIRST FIGURE: RVU Graphs (Graph 1 & 2) ===
         # Create first figure with 2 subplots
         fig1 = Figure(figsize=(fig_width, 8), dpi=100)
         fig1.patch.set_facecolor(theme_colors['bg'])
@@ -5298,26 +5431,6 @@ class StatisticsWindow:
         canvas_widgets.append(canvas_widget1)
         
         # === SECOND FIGURE: Study Count Graph (Graph 3) ===
-        # Control panel above third graph
-        toggle_frame2 = ttk.Frame(scrollable_frame)
-        toggle_frame2.pack(fill=tk.X, padx=10, pady=(5, 2))
-        ttk.Label(toggle_frame2, text="Modality Filter:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
-        
-        # Get all unique modalities from both shifts
-        all_modalities_set = set()
-        for mod_dict in [data1['modality_cumulative'], data2['modality_cumulative']]:
-            all_modalities_set.update(mod_dict.keys())
-        all_modalities = sorted(list(all_modalities_set))
-        
-        # "All" option
-        ttk.Radiobutton(toggle_frame2, text="All", variable=self.comparison_modality_filter,
-                       value="all", command=lambda: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
-        
-        # Individual modality options (limit to 6 for space)
-        for modality in all_modalities[:6]:
-            ttk.Radiobutton(toggle_frame2, text=modality, variable=self.comparison_modality_filter,
-                           value=modality, command=lambda m=modality: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
-        
         # Create second figure with 1 subplot
         fig2 = Figure(figsize=(fig_width, 4), dpi=100)
         fig2.patch.set_facecolor(theme_colors['bg'])
