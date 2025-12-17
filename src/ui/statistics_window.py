@@ -5094,23 +5094,36 @@ class StatisticsWindow:
     def _update_comparison_graphs(self, changed_element: str):
         """Update comparison graphs WITHOUT full UI redraw.
         
-        Only redraws the matplotlib figures, preserving scroll position and UI state.
+        Only redraws the matplotlib figure contents, preserving scroll position and all UI state.
+        This should NEVER call _display_comparison() - if widgets don't exist, do nothing.
         """
+        # Verify we have valid widgets - if not, do nothing (don't trigger redraw)
+        if not hasattr(self, '_comparison_canvas_widgets') or not self._comparison_canvas_widgets:
+            logger.debug("_update_comparison_graphs: No canvas widgets, skipping")
+            return
+        
+        if not hasattr(self, '_comparison_data1') or not hasattr(self, '_comparison_data2'):
+            logger.debug("_update_comparison_graphs: No cached data, skipping")
+            return
+        
+        # Verify widgets are still valid (not destroyed)
         try:
-            # Check if we have the necessary data and widgets
-            if not hasattr(self, '_comparison_data1') or not hasattr(self, '_comparison_data2'):
-                # No cached data, need full redraw
-                self._display_comparison()
-                return
-            
-            if not hasattr(self, '_comparison_canvas_widgets') or not self._comparison_canvas_widgets:
-                # No figure widgets, need full redraw
-                self._display_comparison()
-                return
-            
-            # Get current scroll position
+            # Quick validity check - try to access the widget
+            test_widget = self._comparison_canvas_widgets[0].get_tk_widget()
+            test_widget.winfo_exists()
+        except Exception:
+            logger.debug("_update_comparison_graphs: Canvas widgets destroyed, skipping")
+            return
+        
+        try:
+            # Get current scroll position BEFORE any updates
             canvas = getattr(self, '_comparison_scroll_canvas', None)
-            scroll_pos = canvas.yview()[0] if canvas else 0
+            scroll_pos = 0
+            if canvas:
+                try:
+                    scroll_pos = canvas.yview()[0]
+                except:
+                    pass
             
             # Get theme colors
             theme_colors = self.app.get_theme_colors()
@@ -5129,67 +5142,73 @@ class StatisticsWindow:
             if changed_element in ['mode', 'all']:
                 # Update RVU graphs (first figure - has 2 subplots)
                 if len(self._comparison_canvas_widgets) >= 1:
-                    fig1 = self._comparison_canvas_widgets[0].figure
-                    ax1, ax2 = fig1.axes[0], fig1.axes[1]
+                    canvas_widget = self._comparison_canvas_widgets[0]
+                    fig1 = canvas_widget.figure
                     
-                    # Clear and redraw axes
-                    ax1.clear()
-                    ax2.clear()
-                    
-                    # Re-apply dark mode colors
-                    for ax in [ax1, ax2]:
-                        ax.set_facecolor(theme_colors['bg'])
-                        ax.tick_params(colors=theme_colors['fg'])
-                        ax.xaxis.label.set_color(theme_colors['fg'])
-                        ax.yaxis.label.set_color(theme_colors['fg'])
-                        ax.title.set_color(theme_colors['fg'])
-                        for spine in ax.spines.values():
-                            spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
-                    
-                    # Redraw plots
-                    self._plot_rvu_progression(ax1, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
-                    self._plot_rvu_delta(ax2, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
-                    
-                    fig1.tight_layout(pad=2.5)
-                    self._comparison_canvas_widgets[0].draw()
+                    if len(fig1.axes) >= 2:
+                        ax1, ax2 = fig1.axes[0], fig1.axes[1]
+                        
+                        # Clear and redraw axes
+                        ax1.clear()
+                        ax2.clear()
+                        
+                        # Re-apply dark mode colors
+                        for ax in [ax1, ax2]:
+                            ax.set_facecolor(theme_colors['bg'])
+                            ax.tick_params(colors=theme_colors['fg'])
+                            ax.xaxis.label.set_color(theme_colors['fg'])
+                            ax.yaxis.label.set_color(theme_colors['fg'])
+                            ax.title.set_color(theme_colors['fg'])
+                            for spine in ax.spines.values():
+                                spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+                        
+                        # Redraw plots
+                        self._plot_rvu_progression(ax1, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                        self._plot_rvu_delta(ax2, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                        
+                        fig1.tight_layout(pad=2.5)
+                        canvas_widget.draw_idle()  # Use draw_idle for better performance
             
             if changed_element in ['modality', 'all']:
                 # Update study count graph (second figure)
                 if len(self._comparison_canvas_widgets) >= 2:
-                    fig2 = self._comparison_canvas_widgets[1].figure
-                    ax3 = fig2.axes[0]
+                    canvas_widget = self._comparison_canvas_widgets[1]
+                    fig2 = canvas_widget.figure
                     
-                    # Clear and redraw
-                    ax3.clear()
-                    
-                    # Re-apply dark mode colors
-                    ax3.set_facecolor(theme_colors['bg'])
-                    ax3.tick_params(colors=theme_colors['fg'])
-                    ax3.xaxis.label.set_color(theme_colors['fg'])
-                    ax3.yaxis.label.set_color(theme_colors['fg'])
-                    ax3.title.set_color(theme_colors['fg'])
-                    for spine in ax3.spines.values():
-                        spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
-                    
-                    # Get selected modality
-                    selected_modality = self.comparison_modality_filter.get()
-                    
-                    if selected_modality == "all":
-                        self._plot_total_studies(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
-                    else:
-                        self._plot_modality_progression(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, selected_modality, theme_colors)
-                    
-                    fig2.tight_layout(pad=2.5)
-                    self._comparison_canvas_widgets[1].draw()
+                    if len(fig2.axes) >= 1:
+                        ax3 = fig2.axes[0]
+                        
+                        # Clear and redraw
+                        ax3.clear()
+                        
+                        # Re-apply dark mode colors
+                        ax3.set_facecolor(theme_colors['bg'])
+                        ax3.tick_params(colors=theme_colors['fg'])
+                        ax3.xaxis.label.set_color(theme_colors['fg'])
+                        ax3.yaxis.label.set_color(theme_colors['fg'])
+                        ax3.title.set_color(theme_colors['fg'])
+                        for spine in ax3.spines.values():
+                            spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+                        
+                        # Get selected modality
+                        selected_modality = self.comparison_modality_filter.get()
+                        
+                        if selected_modality == "all":
+                            self._plot_total_studies(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                        else:
+                            self._plot_modality_progression(ax3, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, selected_modality, theme_colors)
+                        
+                        fig2.tight_layout(pad=2.5)
+                        canvas_widget.draw_idle()  # Use draw_idle for better performance
             
-            # Restore scroll position immediately (widgets already exist)
-            if canvas:
-                canvas.yview_moveto(scroll_pos)
+            # Restore scroll position
+            if canvas and scroll_pos > 0:
+                # Use after_idle to ensure scroll happens after drawing
+                self.window.after_idle(lambda: canvas.yview_moveto(scroll_pos))
                 
         except Exception as e:
-            logger.error(f"Error updating comparison graphs incrementally: {e}")
-            # Fallback to full redraw
-            self._display_comparison()
+            logger.error(f"Error updating comparison graphs: {e}", exc_info=True)
+            # Do NOT call _display_comparison here - just log the error
     
     def _restore_scroll_position(self, position):
         """Restore scroll position after redraw."""
@@ -6388,12 +6407,27 @@ class StatisticsWindow:
         
         # Configure ttk styles for Entry and Spinbox widgets
         style.configure("TEntry", fieldbackground=entry_bg, foreground=entry_fg, bordercolor=border_color)
-        style.configure("TSpinbox", fieldbackground=entry_bg, foreground=entry_fg, bordercolor=border_color, 
+        style.configure("TSpinbox", fieldbackground=entry_bg, foreground=entry_fg, bordercolor=border_color,
                        background=entry_bg, arrowcolor=fg_color)
         style.configure("TLabel", background=bg_color, foreground=fg_color)
         style.configure("TFrame", background=bg_color)
         style.configure("TLabelframe", background=bg_color, bordercolor=border_color)
         style.configure("TLabelframe.Label", background=bg_color, foreground=fg_color)
+        
+        # Configure Combobox styling for dark mode visibility
+        style.configure("TCombobox", 
+                       fieldbackground=entry_bg, 
+                       foreground=entry_fg,
+                       background=entry_bg,
+                       selectbackground="#0078d7" if dark_mode else "SystemHighlight",
+                       selectforeground="white" if dark_mode else "SystemHighlightText",
+                       bordercolor=border_color,
+                       arrowcolor=fg_color)
+        style.map("TCombobox",
+                 fieldbackground=[('readonly', entry_bg), ('disabled', bg_color)],
+                 foreground=[('readonly', entry_fg), ('disabled', '#888888')],
+                 selectbackground=[('readonly', '#0078d7' if dark_mode else 'SystemHighlight')],
+                 selectforeground=[('readonly', 'white' if dark_mode else 'SystemHighlightText')])
     
     def detect_partial_shifts(self, typical_start_hour: int = None) -> List[List[dict]]:
         """
