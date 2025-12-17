@@ -104,6 +104,7 @@ class StatisticsWindow:
         self.comparison_shift1_index = None  # Index in shifts list for first shift (current/newer)
         self.comparison_shift2_index = None  # Index in shifts list for second shift (prior/older)
         self.comparison_graph_mode = tk.StringVar(value="accumulation")  # accumulation or average
+        self.comparison_delta_mode = tk.StringVar(value="rvu")  # rvu or percent
         
         # Track previous period to show/hide custom date frame
         self.previous_period = "current_shift"
@@ -5139,9 +5140,10 @@ class StatisticsWindow:
             use_actual_time = shift1_start_rounded.hour == shift2_start_rounded.hour
             
             # Update figures in-place based on what changed
-            if changed_element in ['mode', 'all']:
+            if changed_element in ['mode', 'delta', 'all']:
                 # Update RVU graphs (first figure - has 2 subplots)
-                if len(self._comparison_canvas_widgets) >= 1:
+                # Mode changes Graph 1, delta changes Graph 2
+                if len(self._comparison_canvas_widgets) >= 1 and changed_element in ['mode', 'all']:
                     canvas_widget = self._comparison_canvas_widgets[0]
                     fig1 = canvas_widget.figure
                     
@@ -5168,6 +5170,32 @@ class StatisticsWindow:
                         
                         fig1.tight_layout(pad=2.5)
                         canvas_widget.draw_idle()  # Use draw_idle for better performance
+                
+                # Handle delta mode changes (only Graph 2 / ax2)
+                if len(self._comparison_canvas_widgets) >= 1 and changed_element == 'delta':
+                    canvas_widget = self._comparison_canvas_widgets[0]
+                    fig1 = canvas_widget.figure
+                    
+                    if len(fig1.axes) >= 2:
+                        ax2 = fig1.axes[1]
+                        
+                        # Clear and redraw only ax2
+                        ax2.clear()
+                        
+                        # Re-apply dark mode colors
+                        ax2.set_facecolor(theme_colors['bg'])
+                        ax2.tick_params(colors=theme_colors['fg'])
+                        ax2.xaxis.label.set_color(theme_colors['fg'])
+                        ax2.yaxis.label.set_color(theme_colors['fg'])
+                        ax2.title.set_color(theme_colors['fg'])
+                        for spine in ax2.spines.values():
+                            spine.set_edgecolor(theme_colors['fg'] if is_dark else '#cccccc')
+                        
+                        # Redraw only delta plot
+                        self._plot_rvu_delta(ax2, data1, data2, shift1_start_rounded, shift2_start_rounded, use_actual_time, theme_colors)
+                        
+                        fig1.tight_layout(pad=2.5)
+                        canvas_widget.draw_idle()
             
             if changed_element in ['modality', 'all']:
                 # Update study count graph (second figure)
@@ -5282,20 +5310,27 @@ class StatisticsWindow:
             controls_frame.pack(fill=tk.X, padx=10, pady=(5, 5))
             self._comparison_controls_frame = controls_frame
             
-            # Graph Mode controls
-            mode_frame = ttk.Frame(controls_frame)
-            mode_frame.pack(fill=tk.X, pady=(0, 5))
-            ttk.Label(mode_frame, text="Graph Mode:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
-            ttk.Radiobutton(mode_frame, text="Accumulation", variable=self.comparison_graph_mode,
-                           value="accumulation", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
-            ttk.Radiobutton(mode_frame, text="Average", variable=self.comparison_graph_mode,
-                           value="average", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=5)
+            # All graph controls on one line
+            all_controls_frame = ttk.Frame(controls_frame)
+            all_controls_frame.pack(fill=tk.X)
             
-            # Modality Filter controls (will be populated below)
-            modality_frame = ttk.Frame(controls_frame)
-            modality_frame.pack(fill=tk.X)
-            ttk.Label(modality_frame, text="Modality Filter:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
-            self._comparison_modality_frame = modality_frame
+            # Graph 1 controls
+            ttk.Label(all_controls_frame, text="Graph 1:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+            ttk.Radiobutton(all_controls_frame, text="Accumulation", variable=self.comparison_graph_mode,
+                           value="accumulation", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=2)
+            ttk.Radiobutton(all_controls_frame, text="Average", variable=self.comparison_graph_mode,
+                           value="average", command=lambda: self._update_comparison_graphs('mode')).pack(side=tk.LEFT, padx=(2, 15))
+            
+            # Graph 2 controls
+            ttk.Label(all_controls_frame, text="Graph 2:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+            ttk.Radiobutton(all_controls_frame, text="RVU Delta", variable=self.comparison_delta_mode,
+                           value="rvu", command=lambda: self._update_comparison_graphs('delta')).pack(side=tk.LEFT, padx=2)
+            ttk.Radiobutton(all_controls_frame, text="Percent Delta", variable=self.comparison_delta_mode,
+                           value="percent", command=lambda: self._update_comparison_graphs('delta')).pack(side=tk.LEFT, padx=(2, 15))
+            
+            # Graph 3 controls (modality filter - will be populated dynamically below)
+            ttk.Label(all_controls_frame, text="Graph 3:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(0, 5))
+            self._comparison_modality_frame = all_controls_frame  # Store reference for dynamic population
             
             # Create scrollable content area below controls
             content_frame = ttk.Frame(self.table_frame)
@@ -5372,21 +5407,15 @@ class StatisticsWindow:
         # Determine if shifts have matching times (compare rounded hours)
         use_actual_time = shift1_start_rounded.hour == shift2_start_rounded.hour
         
-        # Align time ranges: ignore stragglers and use common max hour
-        # For typical night shifts (11pm-8am = 9 hours), cap at 9 hours
-        # Otherwise, use min of both max_hours to ignore stragglers
-        ideal_max_hour = 9  # 11pm to 8am
+        # Align time ranges: extend shorter shift to match longer shift
+        # This shows the full comparison without cutting off the longer shift
         max_hour1 = data1['max_hour']
         max_hour2 = data2['max_hour']
         
-        # If both shifts are close to ideal length, use ideal; otherwise use minimum to avoid stragglers
-        if max_hour1 >= ideal_max_hour - 1 and max_hour2 >= ideal_max_hour - 1:
-            common_max_hour = ideal_max_hour
-        else:
-            # Use minimum + 1 to allow some flexibility but cut stragglers
-            common_max_hour = min(max_hour1, max_hour2) + 1
+        # Use the maximum of both shifts (extend shorter one to match longer one)
+        common_max_hour = max(max_hour1, max_hour2)
         
-        # Pad/trim data to common length
+        # Pad shorter shift to match longer shift length
         self._align_shift_data(data1, common_max_hour)
         self._align_shift_data(data2, common_max_hour)
         
@@ -5394,13 +5423,22 @@ class StatisticsWindow:
         canvas_widgets = []
         
         # Update modality filter radiobuttons in the persistent frame
-        # (Graph Mode controls are already in the persistent frame)
+        # Only destroy modality radiobuttons (after "Graph 3:" label)
         if hasattr(self, '_comparison_modality_frame'):
             modality_frame = self._comparison_modality_frame
-            # Clear old modality radiobuttons (except the label)
+            
+            # Clear old modality radiobuttons only (identify by checking their text values)
+            # We need to find widgets after the "Graph 3:" label and destroy them
+            found_graph3_label = False
+            widgets_to_destroy = []
             for widget in modality_frame.winfo_children():
-                if not isinstance(widget, ttk.Label):
-                    widget.destroy()
+                if isinstance(widget, ttk.Label) and "Graph 3:" in str(widget.cget("text")):
+                    found_graph3_label = True
+                elif found_graph3_label and isinstance(widget, ttk.Radiobutton):
+                    widgets_to_destroy.append(widget)
+            
+            for widget in widgets_to_destroy:
+                widget.destroy()
             
             # Get all unique modalities from both shifts
             all_modalities_set = set()
@@ -5418,9 +5456,10 @@ class StatisticsWindow:
                                value=modality, command=lambda m=modality: self._update_comparison_graphs('modality')).pack(side=tk.LEFT, padx=2)
         
         # === FIRST FIGURE: RVU Graphs (Graph 1 & 2) ===
-        # Create first figure with 2 subplots
+        # Create first figure with 2 subplots - consistent spacing
         fig1 = Figure(figsize=(fig_width, 8), dpi=100)
         fig1.patch.set_facecolor(theme_colors['bg'])
+        fig1.subplots_adjust(hspace=0.35)  # Consistent vertical spacing between subplots
         
         ax1 = fig1.add_subplot(2, 1, 1)  # RVU accumulation
         ax2 = fig1.add_subplot(2, 1, 2)  # Delta from average RVU
@@ -5699,9 +5738,12 @@ class StatisticsWindow:
             ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
                                for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
     
-    def _plot_rvu_delta(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
+    def _plot_rvu_delta(self, ax, data1: dict, data2: dict, shift1_start: datetime,
                        shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
-        """Plot hourly RVU delta from average."""
+        """Plot hourly RVU delta from average (absolute or percent)."""
+        # Get delta mode
+        delta_mode = self.comparison_delta_mode.get() if hasattr(self, 'comparison_delta_mode') else 'rvu'
+        
         # Calculate average RVU per hour for each shift
         total_hours1 = data1['max_hour'] + 1 if data1['max_hour'] >= 0 else 1
         total_hours2 = data2['max_hour'] + 1 if data2['max_hour'] >= 0 else 1
@@ -5709,56 +5751,74 @@ class StatisticsWindow:
         total_rvu2 = data2['cumulative_rvu'][-1] if data2['cumulative_rvu'] else 0
         avg_rvu_per_hour1 = total_rvu1 / total_hours1 if total_hours1 > 0 else 0
         avg_rvu_per_hour2 = total_rvu2 / total_hours2 if total_hours2 > 0 else 0
-        
+
         # Calculate hourly RVU (RVU earned in each specific hour)
         delta1 = []
         delta2 = []
-        
+
         for hour in range(len(data1['cumulative_rvu'])):
             if hour == 0:
                 hourly_rvu = data1['cumulative_rvu'][0]
             else:
                 hourly_rvu = data1['cumulative_rvu'][hour] - data1['cumulative_rvu'][hour-1]
-            delta1.append(hourly_rvu - avg_rvu_per_hour1)
-        
+            
+            if delta_mode == 'percent':
+                # Convert to percentage of average
+                delta_val = ((hourly_rvu - avg_rvu_per_hour1) / avg_rvu_per_hour1 * 100) if avg_rvu_per_hour1 > 0 else 0
+            else:
+                delta_val = hourly_rvu - avg_rvu_per_hour1
+            delta1.append(delta_val)
+
         for hour in range(len(data2['cumulative_rvu'])):
             if hour == 0:
                 hourly_rvu = data2['cumulative_rvu'][0]
             else:
                 hourly_rvu = data2['cumulative_rvu'][hour] - data2['cumulative_rvu'][hour-1]
-            delta2.append(hourly_rvu - avg_rvu_per_hour2)
-        
+            
+            if delta_mode == 'percent':
+                # Convert to percentage of average
+                delta_val = ((hourly_rvu - avg_rvu_per_hour2) / avg_rvu_per_hour2 * 100) if avg_rvu_per_hour2 > 0 else 0
+            else:
+                delta_val = hourly_rvu - avg_rvu_per_hour2
+            delta2.append(delta_val)
+
         hours1 = list(range(len(delta1)))
         hours2 = list(range(len(delta2)))
-        
+
         if use_actual_time:
             x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
             x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
         else:
             x1 = [f"Hour {h}" for h in hours1]
             x2 = [f"Hour {h}" for h in hours2]
-        
+
         ax.plot(range(len(delta1)), delta1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
         ax.plot(range(len(delta2)), delta2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
         ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
-        
+
         ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
-        ax.set_ylabel("Hourly RVU Delta from Average", fontsize=10)
-        ax.set_title("Hourly RVU Delta", fontsize=12, fontweight='bold')
+        
+        if delta_mode == 'percent':
+            ax.set_ylabel("Percent Delta from Average (%)", fontsize=10)
+            ax.set_title("Hourly RVU Percent Delta", fontsize=12, fontweight='bold')
+        else:
+            ax.set_ylabel("Hourly RVU Delta from Average", fontsize=10)
+            ax.set_title("Hourly RVU Delta", fontsize=12, fontweight='bold')
+        
         ax.legend()
         ax.grid(True, alpha=0.3)
-        
+
         # Set x-axis to start at zero with no left padding
         max_len = max(len(x1), len(x2))
         if max_len > 0:
             ax.set_xlim(0, max_len - 1)
             ax.margins(x=0.01)
-        
+
         # Set x-axis labels
         if max_len > 0:
             step = max(1, max_len // 8)
             ax.set_xticks(range(0, max_len, step))
-            ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
+            ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else ""
                                for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
     
     def _plot_modality_progression(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
