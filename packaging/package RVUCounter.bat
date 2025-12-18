@@ -21,13 +21,22 @@ if not exist "..\RVUCounter.pyw" (
     exit /b 1
 )
 
+REM Check if src folder exists in parent directory
+if not exist "..\src" (
+    echo ERROR: src folder not found in parent directory!
+    echo Please ensure the refactored src/ directory is present.
+    pause
+    exit /b 1
+)
+
 REM Run PyInstaller from parent directory, outputting to packaging folder
 echo Building executable...
-echo Bundling rvu_settings.yaml from parent directory...
+echo Bundling rvu_settings.yaml and src/ folder from parent directory...
 set PARENT_DIR=%~dp0..
 pushd "%PARENT_DIR%"
 set ABS_YAML=%CD%\rvu_settings.yaml
-pyinstaller --onefile --windowed --add-data "%ABS_YAML%;." --name "RVU Counter" --distpath "packaging\dist" --workpath "packaging\build" --specpath "packaging" --clean RVUCounter.pyw
+set ABS_SRC=%CD%\src
+pyinstaller --onefile --windowed --add-data "%ABS_YAML%;." --add-data "%ABS_SRC%;src" --name "RVU Counter" --distpath "packaging\dist" --workpath "packaging\build" --specpath "packaging" --clean --hidden-import=src --hidden-import=src.main --hidden-import=src.ui --hidden-import=src.data --hidden-import=src.logic --hidden-import=src.core RVUCounter.pyw
 popd
 
 if %ERRORLEVEL% NEQ 0 (

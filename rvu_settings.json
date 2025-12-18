@@ -26,7 +26,7 @@
     "pace_goal_rvu_per_hour": 15.0,
     "pace_goal_shift_hours": 9.0,
     "pace_goal_total_rvu": 135.0,
-    "pace_comparison_mode": "week_2",
+    "pace_comparison_mode": "custom",
     "efficiency_study_count_mode": "average"
   },
   "direct_lookups": {},
@@ -1674,29 +1674,33 @@
   },
   "window_positions": {
     "main": {
-      "x": 6606,
-      "y": -10,
-      "width": 240,
-      "height": 612
+      "x": 4985,
+      "y": 3,
+      "width": 278,
+      "height": 614
     },
     "settings": {
       "x": 5254,
       "y": -310
     },
     "statistics": {
-      "x": 5203,
-      "y": -274
+      "x": 5305,
+      "y": -289
     },
     "backup_history": {
       "x": 5762,
       "y": 2
+    },
+    "custom_shift_selector": {
+      "x": 6279,
+      "y": 187
     }
   },
   "backup": {
     "cloud_backup_enabled": true,
     "backup_schedule": "shift_end",
     "backup_retention_count": 10,
-    "last_backup_time": "2025-12-10T21:37:28.752532",
+    "last_backup_time": "2025-12-16T08:00:56.217960",
     "last_backup_status": "success",
     "last_backup_error": null,
     "onedrive_path": "C:\\Users\\erik.richter\\OneDrive - Radiology Partners Inc",

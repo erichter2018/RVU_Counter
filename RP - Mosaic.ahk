@@ -24,6 +24,15 @@ NoS := 0
 #if
 Return
 
+; --- InteleViewer Ctrl+F to Get Prior ---
+#IfWinActive ahk_exe InteleViewer.exe 
+^f::
+Send ^+r
+Sleep, 250
+Gosub, GetPrior
+Return
+#if
+
 ; =============================================================================
 ; GET PRIOR - Extract and format prior study information from Mosaic
 ; Triggered by: Alt+Shift+F3
@@ -44,7 +53,6 @@ ClipWait, 0.5, 1
 if (Clipboard = "")
 {
     Clipboard := ClipboardBackup  ; Restore clipboard
-    MsgBox, No text selected. Please select a prior study row and try again.
     Return
 }
 
@@ -312,6 +320,9 @@ if InStr(PriorOriginal, ModalitySearch)
     
     PriorDescript := StrReplace(PriorDescript, " SIGNXED", "")
     
+    ; Remove " - " patterns (space-dash-space, but preserve dashes in words like "c-spine")
+    PriorDescript := RegExReplace(PriorDescript, "i)\s+-\s+", " ", , 1)
+    
     ; Expand abbreviations
     PriorDescript := StrReplace(PriorDescript, " + ", " and ")
     PriorDescript := StrReplace(PriorDescript, "+", " and ")
@@ -379,7 +390,11 @@ if InStr(PriorOriginal, ModalitySearch)
     }
     else if InStr(PriorDescript1, " without")
     {
-        PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " CT $1")
+        ; Only add "contrast" if it's not already present
+        if !InStr(PriorDescript1, " contrast")
+            PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)(\s|$)", " CT $1 contrast$2")
+        else
+            PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+(without)", " CT $1")
         ModifierFound := true
     }
     else if InStr(PriorDescript1, " with")
@@ -460,6 +475,9 @@ if (PriorDate != "" and PriorTimeFormatted != "")
 ; Filter out "No Prior Report" phrase if it appears in the description
 PriorDescript1 := RegExReplace(PriorDescript1, "i)\s*no prior report\.?\s*", " ", , 1)
 
+; Remove any remaining " - " patterns (space-dash-space)
+PriorDescript1 := RegExReplace(PriorDescript1, "i)\s+-\s+", " ", , 1)
+
 ; Build the final comparison text
 if (IncludeTime)
     FinalText := " COMPARISON: " . PriorDate . " " . PriorTimeFormatted . " " . PriorDescript1 . ". " . PriorReport . PriorImages
@@ -519,6 +537,9 @@ Return
 
 ; --- Process Radiograph Descriptions ---
 ProcessRadiograph:
+    ; Remove "rad - " pattern
+    PriorDescript := RegExReplace(PriorDescript, "i)\s*rad\s*-\s*", " ", , 1)
+    
     ; Expand abbreviations
     PriorDescript := StrReplace(PriorDescript, " vw", " view(s)")
     PriorDescript := StrReplace(PriorDescript, " 2v", " PA and lateral")
