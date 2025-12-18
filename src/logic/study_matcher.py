@@ -169,6 +169,14 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
                 pet_ct_match = (study_type, rvu)
             continue  # Skip adding to matches - will handle separately at the very end
         
+        # Special handling for "CTA Brain with Perfusion" - don't match via partial matching
+        # unless it has CTA/angio indicators (classification rules should handle it if it does)
+        if study_lower == "cta brain with perfusion":
+            # Only match if it has CTA/angio indicators (otherwise classification rules would have matched it)
+            has_cta_indicator = ("cta" in procedure_lower or "angio" in procedure_lower or "angiography" in procedure_lower)
+            if not has_cta_indicator:
+                continue  # Skip partial matching for this study type if no CTA indicators
+        
         if study_lower in procedure_lower or procedure_lower in study_lower:
             # Score by length (longer = more specific)
             score = len(study_type)

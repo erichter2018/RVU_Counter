@@ -3,6 +3,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional, TYPE_CHECKING
 import threading
@@ -22,6 +23,21 @@ from ..core.platform_utils import (
 )
 from ..data import RVUData
 from ..logic import StudyTracker
+from ..logic.study_matcher import match_study_type
+
+# Import extraction utilities
+from ..utils.window_extraction import (
+    _window_text_with_timeout,
+    find_elements_by_automation_id
+)
+from ..utils.powerscribe_extraction import find_powerscribe_window
+from ..utils.mosaic_extraction import (
+    find_mosaic_window,
+    find_mosaic_webview_element,
+    extract_mosaic_data_v2,
+    extract_mosaic_data
+)
+from ..utils.clario_extraction import extract_clario_patient_class
 
 # Lazy imports to avoid circular dependencies
 if TYPE_CHECKING:
@@ -33,6 +49,24 @@ logger = logging.getLogger(__name__)
 # Module-level globals for PowerScribe/Mosaic detection
 _cached_desktop = None
 _timeout_thread_count = 0
+
+
+def _extract_accession_number(entry: str) -> str:
+    """Extract pure accession number from entry string.
+    
+    Handles formats like "ACC1234 (CT HEAD)" -> "ACC1234" or just "ACC1234" -> "ACC1234".
+    Used by multi-accession tracking logic.
+    
+    Args:
+        entry: Raw listbox entry or accession string
+        
+    Returns:
+        Stripped accession number
+    """
+    if '(' in entry and ')' in entry:
+        m = re.match(r'^([^(]+)', entry)
+        return m.group(1).strip() if m else entry.strip()
+    return entry.strip()
 
 
 def quick_check_powerscribe() -> bool:

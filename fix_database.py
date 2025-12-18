@@ -32,6 +32,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Tuple, Dict, List, Optional
 
+# Try to import the refactored match_study_type function
+try:
+    # Add src directory to path if running from project root
+    if Path(__file__).parent.exists():
+        sys.path.insert(0, str(Path(__file__).parent))
+    from src.logic.study_matcher import match_study_type as refactored_match_study_type
+    USE_REFACTORED = True
+except ImportError:
+    # Fallback to local copy if import fails
+    USE_REFACTORED = False
+    print("WARNING: Could not import refactored match_study_type, using local copy")
+
 
 def load_rvu_settings(settings_path: Path) -> Dict:
     """Load RVU settings from YAML file.
@@ -257,8 +269,12 @@ def check_record(record: tuple, rvu_table: dict, classification_rules: dict, dir
     if not procedure:
         return None  # Skip records without procedures
     
-    # Recalculate using current rules
-    new_study_type, new_rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+    # Recalculate using current rules - use refactored version if available
+    # This should purely follow the rvu_settings rules without any special handling
+    if USE_REFACTORED:
+        new_study_type, new_rvu = refactored_match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
+    else:
+        new_study_type, new_rvu = match_study_type(procedure, rvu_table, classification_rules, direct_lookups)
     
     # Check for mismatch (accounting for floating point precision)
     mismatch = False

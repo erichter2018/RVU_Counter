@@ -5399,6 +5399,9 @@ class StatisticsWindow:
         # Store for incremental graph updates
         self._comparison_data1 = data1
         self._comparison_data2 = data2
+        # Store records for minute-by-minute accumulation graph
+        self._comparison_records1 = records1
+        self._comparison_records2 = records2
         
         # Get rounded shift start times for x-axis display
         shift1_start_rounded = data1['shift_start_rounded']
@@ -5690,53 +5693,230 @@ class StatisticsWindow:
             'shift_start_rounded': shift_start_rounded
         }
     
+    def _smooth_hourly_data(self, y_values: List[float], num_points: int = None) -> tuple:
+        """Interpolate hourly data to create smoother curves.
+        
+        Args:
+            y_values: List of hourly values
+            num_points: Number of interpolated points per hour (default: 10 for smooth curve)
+        
+        Returns:
+            Tuple of (x_indices, smoothed_y_values)
+        """
+        if not y_values or len(y_values) < 2:
+            return list(range(len(y_values))), y_values
+        
+        if num_points is None:
+            # Create 10 points per hour for smooth interpolation
+            num_points = 10
+        
+        # Original x indices (hourly)
+        x_original = np.array(range(len(y_values)))
+        y_original = np.array(y_values)
+        
+        # Create finer x grid (more points between hours)
+        x_smooth = np.linspace(0, len(y_values) - 1, len(y_values) * num_points)
+        
+        # Use cubic interpolation for smooth curves
+        # For cubic, we need at least 4 points, so use linear if we have fewer
+        if len(y_values) >= 4:
+            # Use numpy's interpolation with cubic spline approximation
+            # Create a simple cubic interpolation using numpy
+            y_smooth = np.interp(x_smooth, x_original, y_original)
+            
+            # Apply a simple smoothing filter (moving average) for extra smoothness
+            window_size = min(5, len(y_smooth) // 10)
+            if window_size > 1:
+                # Simple moving average
+                kernel = np.ones(window_size) / window_size
+                y_smooth = np.convolve(y_smooth, kernel, mode='same')
+        else:
+            # For fewer points, just use linear interpolation
+            y_smooth = np.interp(x_smooth, x_original, y_original)
+        
+        return x_smooth.tolist(), y_smooth.tolist()
+    
     def _plot_rvu_progression(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
                              shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
         """Plot RVU accumulation or average progression."""
         mode = self.comparison_graph_mode.get()
         
         if mode == "accumulation":
-            y1 = data1['cumulative_rvu']
-            y2 = data2['cumulative_rvu']
+            # For accumulation mode, use minute-by-minute granularity
+            # Get records for minute-by-minute calculation
+            records1 = getattr(self, '_comparison_records1', [])
+            records2 = getattr(self, '_comparison_records2', [])
+            
+            # Calculate minute-by-minute cumulative RVU
+            def calculate_minute_by_minute(records, shift_start_rounded):
+                """Calculate cumulative RVU at each minute."""
+                if not records:
+                    return [], []
+                
+                # Sort records by time_finished
+                sorted_records = sorted(records, key=lambda r: datetime.fromisoformat(r.get('time_finished', '')))
+                
+                # Find the time range
+                first_time = datetime.fromisoformat(sorted_records[0]['time_finished'])
+                last_time = datetime.fromisoformat(sorted_records[-1]['time_finished'])
+                
+                # Calculate total minutes in shift (ensure at least 1 minute)
+                total_minutes = max(1, int((last_time - shift_start_rounded).total_seconds() / 60) + 1)
+                
+                # Initialize minute buckets with cumulative RVU
+                minute_rvu = {}  # minute_index -> RVU added at that minute
+                
+                for record in sorted_records:
+                    try:
+                        time_finished = datetime.fromisoformat(record['time_finished'])
+                        elapsed_minutes = int((time_finished - shift_start_rounded).total_seconds() / 60)
+                        # Ensure non-negative minute index
+                        if elapsed_minutes < 0:
+                            elapsed_minutes = 0
+                        rvu = record.get('rvu', 0)
+                        
+                        if elapsed_minutes not in minute_rvu:
+                            minute_rvu[elapsed_minutes] = 0
+                        minute_rvu[elapsed_minutes] += rvu
+                    except (ValueError, KeyError):
+                        continue  # Skip invalid records
+                
+                # Build cumulative array - one entry per minute
+                cumulative_data = []
+                time_labels = []
+                current_rvu = 0
+                
+                for minute in range(total_minutes):
+                    if minute in minute_rvu:
+                        current_rvu += minute_rvu[minute]
+                    cumulative_data.append(current_rvu)
+                    
+                    # Create time label
+                    time_at_minute = shift_start_rounded + timedelta(minutes=minute)
+                    time_labels.append(time_at_minute.strftime("%H:%M"))
+                
+                return cumulative_data, time_labels
+            
+            y1, x1_labels = calculate_minute_by_minute(records1, shift1_start)
+            y2, x2_labels = calculate_minute_by_minute(records2, shift2_start)
+            
+            # Handle empty data case
+            if not y1 and not y2:
+                # Fallback to hourly data if no records
+                y1 = data1['cumulative_rvu']
+                y2 = data2['cumulative_rvu']
+                hours1 = list(range(len(y1)))
+                hours2 = list(range(len(y2)))
+                x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
+                x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+            else:
+                # Use the longer of the two for x-axis
+                max_len = max(len(y1), len(y2)) if (y1 and y2) else (len(y1) if y1 else len(y2))
+                
+                # Extend shorter series to match longer one (carry forward last value)
+                if len(y1) < max_len:
+                    last_val = y1[-1] if y1 else 0
+                    y1.extend([last_val] * (max_len - len(y1)))
+                    last_label = x1_labels[-1] if x1_labels else shift1_start.strftime("%H:%M")
+                    # Generate time labels for extended portion
+                    for i in range(len(x1_labels), max_len):
+                        time_at_minute = shift1_start + timedelta(minutes=i)
+                        x1_labels.append(time_at_minute.strftime("%H:%M"))
+                
+                if len(y2) < max_len:
+                    last_val = y2[-1] if y2 else 0
+                    y2.extend([last_val] * (max_len - len(y2)))
+                    last_label = x2_labels[-1] if x2_labels else shift2_start.strftime("%H:%M")
+                    # Generate time labels for extended portion
+                    for i in range(len(x2_labels), max_len):
+                        time_at_minute = shift2_start + timedelta(minutes=i)
+                        x2_labels.append(time_at_minute.strftime("%H:%M"))
+                
+                x1 = x1_labels
+                x2 = x2_labels
+            
             ylabel = "Cumulative RVU"
             title = "RVU Accumulation"
         else:
+            # For average mode, use hourly data with smoothing
             y1 = data1['avg_rvu']
             y2 = data2['avg_rvu']
             ylabel = "Average RVU per Hour"
             title = "RVU Average per Hour"
+            
+            # Smooth the hourly data
+            x1_smooth, y1_smooth = self._smooth_hourly_data(y1)
+            x2_smooth, y2_smooth = self._smooth_hourly_data(y2)
+            
+            hours1 = list(range(len(y1)))
+            hours2 = list(range(len(y2)))
+            
+            if use_actual_time:
+                x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
+                x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+            else:
+                x1 = [f"Hour {h}" for h in hours1]
+                x2 = [f"Hour {h}" for h in hours2]
         
-        hours1 = list(range(len(y1)))
-        hours2 = list(range(len(y2)))
-        
-        if use_actual_time:
-            x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
-            x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
+        # Plot with appropriate style based on mode
+        if mode == "accumulation":
+            # Minute-by-minute: use smooth line without markers (too many points)
+            ax.plot(range(len(y1)), y1, color='#4472C4', linewidth=2, label='Shift 1')
+            ax.plot(range(len(y2)), y2, color='#9966CC', linewidth=2, label='Shift 2')
         else:
-            x1 = [f"Hour {h}" for h in hours1]
-            x2 = [f"Hour {h}" for h in hours2]
+            # Hourly: use smoothed line without markers for smooth appearance
+            ax.plot(x1_smooth, y1_smooth, color='#4472C4', linewidth=2, label='Shift 1')
+            ax.plot(x2_smooth, y2_smooth, color='#9966CC', linewidth=2, label='Shift 2')
         
-        ax.plot(range(len(y1)), y1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
-        ax.plot(range(len(y2)), y2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
-        
-        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        if mode == "accumulation":
+            ax.set_xlabel("Time", fontsize=10)
+        else:
+            ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
         ax.set_title(title, fontsize=12, fontweight='bold')
         ax.legend()
         ax.grid(True, alpha=0.3)
         
         # Set x-axis to start at zero with no left padding
-        max_len = max(len(x1), len(x2))
+        # For smoothed data, use original hourly length for x-axis limits
+        if mode == "accumulation":
+            max_len = max(len(x1), len(x2))
+        else:
+            # For smoothed hourly data, use original hourly count
+            max_len = max(len(y1), len(y2)) if mode == "average" else max(len(x1), len(x2))
+        
         if max_len > 0:
             ax.set_xlim(0, max_len - 1)
             ax.margins(x=0.01)
         
-        # Set x-axis labels (show every other hour for readability)
+        # Set x-axis labels - for minute-by-minute, show every 30 minutes or every hour
         if max_len > 0:
-            step = max(1, max_len // 8)
-            ax.set_xticks(range(0, max_len, step))
+            if mode == "accumulation":
+                # For minute-by-minute: show labels every 30-60 minutes depending on shift length
+                # Aim for ~10-15 labels total for readability
+                if max_len <= 120:  # 2 hours or less: show every 15 minutes
+                    step = 15
+                elif max_len <= 480:  # 8 hours or less: show every 30 minutes
+                    step = 30
+                elif max_len <= 720:  # 12 hours or less: show every 60 minutes
+                    step = 60
+                else:  # Very long shift: show every 2 hours
+                    step = 120
+            else:
+                # For hourly: show every other hour (use original hourly indices)
+                step = max(1, max_len // 8)
+            
+            # Calculate tick positions
+            if mode == "accumulation":
+                tick_positions = list(range(0, max_len, step))
+            else:
+                # For hourly: ensure we don't go beyond max_len - 1 (the last hour bucket start)
+                tick_positions = list(range(0, max_len, step))
+                tick_positions = [p for p in tick_positions if p < max_len]
+            
+            ax.set_xticks(tick_positions)
             ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else "" 
-                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
+                               for i in tick_positions], rotation=45, ha='right', fontsize=8)
     
     def _plot_rvu_delta(self, ax, data1: dict, data2: dict, shift1_start: datetime,
                        shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
@@ -5786,14 +5966,19 @@ class StatisticsWindow:
         hours2 = list(range(len(delta2)))
 
         if use_actual_time:
+            # Time labels represent the START of each hour bucket (e.g., hour 7 = 7am for 7am-8am bucket)
             x1 = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in hours1]
             x2 = [(shift2_start + timedelta(hours=h)).strftime("%H:%M") for h in hours2]
         else:
             x1 = [f"Hour {h}" for h in hours1]
             x2 = [f"Hour {h}" for h in hours2]
 
-        ax.plot(range(len(delta1)), delta1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
-        ax.plot(range(len(delta2)), delta2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
+        # Smooth the hourly delta data
+        x1_smooth, delta1_smooth = self._smooth_hourly_data(delta1)
+        x2_smooth, delta2_smooth = self._smooth_hourly_data(delta2)
+
+        ax.plot(x1_smooth, delta1_smooth, color='#4472C4', linewidth=2, label='Shift 1')
+        ax.plot(x2_smooth, delta2_smooth, color='#9966CC', linewidth=2, label='Shift 2')
         ax.axhline(y=0, color='gray', linestyle='--', alpha=0.5)
 
         ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
@@ -5808,23 +5993,33 @@ class StatisticsWindow:
         ax.legend()
         ax.grid(True, alpha=0.3)
 
-        # Set x-axis to start at zero with no left padding
-        max_len = max(len(x1), len(x2))
+        # Set x-axis to end at the START of the last hour bucket
+        # If we have 8 hours (0-7), the last bucket is 7am-8am, so end at position 7 (7am)
+        max_len = max(len(delta1), len(delta2))
         if max_len > 0:
+            # End at max_len - 1 (the start of the last hour bucket)
             ax.set_xlim(0, max_len - 1)
             ax.margins(x=0.01)
 
-        # Set x-axis labels
+        # Set x-axis labels (use original hourly indices)
         if max_len > 0:
             step = max(1, max_len // 8)
-            ax.set_xticks(range(0, max_len, step))
+            # Only show labels up to max_len - 1 (the last hour bucket start)
+            tick_positions = list(range(0, max_len, step))
+            # Ensure we don't go beyond max_len - 1
+            tick_positions = [p for p in tick_positions if p < max_len]
+            ax.set_xticks(tick_positions)
             ax.set_xticklabels([x1[i] if i < len(x1) else x2[i] if i < len(x2) else ""
-                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
+                               for i in tick_positions], rotation=45, ha='right', fontsize=8)
     
     def _plot_modality_progression(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
                                    shift2_start: datetime, use_actual_time: bool, modality_filter: str = "all", theme_colors: dict = None):
-        """Plot study accumulation by modality."""
+        """Plot study accumulation by modality - minute-by-minute granularity."""
         mode = self.comparison_graph_mode.get()
+        
+        # Get records for minute-by-minute calculation
+        records1 = getattr(self, '_comparison_records1', [])
+        records2 = getattr(self, '_comparison_records2', [])
         
         # Determine which modalities to plot based on filter
         if modality_filter == "all":
@@ -5849,6 +6044,107 @@ class StatisticsWindow:
             ax.text(0.5, 0.5, 'No modality data available', ha='center', va='center', transform=ax.transAxes)
             return
         
+        # Calculate minute-by-minute cumulative studies by modality
+        def calculate_modality_minute_by_minute(records, shift_start_rounded, modalities_to_plot):
+            """Calculate cumulative studies by modality at each minute."""
+            if not records:
+                return {}, []
+            
+            # Sort records by time_finished
+            sorted_records = sorted(records, key=lambda r: datetime.fromisoformat(r.get('time_finished', '')))
+            
+            # Find the time range
+            first_time = datetime.fromisoformat(sorted_records[0]['time_finished'])
+            last_time = datetime.fromisoformat(sorted_records[-1]['time_finished'])
+            
+            # Calculate total minutes in shift
+            total_minutes = max(1, int((last_time - shift_start_rounded).total_seconds() / 60) + 1)
+            
+            # Initialize minute buckets by modality
+            minute_modality_counts = {}  # minute_index -> {modality: count}
+            
+            for record in sorted_records:
+                try:
+                    time_finished = datetime.fromisoformat(record['time_finished'])
+                    elapsed_minutes = int((time_finished - shift_start_rounded).total_seconds() / 60)
+                    if elapsed_minutes < 0:
+                        elapsed_minutes = 0
+                    
+                    # Extract modality from study_type
+                    study_type = record.get('study_type', 'Unknown')
+                    modality = study_type.split()[0] if study_type else "Unknown"
+                    if modality == "Multiple" and len(study_type.split()) > 1:
+                        modality = study_type.split()[1]
+                    
+                    if modality not in modalities_to_plot:
+                        continue
+                    
+                    if elapsed_minutes not in minute_modality_counts:
+                        minute_modality_counts[elapsed_minutes] = {}
+                    if modality not in minute_modality_counts[elapsed_minutes]:
+                        minute_modality_counts[elapsed_minutes][modality] = 0
+                    minute_modality_counts[elapsed_minutes][modality] += 1
+                except (ValueError, KeyError):
+                    continue
+            
+            # Build cumulative arrays - one entry per minute for each modality
+            modality_data = {}  # modality -> (x_indices, y_values)
+            time_labels = []
+            
+            for modality in modalities_to_plot:
+                cumulative_data = []
+                current_count = 0
+                
+                for minute in range(total_minutes):
+                    if minute in minute_modality_counts and modality in minute_modality_counts[minute]:
+                        current_count += minute_modality_counts[minute][modality]
+                    cumulative_data.append(current_count)
+                    
+                    # Create time label (only once)
+                    if not time_labels:
+                        time_at_minute = shift_start_rounded + timedelta(minutes=minute)
+                        time_labels.append(time_at_minute.strftime("%H:%M"))
+                
+                if mode == "average":
+                    # Convert to average per hour (studies per hour up to this point)
+                    cumulative_data = [count / ((minute + 1) / 60) if minute >= 0 else 0 
+                                     for minute, count in enumerate(cumulative_data)]
+                
+                modality_data[modality] = (list(range(total_minutes)), cumulative_data)
+            
+            return modality_data, time_labels
+        
+        modality_data1, x1_labels = calculate_modality_minute_by_minute(records1, shift1_start, modalities_to_plot)
+        modality_data2, x2_labels = calculate_modality_minute_by_minute(records2, shift2_start, modalities_to_plot)
+        
+        # Find max length for alignment
+        max_len = 0
+        for mod_data in [modality_data1, modality_data2]:
+            for modality, (x_vals, y_vals) in mod_data.items():
+                max_len = max(max_len, len(x_vals))
+        
+        # Extend shorter series to match longer one
+        for modality in modalities_to_plot:
+            if modality in modality_data1:
+                x1, y1 = modality_data1[modality]
+                if len(x1) < max_len:
+                    last_val = y1[-1] if y1 else 0
+                    y1.extend([last_val] * (max_len - len(x1)))
+                    x1.extend(range(len(x1), max_len))
+                    for i in range(len(x1_labels), max_len):
+                        time_at_minute = shift1_start + timedelta(minutes=i)
+                        x1_labels.append(time_at_minute.strftime("%H:%M"))
+            
+            if modality in modality_data2:
+                x2, y2 = modality_data2[modality]
+                if len(x2) < max_len:
+                    last_val = y2[-1] if y2 else 0
+                    y2.extend([last_val] * (max_len - len(x2)))
+                    x2.extend(range(len(x2), max_len))
+                    for i in range(len(x2_labels), max_len):
+                        time_at_minute = shift2_start + timedelta(minutes=i)
+                        x2_labels.append(time_at_minute.strftime("%H:%M"))
+        
         # Plot each modality
         colors_current = ['#4472C4', '#70AD47', '#FFC000', '#E74C3C', '#9B59B6']
         colors_prior = ['#9966CC', '#C06090', '#FF9966', '#F39C12', '#3498DB']
@@ -5856,24 +6152,20 @@ class StatisticsWindow:
         for i, modality in enumerate(modalities_to_plot):
             color_idx = i % len(colors_current)
             
-            if modality in data1['modality_cumulative']:
-                y1 = data1['modality_cumulative'][modality]
-                if mode == "average":
-                    y1 = [count / (hour + 1) for hour, count in enumerate(y1)]
-                ax.plot(range(len(y1)), y1, color=colors_current[color_idx], linewidth=1.5, 
-                       marker='o', markersize=4, label=f'{modality} (Shift 1)', alpha=0.8)
+            if modality in modality_data1:
+                x1, y1 = modality_data1[modality]
+                ax.plot(x1, y1, color=colors_current[color_idx], linewidth=1.5, 
+                       label=f'{modality} (Shift 1)', alpha=0.8)
             
-            if modality in data2['modality_cumulative']:
-                y2 = data2['modality_cumulative'][modality]
-                if mode == "average":
-                    y2 = [count / (hour + 1) for hour, count in enumerate(y2)]
-                ax.plot(range(len(y2)), y2, color=colors_prior[color_idx], linewidth=1.5, 
-                       marker='s', markersize=4, label=f'{modality} (Shift 2)', alpha=0.8, linestyle='--')
+            if modality in modality_data2:
+                x2, y2 = modality_data2[modality]
+                ax.plot(x2, y2, color=colors_prior[color_idx], linewidth=1.5, 
+                       label=f'{modality} (Shift 2)', alpha=0.8, linestyle='--')
         
         ylabel = "Average Studies per Hour" if mode == "average" else "Cumulative Studies"
         title = f"Study Count by Modality{title_suffix}"
         
-        ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
+        ax.set_xlabel("Time", fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
         ax.set_title(title, fontsize=12, fontweight='bold')
         ax.legend(fontsize=8, loc='best')
@@ -5881,20 +6173,24 @@ class StatisticsWindow:
         ax.grid(True, alpha=0.2, color=grid_color)
         
         # Set x-axis to start at zero with no left padding
-        max_len = max(len(data1['cumulative_rvu']), len(data2['cumulative_rvu']))
         if max_len > 0:
             ax.set_xlim(0, max_len - 1)
             ax.margins(x=0.01)
         
-        # Set x-axis labels
+        # Set x-axis labels - show every 30-60 minutes depending on shift length
         if max_len > 0:
-            step = max(1, max_len // 8)
+            if max_len <= 120:  # 2 hours or less: show every 15 minutes
+                step = 15
+            elif max_len <= 480:  # 8 hours or less: show every 30 minutes
+                step = 30
+            elif max_len <= 720:  # 12 hours or less: show every 60 minutes
+                step = 60
+            else:  # Very long shift: show every 2 hours
+                step = 120
+            
             ax.set_xticks(range(0, max_len, step))
-            if use_actual_time:
-                labels = [(shift1_start + timedelta(hours=h)).strftime("%H:%M") for h in range(0, max_len, step)]
-            else:
-                labels = [f"Hour {h}" for h in range(0, max_len, step)]
-            ax.set_xticklabels(labels, rotation=45, ha='right', fontsize=8)
+            ax.set_xticklabels([x1_labels[i] if i < len(x1_labels) else x2_labels[i] if i < len(x2_labels) else ""
+                               for i in range(0, max_len, step)], rotation=45, ha='right', fontsize=8)
     
     def _plot_total_studies(self, ax, data1: dict, data2: dict, shift1_start: datetime, 
                            shift2_start: datetime, use_actual_time: bool, theme_colors: dict = None):
@@ -5922,8 +6218,12 @@ class StatisticsWindow:
             x1 = [f"Hour {h}" for h in hours1]
             x2 = [f"Hour {h}" for h in hours2]
         
-        ax.plot(range(len(y1)), y1, color='#4472C4', linewidth=2, marker='o', label='Shift 1')
-        ax.plot(range(len(y2)), y2, color='#9966CC', linewidth=2, marker='s', label='Shift 2')
+        # Smooth the hourly data (both accumulation and average modes use hourly data)
+        x1_smooth, y1_smooth = self._smooth_hourly_data(y1)
+        x2_smooth, y2_smooth = self._smooth_hourly_data(y2)
+        
+        ax.plot(x1_smooth, y1_smooth, color='#4472C4', linewidth=2, label='Shift 1')
+        ax.plot(x2_smooth, y2_smooth, color='#9966CC', linewidth=2, label='Shift 2')
         
         ax.set_xlabel("Time" if use_actual_time else "Hours from Start", fontsize=10)
         ax.set_ylabel(ylabel, fontsize=10)
@@ -5932,11 +6232,12 @@ class StatisticsWindow:
         ax.grid(True, alpha=0.3)
         
         # Set x-axis to start at zero with tight margins
-        max_len = max(len(x1), len(x2))
+        # Use original hourly length for x-axis limits (not smoothed length)
+        max_len = max(len(y1), len(y2)) if mode == "average" else max(len(x1), len(x2))
         ax.set_xlim(0, max_len - 1)
         ax.margins(x=0.01)
         
-        # Set x-axis labels
+        # Set x-axis labels (use original hourly indices)
         if max_len > 0:
             step = max(1, max_len // 8)
             ax.set_xticks(range(0, max_len, step))
