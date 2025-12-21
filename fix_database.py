@@ -45,43 +45,52 @@ except ImportError:
     print("WARNING: Could not import refactored match_study_type, using local copy")
 
 
-def load_rvu_settings(settings_path: Path) -> Dict:
-    """Load RVU settings from YAML file.
+def load_rvu_settings(settings_source: Path) -> Dict:
+    """Load RVU settings and rules from YAML files.
     
-    When running as frozen executable, checks sys._MEIPASS first for bundled file,
-    then falls back to the settings_path provided.
+    Can handle either a directory containing rvu_rules.yaml and rvu_settings.yaml,
+    or a single rvu_settings.yaml file (backward compatibility).
     """
-    # Handle PyInstaller bundled files
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable - check bundled location first
-        bundled_path = Path(sys._MEIPASS) / "rvu_settings.yaml"
-        if bundled_path.exists():
-            try:
-                with open(bundled_path, 'r', encoding='utf-8') as f:
-                    settings = yaml.safe_load(f)
-                print(f"Loaded bundled settings from {bundled_path}")
-                return settings
-            except Exception as e:
-                print(f"WARNING: Failed to load bundled settings: {e}")
-                print(f"  Falling back to: {settings_path}")
+    # Determine directory and primary file
+    if settings_source.is_dir():
+        settings_dir = settings_source
+        settings_path = settings_dir / "rvu_settings.yaml"
+    else:
+        settings_path = settings_source
+        settings_dir = settings_path.parent
+        
+    rules_path = settings_dir / "rvu_rules.yaml"
     
-    # Check provided path (or fallback if bundled file not found)
-    if not settings_path.exists():
-        print(f"ERROR: {settings_path} not found!")
-        if getattr(sys, 'frozen', False):
-            print(f"  Running as frozen executable")
-            print(f"  Checked bundled location: {Path(sys._MEIPASS) / 'rvu_settings.yaml'}")
-            print(f"  sys._MEIPASS: {sys._MEIPASS}")
-        sys.exit(1)
+    combined_settings = {}
     
-    try:
-        with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = yaml.safe_load(f)
-        print(f"Loaded settings from {settings_path}")
-        return settings
-    except Exception as e:
-        print(f"ERROR: Failed to load settings: {e}")
+    # Try to load rules first (v1.7 structure)
+    if rules_path.exists():
+        try:
+            with open(rules_path, 'r', encoding='utf-8') as f:
+                rules_data = yaml.safe_load(f) or {}
+                combined_settings.update(rules_data)
+            print(f"Loaded rules from {rules_path}")
+        except Exception as e:
+            print(f"WARNING: Failed to load rules from {rules_path}: {e}")
+            
+    # Then load settings (might contain rules in < v1.7 versions)
+    if settings_path.exists():
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings_data = yaml.safe_load(f) or {}
+                # Add settings keys, but don't overwrite rules if already loaded
+                for k, v in settings_data.items():
+                    if k not in combined_settings:
+                        combined_settings[k] = v
+            print(f"Loaded settings from {settings_path}")
+        except Exception as e:
+            print(f"WARNING: Failed to load settings from {settings_path}: {e}")
+            
+    if not combined_settings:
+        print(f"ERROR: Could not find settings or rules at {settings_source}")
         sys.exit(1)
+        
+    return combined_settings
 
 
 def match_study_type(procedure_text: str, rvu_table: dict = None, classification_rules: dict = None, direct_lookups: dict = None) -> Tuple[str, float]:
@@ -231,6 +240,14 @@ def match_study_type(procedure_text: str, rvu_table: dict = None, classification
             if "pet" in procedure_lower and "ct" in procedure_lower:
                 pet_ct_match = (study_type, rvu)
             continue  # Skip adding to matches - will handle separately at the very end
+        
+        # Special handling for "CTA Brain with Perfusion" - don't match via partial matching
+        # unless it has CTA/angio indicators (classification rules should handle it if it does)
+        if study_lower == "cta brain with perfusion":
+            # Only match if it has CTA/angio indicators (otherwise classification rules would have matched it)
+            has_cta_indicator = ("cta" in procedure_lower or "angio" in procedure_lower or "angiography" in procedure_lower)
+            if not has_cta_indicator:
+                continue  # Skip partial matching for this study type if no CTA indicators
         
         if study_lower in procedure_lower or procedure_lower in study_lower:
             # Score by length (longer = more specific)
@@ -646,8 +663,21 @@ def main():
     print(f"\nWorking directory: {work_dir}")
     
     # Find required files
-    settings_path = work_dir / "rvu_settings.yaml"
-    db_path = work_dir / "rvu_records.db"
+    # Check new v1.7 structure first
+    settings_dir = work_dir / "settings"
+    data_dir = work_dir / "data"
+    
+    settings_path = settings_dir / "rvu_settings.yaml"
+    db_path = data_dir / "rvu_records.db"
+    
+    # Fallback to old structure if not found
+    if not settings_path.exists():
+        settings_path = work_dir / "rvu_settings.yaml"
+    if not db_path.exists():
+        db_path = work_dir / "rvu_records.db"
+    
+    # Use settings directory for loading (it will look for rules there too)
+    target_settings_path = settings_dir if settings_dir.exists() else settings_path
     
     # Check for duplicate accessions first
     print("\n" + "=" * 80)
@@ -677,8 +707,8 @@ def main():
         else:
             print("\nNo duplicate records deleted.")
     
-    # Load settings
-    settings = load_rvu_settings(settings_path)
+    # Load settings and rules
+    settings = load_rvu_settings(target_settings_path)
     
     # Analyze database for mismatches
     print("\n" + "=" * 80)

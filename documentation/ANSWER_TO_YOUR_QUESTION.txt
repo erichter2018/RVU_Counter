@@ -1,0 +1,174 @@
+================================================================================
+YOUR QUESTION: "What is the script to send to people to update/upgrade?"
+================================================================================
+
+ANSWER:
+
+The script is: Install_or_Upgrade_RVU_Counter.bat
+
+================================================================================
+HOW IT WORKS
+================================================================================
+
+This ONE script handles BOTH scenarios:
+
+1. FRESH INSTALL (new user):
+   ✓ Creates empty database
+   ✓ Downloads latest version from GitHub
+   ✓ Sets up folders
+   ✓ Uses default settings
+
+2. UPGRADE (existing user):
+   ✓ Preserves their database
+   ✓ Backs up everything
+   ✓ Downloads latest version
+   ✓ Migrates to new structure
+   ✓ Keeps all their data
+
+It detects automatically which scenario applies!
+
+================================================================================
+HOW TO SEND TO USERS
+================================================================================
+
+OPTION 1 - Use Package Creator (Recommended):
+----------------------------------------------
+1. Run this command:
+   powershell -ExecutionPolicy Bypass -File Create_Distribution_Package.ps1
+
+2. Script creates: RVU_Counter_v1.7_Distribution_*.zip
+
+3. Email that ZIP file to users
+
+4. Users extract and run Install_or_Upgrade_RVU_Counter.bat
+
+5. Done! ✅
+
+OPTION 2 - Manual:
+------------------
+Just send users these 2 files:
+- Install_or_Upgrade_RVU_Counter.bat
+- DISTRIBUTION_README.txt
+
+They put them in a folder and run the .bat file.
+
+================================================================================
+WHAT HAPPENS FOR THE USER
+================================================================================
+
+FOR NEW USER (Fresh Install):
+1. User creates folder (e.g., Desktop\RVU_Counter)
+2. User copies .bat file to that folder
+3. User double-clicks .bat file
+4. Script downloads latest version from GitHub
+5. Script creates data/, settings/, logs/, helpers/ folders
+6. Script creates empty database
+7. Script launches RVU Counter
+8. User is ready to start tracking!
+
+FOR EXISTING USER (Upgrade):
+1. User goes to their RVU Counter folder
+2. User copies .bat file to that folder
+3. User double-clicks .bat file
+4. Script detects existing installation
+5. Script backs up database and settings
+6. Script downloads latest version
+7. Script preserves all data
+8. Script launches upgraded RVU Counter
+9. What's New window appears
+10. User continues with all their data intact!
+
+Time required: 2-3 minutes per user
+
+================================================================================
+KEY FEATURES
+================================================================================
+
+✅ Automatic detection (fresh vs. upgrade)
+✅ Automatic backup before upgrade
+✅ Automatic download from GitHub
+✅ Preserves all user data
+✅ Creates proper folder structure
+✅ Error handling and recovery
+✅ Clear status messages
+✅ No admin rights required
+
+================================================================================
+FILES TO KNOW ABOUT
+================================================================================
+
+FOR DISTRIBUTION:
+✓ Install_or_Upgrade_RVU_Counter.bat - THE SCRIPT (send this to users)
+✓ DISTRIBUTION_README.txt - User instructions (send this too)
+✓ Create_Distribution_Package.ps1 - Creates ZIP for you
+
+FOR YOU:
+✓ DISTRIBUTION_GUIDE.md - Complete distribution documentation
+✓ DISTRIBUTION_QUICK_START.txt - Quick reference
+✓ DISTRIBUTION_SUMMARY.txt - Summary of distribution system
+
+================================================================================
+SAMPLE EMAIL TO USERS
+================================================================================
+
+Subject: RVU Counter Installation
+
+Hi [Name],
+
+Attached is RVU_Counter_v1.7_Install.zip for installing or upgrading
+RVU Counter.
+
+TO INSTALL:
+1. Extract the ZIP file
+2. Double-click: Install_or_Upgrade_RVU_Counter.bat
+3. Follow the prompts
+4. The app will launch automatically
+
+The script handles everything automatically:
+- Downloads latest version
+- Preserves your data (if upgrading)
+- Creates necessary folders
+- Backs up before changes
+
+Detailed instructions are in DISTRIBUTION_README.txt (included in ZIP).
+
+Questions? Let me know!
+
+[Your Name]
+
+================================================================================
+BEFORE YOU DISTRIBUTE
+================================================================================
+
+REQUIRED - Create GitHub Release:
+1. Go to: https://github.com/erichter2018/RVU-Releases
+2. Create new release
+3. Tag: v1.7
+4. Upload: RVU Counter.exe (name it exactly "RVU Counter.exe")
+5. Publish
+
+The installation script downloads from GitHub, so the release must exist!
+
+================================================================================
+SUMMARY
+================================================================================
+
+✓ Installation script: Install_or_Upgrade_RVU_Counter.bat
+✓ User instructions: DISTRIBUTION_README.txt
+✓ Package creator: Create_Distribution_Package.ps1
+✓ Distribution guide: DISTRIBUTION_GUIDE.md
+
+✓ Handles fresh install: Creates empty database
+✓ Handles upgrade: Preserves all data
+✓ Downloads from: GitHub releases automatically
+✓ User experience: 2-3 minutes, fully automated
+
+Ready to distribute! 📦
+
+================================================================================
+
+See DISTRIBUTION_QUICK_START.txt for quick reference
+See DISTRIBUTION_GUIDE.md for complete documentation
+
+================================================================================
+

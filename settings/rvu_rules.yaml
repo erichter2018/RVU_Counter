@@ -1,0 +1,1506 @@
+direct_lookups: {}
+rvu_table:
+  MRI Brain: 2.3
+  MRI Brain with MRA and MRV: 4.6
+  MRI Brain with MRA: 2.3
+  MRI Spine: 1.75
+  MRI Spine Cervical: 1.75
+  MRI Spine Thoracic: 1.75
+  MRI Spine Lumbar: 1.75
+  MRI Spine Complete: 3.0
+  MRI Chest: 1.75
+  MRI Abdomen: 1.75
+  MRI Pelvis: 1.75
+  MRI Abdomen Pelvis: 2.5
+  MRI Upper Extremity: 1.75
+  MRI Lower Extremity: 1.75
+  MRI Joint: 1.75
+  MRI Cardiac: 2.5
+  MRI Breast: 1.75
+  MRI Neck: 1.75
+  MRI Other: 1.75
+  CT CAP: 3.06
+  CT CAP Trauma: 3.0
+  CTA CAP: 3.06
+  CTA Chest + CT AP: 3.0
+  CTA AP: 1.68
+  CT CA: 2.0
+  CT AP: 1.68
+  CT Abdomen: 1.0
+  MRI Hip Bilateral: 3.5
+  CT 3D Imaging Processing: 1.75
+  CT Extremity Bilateral: 1.0
+  CT Lower Extremity: 1.0
+  CT Upper Extremity: 1.0
+  CT Outside Film Read: 0.9
+  CT Other: 1.0
+  XR Scanogram: 1.0
+  NM Myocardial stress: 1.62
+  NM Other: 1.0
+  PET CT: 3.6
+  Ultrasound transvaginal complete: 1.38
+  US Doppler Lower Extremity: 1.2
+  US Doppler Upper Extremity: 1.2
+  US Arterial Lower Extremity: 1.2
+  US Arterial Upper Extremity: 1.2
+  US Venous Lower Extremity: 0.68
+  US Venous Upper Extremity: 0.68
+  US Abdomen Pelvis: 0.68
+  US Abdomen: 0.68
+  US Pelvis: 0.68
+  US Soft Tissue: 0.68
+  US Joint: 0.68
+  US Breast: 0.68
+  US Thyroid: 0.68
+  US Neck: 0.68
+  US Other: 0.68
+  XR Other: 0.3
+  XR Chest: 0.3
+  CT Brain: 0.9
+  CT Brain with Contrast: 1.0
+  CT Spine Lumbar Recon: 1.0
+  XR Exam Unlisted: 0.68
+  CT Chest: 1.0
+  CTA Chest: 1.0
+  CTA Brain: 1.75
+  CTA Brain with Perfusion: 3.65
+  CTA Neck: 1.75
+  CT Neck: 1.5
+  CT Spine Cervical: 1.0
+  CT Spine Thoracic: 1.0
+  CT Spine Lumbar: 2.0
+  CTA Runoff with Abdo/Pelvis: 2.75
+  Bone Survey: 1.0
+  CTA Brain and Neck: 3.5
+  CTA Brain and Neck with Perfusion: 4.65
+  CT Triple Spine: 5.25
+  CT Head Face and Cervical: 2.9
+  CTA Lower Extremity: 1.75
+  CT Neck Chest: 2.5
+  CT Brain and Cervical: 1.9
+  CT TL Spine: 2.0
+  CT Face: 1.0
+  XR Abdomen: 0.3
+  XR Acute Abdomen: 0.6
+  XR MSK: 0.3
+  XR MSK Bilateral: 0.6
+classification_rules:
+  PET CT:
+  - required_keywords:
+    - PET
+    - CT
+  - required_keywords:
+    - PT
+    - CT
+  - required_keywords:
+    - PT/CT
+  CTA Brain and Neck:
+  - required_keywords:
+    - CTA
+    - brain
+    - neck
+    excluded_keywords:
+    - perfusion
+  - required_keywords:
+    - CT
+    - head
+    - neck
+    - angiography
+    excluded_keywords:
+    - perfusion
+  - required_keywords:
+    - CT
+    - head
+    - neck
+    - angio
+    excluded_keywords:
+    - perfusion
+  CTA Brain and Neck with Perfusion:
+  - required_keywords:
+    - CT
+    - brain
+    - perfusion
+    - CTA
+    - head
+    - neck
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - brain
+    - perfusion
+    - head
+    - neck
+    - contrast
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CTA Runoff with Abdo/Pelvis:
+  - required_keywords:
+    - ct
+    - abd
+    - ang
+    - runoff
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT CAP Trauma:
+  - required_keywords:
+    - CT
+    - ch
+    - abd
+    - pel
+    - trauma
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT CA:
+  - required_keywords:
+    - CT
+    - ch
+    - abd
+    - ang
+    excluded_keywords:
+    - pel
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - ch
+    - abd
+    excluded_keywords:
+    - pel
+    - ang
+    - XR
+    - xr
+    - x-ray
+  CTA Brain with Perfusion:
+  - required_keywords:
+    - CT
+    - brain
+    - perfusion
+    - CTA
+    excluded_keywords:
+    - neck
+  - required_keywords:
+    - CT
+    - brain
+    - perfusion
+    any_of_keywords:
+    - CTA
+    - angio
+    - angiography
+    excluded_keywords:
+    - neck
+  - required_keywords:
+    - CT
+    - head
+    - perfusion
+    - CTA
+    excluded_keywords:
+    - neck
+  - required_keywords:
+    - CT
+    - head
+    - perfusion
+    any_of_keywords:
+    - CTA
+    - angio
+    - angiography
+    excluded_keywords:
+    - neck
+  - required_keywords:
+    - CTA
+    - head
+    - perfusion
+    excluded_keywords:
+    - neck
+  - required_keywords:
+    - CT
+    - brain
+    - perfusion
+    - CTA
+    - head
+    excluded_keywords:
+    - neck
+  CTA Brain:
+  - required_keywords:
+    - CTA
+    - brain
+    excluded_keywords:
+    - neck
+    - perfusion
+  - required_keywords:
+    - CTA
+    - head
+    excluded_keywords:
+    - neck
+    - perfusion
+  - required_keywords:
+    - CT
+    - head
+    - angiography
+    excluded_keywords:
+    - neck
+    - perfusion
+  - required_keywords:
+    - CT
+    - head
+    - angio
+    excluded_keywords:
+    - neck
+    - perfusion
+  CTA Neck:
+  - required_keywords:
+    - CT
+    - neck
+    - angiography
+    excluded_keywords:
+    - head
+    - brain
+  - required_keywords:
+    - CTA
+    - neck
+    excluded_keywords:
+    - head
+    - brain
+  CT Triple Spine:
+  - required_keywords:
+    - CT
+    - cervical
+    - thoracic
+    - lumbar
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT TL Spine:
+  - required_keywords:
+    - CT
+    - thor
+    - lumb
+    excluded_keywords:
+    - cervical
+    - XR
+    - xr
+    - x-ray
+  CT Spine Lumbar Recon:
+  - required_keywords:
+    - CT
+    - lumb
+    - recon
+    excluded_keywords:
+    - thor
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - lumbar
+    - spine
+    - recon
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Spine Lumbar:
+  - required_keywords:
+    - CT
+    - lumb
+    excluded_keywords:
+    - thor
+    - recon
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - lumbar
+    - spine
+    excluded_keywords:
+    - recon
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - l
+    - spine
+    excluded_keywords:
+    - thor
+    - recon
+    - cervical
+    - XR
+    - xr
+    - x-ray
+  CTA Chest + CT AP:
+  - required_keywords:
+    - CT
+    - chest
+    - angio
+    - and
+    - CT
+    - abd
+    - pel
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - chest
+    - angiography
+    - and
+    - CT
+    - abd
+    - pel
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CTA CAP:
+  - required_keywords:
+    - CTA
+    - abd
+    - pel
+    - ch
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    - ch
+    - angio
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+    - and
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    - ch
+    - angiography
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+    - and
+  CTA AP:
+  - required_keywords:
+    - CTA
+    - abd
+    - pel
+    excluded_keywords:
+    - chest
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    - angio
+    excluded_keywords:
+    - chest
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    - angiography
+    excluded_keywords:
+    - chest
+    - XR
+    - xr
+    - x-ray
+  CT CAP:
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    - ch
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+    - angio
+    - angiography
+  CT AP:
+  - required_keywords:
+    - CT
+    - abd
+    - pel
+    excluded_keywords:
+    - chest
+    - XR
+    - xr
+    - x-ray
+    - angio
+    - angiography
+  - required_keywords:
+    - CT
+    - stone
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Abdomen:
+  - required_keywords:
+    - CT
+    - abdomen
+    excluded_keywords:
+    - pel
+    - chest
+    - XR
+    - xr
+    - x-ray
+    - angio
+    - angiography
+  - required_keywords:
+    - CT
+    - abd
+    excluded_keywords:
+    - pel
+    - chest
+    - XR
+    - xr
+    - x-ray
+    - angio
+    - angiography
+  CT Neck Chest:
+  - required_keywords:
+    - CT
+    - neck
+    - chest
+    excluded_keywords:
+    - head
+    - brain
+    - abd
+    - XR
+    - xr
+    - x-ray
+  CTA Chest:
+  - required_keywords:
+    - CTA
+    - chest
+    excluded_keywords:
+    - neck
+    - abd
+    - pel
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - chest
+    - angio
+    excluded_keywords:
+    - neck
+    - abd
+    - pel
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - chest
+    - angiography
+    excluded_keywords:
+    - neck
+    - abd
+    - pel
+    - XR
+    - xr
+    - x-ray
+  CT Head Face and Cervical:
+  - required_keywords:
+    - CT
+    - head
+    - face
+    - cervical
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - brain
+    - facial
+    - cervical
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Brain and Cervical:
+  - required_keywords:
+    - CT
+    - head
+    - cervical
+    excluded_keywords:
+    - CTA
+    - angio
+    - angiography
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - brain
+    - cervical
+    excluded_keywords:
+    - CTA
+    - angio
+    - angiography
+    - XR
+    - xr
+    - x-ray
+  CT Brain with Contrast:
+  - required_keywords:
+    - CT
+    - head
+    - contrast
+    excluded_keywords:
+    - CTA
+    - neck
+    - cervical
+    - angiography
+    - angio
+    - without
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - brain
+    - contrast
+    excluded_keywords:
+    - CTA
+    - neck
+    - cervical
+    - without
+    - XR
+    - xr
+    - x-ray
+  CT Brain:
+  - required_keywords:
+    - CT
+    - brain
+    excluded_keywords:
+    - CTA
+    - neck
+    - cervical
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - head
+    excluded_keywords:
+    - CTA
+    - neck
+    - angiography
+    - angio
+    - perf
+    - cervical
+    - XR
+    - xr
+    - x-ray
+  CT Neck:
+  - required_keywords:
+    - CT
+    - neck
+    excluded_keywords:
+    - head
+    - brain
+    - angiography
+    - angio
+    - CTA
+    - XR
+    - xr
+    - x-ray
+  CT Chest:
+  - required_keywords:
+    - CT
+    - Chest
+    excluded_keywords:
+    - neck
+    - abd
+    - pel
+    - XR
+    - xr
+    - x-ray
+  CT Spine Cervical:
+  - required_keywords:
+    - CT
+    - cervical
+    - spine
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - c-spine
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Spine Thoracic:
+  - required_keywords:
+    - CT
+    - thoracic
+    - spine
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - t-spine
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Face:
+  - required_keywords:
+    - CT
+    any_of_keywords:
+    - facial
+    - face
+    - orbit
+    - maxil
+    - sinus
+    - internal auditory canal
+    - iac
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  MRI Brain with MRA:
+  - required_keywords:
+    - MR
+    - head
+    - mra
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MRI
+    - head
+    - mra
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MR
+    - head
+    any_of_keywords:
+    - mra
+    - angiography
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MRI
+    - brain
+    - angiography
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MR
+    - brain
+    - angiography
+    excluded_keywords:
+    - mrv
+    - venography
+  MRI Brain with MRA and MRV:
+  - required_keywords:
+    - MR
+    - brain
+    any_of_keywords:
+    - angiography
+    - venography
+    - mrv
+  - required_keywords:
+    - MRI
+    - brain
+    any_of_keywords:
+    - angiography
+    - venography
+    - mrv
+  MRI Brain:
+  - required_keywords:
+    - MRI
+    - brain
+    excluded_keywords:
+    - angiography
+    - venography
+    - mra
+    - mrv
+  - required_keywords:
+    - MRI
+    - head
+    excluded_keywords:
+    - angiography
+    - venography
+    - mra
+    - mrv
+  - required_keywords:
+    - MR
+    - brain
+    excluded_keywords:
+    - angiography
+    - venography
+    - mra
+    - mrv
+  - required_keywords:
+    - MR
+    - head
+    excluded_keywords:
+    - angiography
+    - venography
+    - mra
+    - mrv
+  MRI Spine Complete:
+  - required_keywords:
+    - MRI
+    - spine
+    - complete
+  - required_keywords:
+    - MRI
+    - full
+    - spine
+  - required_keywords:
+    - MR
+    - spine
+    - complete
+  - required_keywords:
+    - MR
+    - full
+    - spine
+  MRI Spine Cervical:
+  - required_keywords:
+    - MRI
+    - cervical
+    - spine
+  - required_keywords:
+    - MRI
+    - c-spine
+  - required_keywords:
+    - MR
+    - cervical
+    - spine
+  - required_keywords:
+    - MR
+    - c-spine
+  MRI Spine Thoracic:
+  - required_keywords:
+    - MRI
+    - thoracic
+    - spine
+  - required_keywords:
+    - MRI
+    - t-spine
+  - required_keywords:
+    - MR
+    - thoracic
+    - spine
+  - required_keywords:
+    - MR
+    - t-spine
+  MRI Spine Lumbar:
+  - required_keywords:
+    - MRI
+    - lumbar
+    - spine
+  - required_keywords:
+    - MRI
+    - l-spine
+  - required_keywords:
+    - MR
+    - lumbar
+    - spine
+  - required_keywords:
+    - MR
+    - l-spine
+  MRI Spine:
+  - required_keywords:
+    - MRI
+    - spine
+    excluded_keywords:
+    - cervical
+    - thoracic
+    - lumbar
+    - complete
+    - full
+  - required_keywords:
+    - MR
+    - spine
+    excluded_keywords:
+    - cervical
+    - thoracic
+    - lumbar
+    - complete
+    - full
+  MRI Abdomen Pelvis:
+  - required_keywords:
+    - MRI
+    - abdomen
+    - pelvis
+  - required_keywords:
+    - MR
+    - abdomen
+    - pelvis
+  MRI Abdomen:
+  - required_keywords:
+    - MRI
+    - abdomen
+    excluded_keywords:
+    - pelvis
+  - required_keywords:
+    - MR
+    - abdomen
+    excluded_keywords:
+    - pelvis
+  - required_keywords:
+    - MRI
+    any_of_keywords:
+    - liver
+    - kidney
+    - pancreas
+    - mrcp
+    - enterography
+    excluded_keywords:
+    - pelvis
+  - required_keywords:
+    - MR
+    any_of_keywords:
+    - liver
+    - kidney
+    - pancreas
+    - mrcp
+    - enterography
+    - cholangiopancreatography
+    excluded_keywords:
+    - pelvis
+  MRI Pelvis:
+  - required_keywords:
+    - MRI
+    - pelvis
+    excluded_keywords:
+    - abdomen
+  - required_keywords:
+    - MR
+    - pelvis
+    excluded_keywords:
+    - abdomen
+  MRI Chest:
+  - required_keywords:
+    - MRI
+    - chest
+  - required_keywords:
+    - MRI
+    - thorax
+  - required_keywords:
+    - MR
+    - chest
+  - required_keywords:
+    - MR
+    - thorax
+  MRI Upper Extremity:
+  - required_keywords:
+    - MRI
+    any_of_keywords:
+    - upper extremity
+    - shoulder
+    - arm
+    - elbow
+    - wrist
+    - hand
+  - required_keywords:
+    - MR
+    any_of_keywords:
+    - upper extremity
+    - shoulder
+    - arm
+    - elbow
+    - wrist
+    - hand
+  MRI Hip Bilateral:
+  - required_keywords:
+    - MRI
+    - hip
+    - bilateral
+  - required_keywords:
+    - MR
+    - hip
+    - bilateral
+  MRI Lower Extremity:
+  - required_keywords:
+    - MRI
+    any_of_keywords:
+    - lower extremity
+    - hip
+    - femur
+    - knee
+    - leg
+    - ankle
+    - foot
+  - required_keywords:
+    - MR
+    any_of_keywords:
+    - lower extremity
+    - hip
+    - femur
+    - knee
+    - leg
+    - ankle
+    - foot
+  MRI Joint:
+  - required_keywords:
+    - MRI
+    - joint
+    excluded_keywords:
+    - upper extremity
+    - lower extremity
+  - required_keywords:
+    - MR
+    - joint
+    excluded_keywords:
+    - upper extremity
+    - lower extremity
+  MRI Cardiac:
+  - required_keywords:
+    - MRI
+    - cardiac
+  - required_keywords:
+    - MRI
+    - heart
+  - required_keywords:
+    - MR
+    - cardiac
+  - required_keywords:
+    - MR
+    - heart
+  MRI Breast:
+  - required_keywords:
+    - MRI
+    - breast
+  - required_keywords:
+    - MR
+    - breast
+  MRI Neck:
+  - required_keywords:
+    - MRI
+    - neck
+    excluded_keywords:
+    - brain
+    - head
+  - required_keywords:
+    - MR
+    - neck
+    excluded_keywords:
+    - brain
+    - head
+  US Doppler Lower Extremity:
+  - required_keywords:
+    - US
+    - lower
+    - extremity
+    - doppler
+  - required_keywords:
+    - ultrasound
+    - lower
+    - extremity
+    - doppler
+  US Doppler Upper Extremity:
+  - required_keywords:
+    - US
+    - upper
+    - extremity
+    - doppler
+  - required_keywords:
+    - ultrasound
+    - upper
+    - extremity
+    - doppler
+  - required_keywords:
+    - US
+    - upper
+    - extremity
+    - arteries
+  US Arterial Lower Extremity:
+  - required_keywords:
+    - US
+    - art
+    - low
+    - ext
+  US Arterial Upper Extremity:
+  - required_keywords:
+    - US
+    - arterial
+    - upper
+    - extremity
+  - required_keywords:
+    - ultrasound
+    - arterial
+    - upper
+    - extremity
+  US Venous Lower Extremity:
+  - required_keywords:
+    - US
+    - venous
+    - lower
+    - extremity
+  - required_keywords:
+    - US
+    - dvt
+  US Venous Upper Extremity:
+  - required_keywords:
+    - US
+    - venous
+    - upper
+    - extremity
+  Ultrasound transvaginal complete:
+  - required_keywords:
+    - US
+    - transvaginal
+  - required_keywords:
+    - ultrasound
+    - transvaginal
+  - required_keywords:
+    - US
+    - pelvis
+    any_of_keywords:
+    - transvaginal
+    - transabdominal
+  - required_keywords:
+    - US
+    - OB
+    any_of_keywords:
+    - transvaginal
+    - limited
+  - required_keywords:
+    - US
+    - pregnancy
+    - transvaginal
+  - required_keywords:
+    - US
+    - less
+    - than
+    - 14
+    - weeks
+    - pregnancy
+    - transvaginal
+  - required_keywords:
+    - US
+    - pelvis
+    - complete
+    - transvaginal
+  - required_keywords:
+    - US
+    - pelvis
+    - transabdominal
+    - transvaginal
+  US Abdomen Pelvis:
+  - required_keywords:
+    - US
+    - abdomen
+    - pelvis
+    excluded_keywords:
+    - transvaginal
+  - required_keywords:
+    - ultrasound
+    - abdomen
+    - pelvis
+    excluded_keywords:
+    - transvaginal
+  - required_keywords:
+    - US
+    - abdomen
+    - pelvis
+    - doppler
+    excluded_keywords:
+    - transvaginal
+  US Abdomen:
+  - required_keywords:
+    - US
+    any_of_keywords:
+    - liver
+    - kidney
+    - gallbladder
+    - spleen
+    - pancreas
+    excluded_keywords:
+    - pelvis
+    - ovary
+    - uterus
+    - prostate
+    - bladder
+    - transvaginal
+    - XR
+    - xr
+    - x-ray
+    - CT
+    - ct
+  - required_keywords:
+    - US
+    - abdomen
+    excluded_keywords:
+    - pelvis
+    - transvaginal
+    - XR
+    - xr
+    - x-ray
+    - CT
+    - ct
+  US Pelvis:
+  - required_keywords:
+    - US
+    any_of_keywords:
+    - pelvis
+    - bladder
+    - ovary
+    - uterus
+    - prostate
+    excluded_keywords:
+    - abdomen
+    - liver
+    - kidney
+    - transvaginal
+  US Soft Tissue:
+  - required_keywords:
+    - US
+    - soft
+    - tissue
+  US Joint:
+  - required_keywords:
+    - US
+    - joint
+  - required_keywords:
+    - ultrasound
+    - joint
+  US Breast:
+  - required_keywords:
+    - US
+    - breast
+  - required_keywords:
+    - ultrasound
+    - breast
+  US Thyroid:
+  - required_keywords:
+    - US
+    - thyroid
+  - required_keywords:
+    - ultrasound
+    - thyroid
+  US Neck:
+  - required_keywords:
+    - US
+    - neck
+    excluded_keywords:
+    - thyroid
+  XR MSK Bilateral:
+  - required_keywords:
+    - XR
+    - bilateral
+    excluded_keywords:
+    - chest
+    any_of_keywords:
+    - knee
+    - wrist
+    - hand
+    - thumb
+    - index finger
+    - middle finger
+    - ring finger
+    - small finger
+    - fingers
+    - pelvis
+    - hip
+    - hips
+    - si joints
+    - ankle
+    - foot
+    - humerus
+    - forearm
+    - acromioclavicular
+    - ac joints
+    - ac joint
+    - foreign body
+    - calcaneus
+    - tmj
+    - temporomandibular
+    - tibia-fibula
+    - tibia/fibula
+    - tib/fib
+    - tibia
+    - fibula
+    - elbow
+    - shoulder
+    - femur
+    - ribs
+    - rib
+  XR Acute Abdomen:
+  - required_keywords:
+    - XR
+    - abdomen
+    - supine
+    - erect
+    - chest
+    any_of_keywords:
+    - acute
+    - series
+  XR Abdomen:
+  - required_keywords:
+    - XR
+    any_of_keywords:
+    - abd
+    - abdomen
+    - decubitus
+  XR Exam Unlisted:
+  - required_keywords:
+    - XR
+    - exam
+    - unlisted
+  XR Scanogram:
+  - required_keywords:
+    - XR
+    - scanogram
+  Bone Survey:
+  - required_keywords:
+    - bone
+    - survey
+  XR Chest:
+  - required_keywords:
+    - XR
+    - Chest
+  XR MSK:
+  - required_keywords:
+    - XR
+    excluded_keywords:
+    - bone survey
+    any_of_keywords:
+    - knee
+    - wrist
+    - hand
+    - thumb
+    - index finger
+    - middle finger
+    - ring finger
+    - small finger
+    - fingers
+    - pelvis
+    - hip
+    - hips
+    - si joints
+    - ankle
+    - foot
+    - humerus
+    - forearm
+    - acromioclavicular
+    - ac joints
+    - ac joint
+    - tibia-fibula
+    - tibia/fibula
+    - tib/fib
+    - tibia
+    - fibula
+    - elbow
+    - shoulder
+    - cervical spine
+    - c-spine
+    - thoracic spine
+    - t-spine
+    - lumbar spine
+    - l-spine
+    - lumbosacral spine
+    - ls-spine
+    - spine
+    - scoliosis
+    - leg length
+    - lower extremity leg length
+    - bone survey
+    - ribs
+    - rib
+    - clavicle
+    - scapula
+    - calcaneus
+    - femur
+    - skull
+    - mandible
+    - facial bones
+    - nasal bones
+    - orbits
+    - tmj
+    - sternum
+    - sacrum
+    - coccyx
+    - sacrum and coccyx
+  CT Extremity Bilateral:
+  - required_keywords:
+    - CT
+    - bilateral
+    any_of_keywords:
+    - extremity
+    - arm
+    - leg
+    - ankle
+    - foot
+    - wrist
+    - hand
+    - knee
+    - elbow
+    - shoulder
+    - hip
+    - femur
+    - tibia
+    - fibula
+    - humerus
+    - radius
+    - ulna
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT 3D Imaging Processing:
+  - required_keywords:
+    - CT
+    - 3D
+    - imaging
+    - processing
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  MRI Other:
+  - required_keywords:
+    - MRI
+  - required_keywords:
+    - 'MR '
+  NM Other:
+  - required_keywords:
+    - NM
+  - required_keywords:
+    - nuclear
+  US Other:
+  - required_keywords:
+    - US
+  - required_keywords:
+    - ultrasound
+  XR Other:
+  - required_keywords:
+    - XA
+    - guidance
+  - required_keywords:
+    - XR
+    - nose
+    - rectum
+    - foreign
+    - body
+  - required_keywords:
+    - XR
+  CTA Lower Extremity:
+  - required_keywords:
+    - CT
+    - lower
+    - extremity
+    any_of_keywords:
+    - angio
+    - angiography
+    - CTA
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Lower Extremity:
+  - required_keywords:
+    - CT
+    any_of_keywords:
+    - lower extremity
+    - hip
+    - femur
+    - knee
+    - leg
+    - ankle
+    - foot
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - lower
+    - extremity
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Upper Extremity:
+  - required_keywords:
+    - CT
+    any_of_keywords:
+    - upper extremity
+    - shoulder
+    - humerus
+    - elbow
+    - arm
+    - forearm
+    - wrist
+    - hand
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - upper
+    - extremity
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Outside Film Read:
+  - required_keywords:
+    - CT
+    - outside
+    - film
+    - read
+  CT Other:
+  - required_keywords:
+    - CT
+    - exam
+    - unlisted
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+    - XA
+    - xa
+  - required_keywords:
+    - CT
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+    - XA
+    - xa

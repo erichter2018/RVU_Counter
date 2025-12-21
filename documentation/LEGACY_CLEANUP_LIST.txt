@@ -1,0 +1,121 @@
+================================================================================
+RVU Counter v1.7 - Legacy Files Cleanup
+================================================================================
+
+The Install_or_Upgrade_RVU_Counter.bat script now automatically removes
+legacy files during the upgrade process.
+
+================================================================================
+FILES REMOVED DURING UPGRADE
+================================================================================
+
+✅ Legacy Executables:
+   • RVU Counter 1.6.exe
+   • RVU Counter 1.51.exe
+   • Old backup executables (keeps only the most recent .old file)
+
+✅ Legacy Configuration:
+   • rvu_settings.yaml
+     → Replaced by: settings/user_settings.yaml + settings/rvu_rules.yaml
+
+✅ Legacy Standalone Tools:
+   • fix_database.py
+     → Now integrated: Tools Window → Database Repair tab
+   
+   • check_rvu_excel_files.py
+     → Now integrated: Tools Window → Excel Checker tab
+
+================================================================================
+WHY THESE ARE REMOVED
+================================================================================
+
+1. **rvu_settings.yaml**
+   - v1.7 uses split configuration for better maintainability
+   - User preferences and RVU rules are now separate
+   - Enables rule hotfixes without touching user settings
+
+2. **fix_database.py**
+   - Functionality now built into main app
+   - Access via wrench icon (🔧) in top-right corner
+   - Full UI with dark mode support
+
+3. **check_rvu_excel_files.py**
+   - Functionality now built into main app
+   - Access via Tools Window → Excel Checker tab
+   - Better integration with app settings
+
+4. **Old executables**
+   - Prevents confusion about which version to run
+   - Keeps folder clean
+   - One backup (.old) is kept for emergency rollback
+
+================================================================================
+FILES THAT ARE PRESERVED
+================================================================================
+
+✅ User Data (Always Preserved):
+   • rvu_records.db → Moved to data/rvu_records.db
+   • All recorded studies and shifts
+   • All historical data
+
+✅ User Settings (Preserved if exist):
+   • settings/user_settings.yaml
+   • Your preferences, rates, and configurations
+
+✅ Backups Created:
+   • backup_YYYYMMDD_HHMMSS/ folder with:
+     - rvu_records.db.backup
+     - rvu_settings.yaml.backup (if it existed)
+     - user_settings.yaml.backup (if it existed)
+     - rvu_rules.yaml.backup (if it existed)
+
+================================================================================
+MANUAL CLEANUP (If Needed)
+================================================================================
+
+The batch script handles all necessary cleanup. However, if you have other
+custom files you no longer need, you can manually delete:
+
+🔹 Old backup folders (backup_YYYYMMDD_HHMMSS/)
+   - Safe to delete after confirming v1.7 works correctly
+   - Keep at least one recent backup for safety
+
+🔹 Old log files (if any exist in root)
+   - v1.7 stores logs in logs/ folder
+   - Any .log files in root can be deleted
+
+🔹 Custom scripts you created
+   - Any personal automation scripts
+   - Only delete if you're sure they're no longer needed
+
+================================================================================
+FRESH INSTALL (No Cleanup Needed)
+================================================================================
+
+Fresh installations don't have legacy files, so the cleanup steps are skipped.
+Only the folder structure is created:
+
+   RVU Counter/
+   ├── RVU Counter.exe
+   ├── data/              (empty, database created on first run)
+   ├── settings/          (created with default templates)
+   ├── logs/              (empty)
+   ├── helpers/           (empty, populated by app if needed)
+   └── documentation/     (empty, populated by app if needed)
+
+================================================================================
+SUMMARY
+================================================================================
+
+✅ Automatic cleanup keeps your folder clean
+✅ All user data and settings are preserved
+✅ Backups are created before any changes
+✅ Legacy standalone tools no longer needed (integrated into app)
+✅ One-click upgrade experience
+
+If you encounter any issues during upgrade:
+1. Check the backup folder for your data
+2. Review logs in logs/ folder
+3. Ensure all instances of RVU Counter are closed before upgrading
+
+================================================================================

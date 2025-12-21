@@ -3,6 +3,7 @@
 from .config import *
 from .logging_config import setup_logging, logger
 from .platform_utils import get_all_monitor_bounds, get_primary_monitor_bounds, get_app_paths
+from .yaml_update_manager import YamlUpdateManager
 
 __all__ = [
     'setup_logging',
@@ -10,4 +11,5 @@ __all__ = [
     'get_all_monitor_bounds',
     'get_primary_monitor_bounds',
     'get_app_paths',
+    'YamlUpdateManager',
 ]

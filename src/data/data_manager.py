@@ -21,7 +21,10 @@ from ..core.config import (
     SETTINGS_FILE_NAME,
     DATABASE_FILE_NAME,
     RECORDS_JSON_FILE_NAME,
-    OLD_DATA_FILE_NAME
+    OLD_DATA_FILE_NAME,
+    USER_SETTINGS_FILE_NAME,
+    RULES_FILE_NAME,
+    DATA_FOLDER
 )
 from .database import RecordsDatabase
 from .backup_manager import BackupManager
@@ -32,24 +35,31 @@ class RVUData:
     """Manages data persistence with SQLite for records and JSON for settings."""
     
     def __init__(self, base_dir: str = None):
-        settings_dir, data_dir = get_app_paths()
+        settings_dir, data_root = get_app_paths()
         
-        # Settings file (RVU tables, rules, rates, user preferences, window positions)
-        self.settings_file = os.path.join(data_dir, "rvu_settings.yaml")
-        # SQLite database for records (replaces rvu_records.json)
-        self.db_file = os.path.join(data_dir, "rvu_records.db")
-        # Legacy JSON file paths (for migration)
-        self.records_file = os.path.join(data_dir, "rvu_records.json")
-        self.old_data_file = os.path.join(data_dir, "rvu_data.json")  # For migration
+        # Use absolute paths based on application root
+        self.user_settings_file = os.path.join(data_root, USER_SETTINGS_FILE_NAME)
+        self.rules_file = os.path.join(data_root, RULES_FILE_NAME)
+        self.legacy_settings_file = os.path.join(data_root, SETTINGS_FILE_NAME)
+        self.db_file = os.path.join(data_root, DATABASE_FILE_NAME)
+        
+        # Legacy file paths (for migration) - located in data folder now
+        self.records_file = os.path.join(data_root, DATA_FOLDER, RECORDS_JSON_FILE_NAME)
+        self.old_data_file = os.path.join(data_root, DATA_FOLDER, OLD_DATA_FILE_NAME)
         
         # Track if running as frozen app
         self.is_frozen = getattr(sys, 'frozen', False)
         
-        logger.info(f"Settings file: {self.settings_file}")
+        logger.info(f"User settings file: {self.user_settings_file}")
+        logger.info(f"Rules file: {self.rules_file}")
         logger.info(f"Database file: {self.db_file}")
         
-        # Load settings from JSON
+        # Split legacy settings if needed
+        self._migrate_to_split_settings()
+        
+        # Load settings and rules
         self.settings_data = self.load_settings()
+        self.rules_data = self.load_rules()
         # Validate and fix window positions after loading
         self.settings_data = self._validate_window_positions(self.settings_data)
         
@@ -72,9 +82,9 @@ class RVUData:
         # Merge into single data structure for compatibility
         self.data = {
             "settings": merged_settings,
-            "direct_lookups": self.settings_data.get("direct_lookups", {}),
-            "rvu_table": self.settings_data.get("rvu_table", {}),
-            "classification_rules": self.settings_data.get("classification_rules", {}),
+            "direct_lookups": self.rules_data.get("direct_lookups", {}),
+            "rvu_table": self.rules_data.get("rvu_table", {}),
+            "classification_rules": self.rules_data.get("classification_rules", {}),
             "compensation_rates": self.settings_data.get("compensation_rates", {}),
             "window_positions": merged_window_positions,
             "backup": self.settings_data.get("backup", {}),  # Load backup settings
@@ -143,161 +153,146 @@ class RVUData:
                 "shifts": []
             }
     
-    def load_settings(self) -> dict:
-        """Load settings, RVU table, classification rules, and window positions.
+    def _load_bundled_file(self, filename: str) -> Optional[dict]:
+        """Load a bundled YAML file from the settings folder.
         
-        Intelligently merges user settings with new defaults:
-        - Preserves: settings, window_positions, backup, compensation_rates
-        - Updates: rvu_table, classification_rules, direct_lookups (to get bug fixes)
-        - Adds: any new settings keys from the new version
+        When running as a PyInstaller executable, files are in sys._MEIPASS/settings/.
+        When running as a script, they're in the project's settings/ folder.
         """
-        # Get bundled/default settings from the settings file
-        # Priority: 1) Bundled file (if frozen), 2) Local file (if script)
-        # There are NO hardcoded defaults - the settings file MUST exist
-        default_data = None
-        
-        # Try bundled file first (when frozen)
-        if self.is_frozen:
+        try:
+            if self.is_frozen:
+                # Running as compiled executable - look in bundle
+                bundle_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+                bundled_file = os.path.join(bundle_dir, 'settings', filename)
+            else:
+                # Running as script - look in project settings folder
+                script_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                bundled_file = os.path.join(script_dir, 'settings', filename)
+            
+            if os.path.exists(bundled_file):
+                logger.info(f"Loading bundled file from: {bundled_file}")
+                with open(bundled_file, 'r', encoding='utf-8') as f:
+                    return yaml.safe_load(f)
+            else:
+                logger.warning(f"Bundled file not found: {bundled_file}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error loading bundled file {filename}: {e}")
+            return None
+    
+    def _migrate_to_split_settings(self):
+        """One-time migration to split rvu_settings.yaml into user_settings.yaml and rvu_rules.yaml."""
+        if os.path.exists(self.legacy_settings_file) and not os.path.exists(self.user_settings_file):
             try:
-                bundled_settings_file = os.path.join(sys._MEIPASS, "rvu_settings.yaml")
-                if os.path.exists(bundled_settings_file):
-                    with open(bundled_settings_file, 'r', encoding='utf-8') as f:
-                        default_data = yaml.safe_load(f)
-                        logger.info(f"Loaded bundled settings from {bundled_settings_file}")
+                logger.info(f"Migrating legacy settings from {self.legacy_settings_file}...")
+                with open(self.legacy_settings_file, 'r', encoding='utf-8') as f:
+                    legacy_data = yaml.safe_load(f)
+                
+                if not legacy_data:
+                    return
+
+                # Extract user settings
+                user_data = {
+                    "settings": legacy_data.get("settings", {}),
+                    "compensation_rates": legacy_data.get("compensation_rates", {}),
+                    "window_positions": legacy_data.get("window_positions", {}),
+                    "backup": legacy_data.get("backup", {})
+                }
+                
+                # Extract rules
+                rules_data = {
+                    "direct_lookups": legacy_data.get("direct_lookups", {}),
+                    "rvu_table": legacy_data.get("rvu_table", {}),
+                    "classification_rules": legacy_data.get("classification_rules", {})
+                }
+                
+                # Save split files
+                with open(self.user_settings_file, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(user_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                
+                with open(self.rules_file, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(rules_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                
+                logger.info("Migration to split settings complete.")
+                # Keep legacy file as backup for now, or delete it? 
+                # The design said to delete it in the transition tool.
+                # Here we just leave it for now to be safe, or rename it.
+                os.rename(self.legacy_settings_file, self.legacy_settings_file + ".migrated")
+                
             except Exception as e:
-                logger.error(f"Error loading bundled settings file: {e}")
-        
-        # Try local file (when running as script, or if bundled file not found)
-        if default_data is None:
-            # Use self.settings_file which already has the correct path from get_app_paths()
-            if os.path.exists(self.settings_file):
-                try:
-                    with open(self.settings_file, 'r', encoding='utf-8') as f:
-                        default_data = yaml.safe_load(f)
-                        logger.info(f"Loaded default settings from local file: {self.settings_file}")
-                except Exception as e:
-                    logger.error(f"Error loading local settings file: {e}")
-        
-        # Settings file MUST exist - fail if it doesn't
-        if default_data is None:
-            error_msg = (
-                f"CRITICAL ERROR: Could not load settings file!\n"
-                f"Expected file: {self.settings_file}\n"
-                f"The settings file must be bundled with the app or present in the root directory."
-            )
-            logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
-        
-        # Try to load user's existing settings file
-        user_data = None
-        if os.path.exists(self.settings_file):
+                logger.error(f"Error during settings split migration: {e}")
+
+    def load_rules(self) -> dict:
+        """Load RVU table and classification rules."""
+        if os.path.exists(self.rules_file):
             try:
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    user_data = yaml.safe_load(f)
-                    logger.info(f"Loaded user settings from {self.settings_file}")
+                with open(self.rules_file, 'r', encoding='utf-8') as f:
+                    return yaml.safe_load(f) or {}
+            except Exception as e:
+                logger.error(f"Error loading rules file: {e}")
+        
+        # On first run, copy bundled rules file
+        logger.info("Rules file not found, copying from bundled template...")
+        bundled_rules = self._load_bundled_file('rvu_rules.yaml')
+        if bundled_rules:
+            # Save rules file for future use
+            try:
+                os.makedirs(os.path.dirname(self.rules_file), exist_ok=True)
+                with open(self.rules_file, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(bundled_rules, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                logger.info(f"Created rules file from bundle: {self.rules_file}")
+            except Exception as e:
+                logger.error(f"Error saving initial rules file: {e}")
+            return bundled_rules
+        
+        # Fallback to empty if not found
+        logger.warning("No bundled rules found, using empty defaults")
+        return {
+            "direct_lookups": {},
+            "rvu_table": {},
+            "classification_rules": {}
+        }
+
+    def load_settings(self) -> dict:
+        """Load user preferences, compensation rates, and window positions."""
+        if os.path.exists(self.user_settings_file):
+            try:
+                with open(self.user_settings_file, 'r', encoding='utf-8') as f:
+                    return yaml.safe_load(f) or {}
             except Exception as e:
                 logger.error(f"Error loading user settings file: {e}")
         
-        # If no user settings exist, use defaults and save them
-        if user_data is None:
-            logger.info("No existing user settings found, using defaults")
-            # Save the default settings for future use
+        # On first run, copy bundled settings file
+        logger.info("User settings file not found, copying from bundled template...")
+        bundled_settings = self._load_bundled_file('user_settings.yaml')
+        if bundled_settings:
+            # Save settings file for future use
             try:
-                with open(self.settings_file, 'w', encoding='utf-8') as f:
-                    yaml.safe_dump(default_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-                logger.info(f"Created new settings file at {self.settings_file}")
+                os.makedirs(os.path.dirname(self.user_settings_file), exist_ok=True)
+                with open(self.user_settings_file, 'w', encoding='utf-8') as f:
+                    yaml.safe_dump(bundled_settings, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                logger.info(f"Created user settings file from bundle: {self.user_settings_file}")
             except Exception as e:
-                logger.error(f"Error saving default settings: {e}")
-            return default_data
+                logger.error(f"Error saving initial settings file: {e}")
+            return bundled_settings
         
-        # Merge user settings with defaults intelligently
-        merged_data = {}
-        
-        # Preserve user's settings (user preferences)
-        merged_data["settings"] = user_data.get("settings", {})
-        # Add any new settings keys from default that user doesn't have
-        for key, value in default_data.get("settings", {}).items():
-            if key not in merged_data["settings"]:
-                merged_data["settings"][key] = value
-                logger.debug(f"Added new settings key '{key}' from default")
-        
-        # Preserve user's window positions
-        merged_data["window_positions"] = user_data.get("window_positions", {})
-        # Add any new window position keys from default
-        for key, value in default_data.get("window_positions", {}).items():
-            if key not in merged_data["window_positions"]:
-                merged_data["window_positions"][key] = value
-                logger.debug(f"Added new window position '{key}' from default")
-        
-        # Preserve user's backup settings
-        merged_data["backup"] = user_data.get("backup", {})
-        # Add any new backup settings keys from default
-        for key, value in default_data.get("backup", {}).items():
-            if key not in merged_data["backup"]:
-                merged_data["backup"][key] = value
-                logger.debug(f"Added new backup setting '{key}' from default")
-        
-        # Preserve user's compensation rates
-        merged_data["compensation_rates"] = user_data.get("compensation_rates", {})
-        # Add any new compensation rate keys from default (nested merge)
-        default_comp = default_data.get("compensation_rates", {})
-        if default_comp:
-            for day_type in ["weekday", "weekend"]:
-                if day_type not in merged_data["compensation_rates"]:
-                    merged_data["compensation_rates"][day_type] = default_comp.get(day_type, {})
-                else:
-                    for role in ["assoc", "partner"]:
-                        if role not in merged_data["compensation_rates"][day_type]:
-                            if day_type in default_comp and role in default_comp[day_type]:
-                                merged_data["compensation_rates"][day_type][role] = default_comp[day_type][role]
-        
-        # RVU table - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_rvu_table = user_data.get("rvu_table", {})
-        if user_rvu_table:
-            merged_data["rvu_table"] = user_rvu_table.copy()
-            logger.info(f"Preserved user RVU table with {len(user_rvu_table)} entries (no defaults added)")
-        else:
-            # Only use defaults from JSON file if user has NO rvu_table at all
-            merged_data["rvu_table"] = default_data.get("rvu_table", {})
-            if merged_data["rvu_table"]:
-                logger.info("No user RVU table found, using defaults from rvu_settings.yaml")
-            else:
-                logger.warning("No RVU table found in user or default settings file!")
-        
-        # Classification rules - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_classification_rules = user_data.get("classification_rules", {})
-        if user_classification_rules:
-            merged_data["classification_rules"] = user_classification_rules.copy()
-            logger.info(f"Preserved user classification rules with {len(user_classification_rules)} study types (no defaults added)")
-        else:
-            # Only use defaults if user has NO classification_rules at all
-            default_classification_rules = default_data.get("classification_rules", {})
-            merged_data["classification_rules"] = default_classification_rules.copy() if default_classification_rules else {}
-            logger.info("No user classification rules found, using defaults")
-        
-        # Direct lookups - PRESERVE user's entries EXACTLY as-is, NO merging from defaults
-        # User's file is the source of truth - don't add anything from hardcoded defaults
-        user_direct_lookups = user_data.get("direct_lookups", {})
-        if user_direct_lookups:
-            merged_data["direct_lookups"] = user_direct_lookups.copy()
-            logger.info(f"Preserved user direct lookups with {len(user_direct_lookups)} entries (no defaults added)")
-        else:
-            # Only use defaults if user has NO direct_lookups at all
-            default_direct_lookups = default_data.get("direct_lookups", {})
-            merged_data["direct_lookups"] = default_direct_lookups.copy() if default_direct_lookups else {}
-            logger.info("No user direct lookups found, using defaults")
-        
-        # Save merged settings back to file
-        try:
-            with open(self.settings_file, 'w', encoding='utf-8') as f:
-                yaml.safe_dump(merged_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            logger.info(f"Saved merged settings to {self.settings_file}")
-        except Exception as e:
-            logger.error(f"Error saving merged settings: {e}")
-        
-        return merged_data
+        # Fallback to minimal defaults if bundled file not found
+        logger.warning("No bundled settings found, using minimal defaults")
+        return {
+            "settings": {
+                "auto_start": True,
+                "show_total": True,
+                "show_avg": True,
+                "role": "Partner",
+                "min_study_seconds": 1,
+                "dark_mode": True,
+                "stay_on_top": True
+            },
+            "window_positions": {},
+            "compensation_rates": {},
+            "backup": {}
+        }
     
     def _validate_window_positions(self, data: dict) -> dict:
         """Validate window positions and reset invalid ones to safe defaults.
@@ -375,8 +370,8 @@ class RVUData:
                 data["window_positions"] = positions
                 try:
                     # Save corrected positions back to file
-                    with open(self.settings_file, 'w') as f:
-                        json.dump(data, f, indent=2, default=str)
+                    with open(self.user_settings_file, 'w') as f:
+                        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
                     logger.info("Window positions validated and corrected")
                 except Exception as e:
                     logger.error(f"Error saving corrected window positions: {e}")
@@ -412,12 +407,12 @@ class RVUData:
                     old_data = json.load(f)
                 
                 # Migrate settings to settings file
-                if not os.path.exists(self.settings_file):
+                if not os.path.exists(self.user_settings_file):
                     # Load default rvu_table from YAML (or JSON for backwards compatibility) if available
                     default_rvu_table = {}
                     try:
-                        if os.path.exists(self.settings_file):
-                            with open(self.settings_file, 'r', encoding='utf-8') as default_f:
+                        if os.path.exists(self.user_settings_file):
+                            with open(self.user_settings_file, 'r', encoding='utf-8') as default_f:
                                 # Try YAML first, then JSON for backwards compatibility
                                 try:
                                     default_data = yaml.safe_load(default_f)
@@ -437,9 +432,9 @@ class RVUData:
                             "settings": {"x": 200, "y": 200}
                         })
                     }
-                    with open(self.settings_file, 'w', encoding='utf-8') as f:
+                    with open(self.user_settings_file, 'w', encoding='utf-8') as f:
                         yaml.safe_dump(settings_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-                    logger.info(f"Migrated settings to {self.settings_file}")
+                    logger.info(f"Migrated settings to {self.user_settings_file}")
                     self.settings_data = settings_data
                 
                 # Migrate records to records file
@@ -478,16 +473,21 @@ class RVUData:
         # Update internal data structures from merged data
         if "settings" in self.data:
             self.settings_data["settings"] = self.data["settings"]
-        if "direct_lookups" in self.data:
-            self.settings_data["direct_lookups"] = self.data["direct_lookups"]
-        if "rvu_table" in self.data:
-            self.settings_data["rvu_table"] = self.data["rvu_table"]
-        if "classification_rules" in self.data:
-            self.settings_data["classification_rules"] = self.data["classification_rules"]
+        if "compensation_rates" in self.data:
+            self.settings_data["compensation_rates"] = self.data["compensation_rates"]
         if "window_positions" in self.data:
             self.settings_data["window_positions"] = self.data["window_positions"]
         if "backup" in self.data:
             self.settings_data["backup"] = self.data["backup"]
+        
+        # Rules are generally not updated by the user in-app except via direct_lookups
+        # BUT we still allow saving them if they were modified
+        if "direct_lookups" in self.data:
+            self.rules_data["direct_lookups"] = self.data["direct_lookups"]
+        if "rvu_table" in self.data:
+            self.rules_data["rvu_table"] = self.data["rvu_table"]
+        if "classification_rules" in self.data:
+            self.rules_data["classification_rules"] = self.data["classification_rules"]
         
         if save_records:
             if "records" in self.data:
@@ -497,22 +497,21 @@ class RVUData:
             if "shifts" in self.data:
                 self.records_data["shifts"] = self.data["shifts"]
         
-        # Save settings file (everything - settings, RVU tables, rules, window positions, backup)
+        # Save user settings file
         try:
-            settings_to_save = {
-                "settings": self.settings_data.get("settings", {}),
-                "direct_lookups": self.settings_data.get("direct_lookups", {}),
-                "rvu_table": self.settings_data.get("rvu_table", {}),
-                "classification_rules": self.settings_data.get("classification_rules", {}),
-                "compensation_rates": self.settings_data.get("compensation_rates", {}),
-                "window_positions": self.settings_data.get("window_positions", {}),
-                "backup": self.settings_data.get("backup", {})
-            }
-            with open(self.settings_file, 'w', encoding='utf-8') as f:
-                yaml.safe_dump(settings_to_save, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            logger.info(f"Saved settings to {self.settings_file}")
+            with open(self.user_settings_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(self.settings_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            logger.info(f"Saved user settings to {self.user_settings_file}")
         except Exception as e:
-            logger.error(f"Error saving settings: {e}")
+            logger.error(f"Error saving user settings: {e}")
+            
+        # Save rules file
+        try:
+            with open(self.rules_file, 'w', encoding='utf-8') as f:
+                yaml.safe_dump(self.rules_data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            logger.info(f"Saved rules to {self.rules_file}")
+        except Exception as e:
+            logger.error(f"Error saving rules: {e}")
         
         # Save records to SQLite database (not JSON anymore)
         if save_records:
@@ -683,6 +682,31 @@ class RVUData:
         except Exception as e:
             logger.error(f"Error importing records: {e}")
             return False
+    
+    def save_data(self, save_records=True):
+        """Save user settings to file.
+        
+        Args:
+            save_records: Deprecated, kept for compatibility. Records are auto-saved to SQLite.
+        """
+        try:
+            # Save user settings (preferences, window positions, compensation rates)
+            settings_to_save = {
+                "settings": self.data.get("settings", {}),
+                "window_positions": self.data.get("window_positions", {}),
+                "compensation_rates": self.data.get("compensation_rates", {}),
+                "backup": self.data.get("backup", {})
+            }
+            
+            with open(self.user_settings_file, 'w', encoding='utf-8') as f:
+                yaml.dump(settings_to_save, f, default_flow_style=False, allow_unicode=True)
+            
+            logger.info(f"Saved user settings to {self.user_settings_file}")
+            
+            # Records are automatically saved to SQLite database, no action needed here
+            
+        except Exception as e:
+            logger.error(f"Error saving user settings: {e}")
     
     def close(self):
         """Close database connection. Call this when app exits."""

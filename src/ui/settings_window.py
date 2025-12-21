@@ -1,6 +1,7 @@
 """Settings window for RVU Counter."""
 
 from __future__ import annotations
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import logging
@@ -310,9 +311,12 @@ class SettingsWindow:
         # Save/Cancel with version on bottom right
         save_cancel_frame = ttk.Frame(main_frame)
         save_cancel_frame.pack(fill=tk.X, pady=10)
-        
+
         ttk.Button(save_cancel_frame, text="Save", command=self.save_settings).pack(side=tk.LEFT, padx=2)
         ttk.Button(save_cancel_frame, text="Cancel", command=self.window.destroy).pack(side=tk.LEFT, padx=2)
+        
+        # What's New button (?) on the right
+        ttk.Button(save_cancel_frame, text="?  What's New", command=self.app.open_whats_new, width=12).pack(side=tk.RIGHT, padx=2)
     
     def sync_compensation_state(self, key):
         """Sync compensation checkbox state based on counter checkbox."""

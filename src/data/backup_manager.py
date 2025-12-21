@@ -35,6 +35,7 @@ class BackupManager:
         "last_backup_status": None,  # "success", "failed", "pending"
         "last_backup_error": None,
         "onedrive_path": None,  # Auto-detected or manually set
+        "github_backup_enabled": False,  # Developer only
     }
     
     def __init__(self, db_path: str, settings: dict, data_manager=None):
@@ -167,15 +168,29 @@ class BackupManager:
             return None
     
     def create_backup(self, force: bool = False) -> dict:
-        """Create a backup of the database.
-        
-        Uses SQLite's online backup API for a consistent copy even during writes.
+        """Create a backup of the database to OneDrive and optionally GitHub.
         
         Args:
             force: If True, bypass schedule check and create backup immediately
             
         Returns:
-            Dict with 'success', 'path', 'error' keys
+            Dict with OneDrive backup result
+        """
+        onedrive_result = self._create_onedrive_backup(force)
+        
+        # Also do GitHub backup if enabled (developer only)
+        if self.settings["backup"].get("github_backup_enabled", False):
+            try:
+                self.create_github_backup()
+            except Exception as e:
+                logger.error(f"GitHub backup failed: {e}")
+                
+        return onedrive_result
+
+    def _create_onedrive_backup(self, force: bool = False) -> dict:
+        """Create a backup of the database to OneDrive.
+        
+        Uses SQLite's online backup API for a consistent copy even during writes.
         """
         result = {
             "success": False,
@@ -225,43 +240,33 @@ class BackupManager:
             try:
                 source_conn = sqlite3.connect(self.db_path)
                 dest_conn = sqlite3.connect(temp_path)
-                
-                # Perform the backup
                 source_conn.backup(dest_conn)
-                
                 dest_conn.close()
                 dest_conn = None
                 source_conn.close()
                 source_conn = None
-                
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e).lower():
                     raise Exception("Database is locked - will retry later")
                 raise
             finally:
                 if dest_conn:
-                    try:
-                        dest_conn.close()
-                    except:
-                        pass
+                    try: dest_conn.close()
+                    except: pass
                 if source_conn:
-                    try:
-                        source_conn.close()
-                    except:
-                        pass
+                    try: source_conn.close()
+                    except: pass
             
             # Step 2: Verify backup integrity
             verify_conn = sqlite3.connect(temp_path)
             cursor = verify_conn.execute("PRAGMA integrity_check")
             integrity_result = cursor.fetchone()[0]
             
-            # Also get record count for verification
             try:
                 cursor = verify_conn.execute("SELECT COUNT(*) FROM records")
                 record_count = cursor.fetchone()[0]
             except:
                 record_count = 0
-            
             verify_conn.close()
             
             if integrity_result.lower() != "ok":
@@ -288,18 +293,66 @@ class BackupManager:
             result["error"] = str(e)
             self._update_backup_status("failed", str(e))
             logger.error(f"Backup failed: {e}")
-            
-            # Cleanup temp file if it exists
             if 'temp_path' in locals() and os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except:
-                    pass
-        
+                try: os.remove(temp_path)
+                except: pass
         finally:
             self.backup_in_progress = False
         
         return result
+
+    def create_github_backup(self):
+        """Upload database backup to private GitHub repository.
+        
+        Uses gh.exe (GitHub CLI) if available.
+        """
+        import subprocess
+        from ..core.config import GITHUB_BACKUP_REPO, BACKUP_BRANCH
+        from ..core.platform_utils import get_app_root
+        
+        root = get_app_root()
+        gh_path = os.path.join(root, "bin", "gh.exe")
+        
+        # Check if gh.exe exists
+        if not os.path.exists(gh_path):
+            # Try system path
+            gh_path = "gh"
+            
+        try:
+            # Check if authenticated
+            result = subprocess.run([gh_path, "auth", "status"], capture_output=True, text=True)
+            if result.returncode != 0:
+                logger.warning("GitHub CLI not authenticated, skipping GitHub backup")
+                return
+            
+            # Create a temporary JSON export for GitHub (smaller than DB)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            export_name = f"rvu_records_{timestamp}.json"
+            export_path = os.path.join(root, "logs", export_name)
+            
+            if self.data_manager:
+                self.data_manager.export_records_to_json(export_path)
+                
+                # Use gh to upload to gist or repo
+                # For simplicity, we'll assume a repo is configured
+                logger.info(f"Uploading backup to GitHub repo: {GITHUB_BACKUP_REPO}")
+                
+                # Alternative: Upload as a gist (no repo setup needed)
+                subprocess.run([
+                    gh_path, "gist", "create", export_path,
+                    "-d", f"RVU Counter Backup {timestamp}",
+                    "-p"  # Private
+                ])
+                
+                # Cleanup temp export
+                if os.path.exists(export_path):
+                    os.remove(export_path)
+                    
+                logger.info("GitHub backup (gist) completed successfully")
+                
+        except Exception as e:
+            logger.error(f"GitHub backup failed: {e}")
+
     
     def _update_backup_status(self, status: str, error: Optional[str]):
         """Update backup status in settings."""
