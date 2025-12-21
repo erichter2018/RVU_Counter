@@ -1,0 +1,101 @@
+================================================================================
+DEPRECATION NOTICE - Standalone Tools
+================================================================================
+
+The following packaging scripts and executables are NO LONGER NEEDED in v1.7:
+
+DEPRECATED:
+❌ package fix_database.bat
+❌ package RVU Excel Checker.bat
+❌ Fix Database.exe
+❌ RVU Excel Checker.exe
+
+================================================================================
+WHY DEPRECATED?
+================================================================================
+
+In v1.7, these tools have been INTEGRATED into the main RVU Counter application:
+
+✅ Database Repair → Available via "Tools" button
+✅ Excel Checker → Available via "Tools" button
+
+Users no longer need separate executables for these functions.
+
+================================================================================
+WHAT TO USE INSTEAD
+================================================================================
+
+For v1.7 and later:
+
+1. Package only the main application:
+   package RVUCounter.bat
+
+2. The resulting "RVU Counter.exe" includes:
+   • All original RVU Counter features
+   • Database Repair tool (integrated)
+   • Excel Checker tool (integrated)
+   • Auto-update system
+   • What's New viewer
+
+================================================================================
+MIGRATION FOR USERS
+================================================================================
+
+Users who previously had separate tools:
+
+OLD WORKFLOW:
+1. RVU Counter.exe (main app)
+2. Fix Database.exe (separate tool)
+3. RVU Excel Checker.exe (separate tool)
+
+NEW WORKFLOW (v1.7):
+1. RVU Counter.exe (includes everything)
+   • Click "Tools" for Database Repair
+   • Click "Tools" for Excel Checker
+
+================================================================================
+KEEPING LEGACY FILES
+================================================================================
+
+These files are kept in the packaging folder for:
+• Historical reference
+• Emergency rollback to v1.6
+• Understanding previous architecture
+
+DO NOT USE for new v1.7 builds.
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+Previous standalone tools:
+• fix_database.py → Now: src/logic/database_repair.py
+• check_rvu_excel_files.py → Now: src/logic/excel_checker.py
+
+New UI integration:
+• src/ui/tools_window.py → Provides unified UI for both tools
+
+Benefits:
+✅ One executable instead of three
+✅ Consistent UI and user experience
+✅ Easier distribution and support
+✅ Reduced complexity for users
+
+================================================================================
+QUESTIONS?
+================================================================================
+
+See:
+• PACKAGING_GUIDE.md - Current v1.7 packaging process
+• README_PACKAGING.txt - Overview of packaging folder
+• ..\IMPLEMENTATION_COMPLETE.md - Technical details of v1.7 changes
+
+================================================================================
+
+Last Updated: December 19, 2025
+Applies to: RVU Counter v1.7 and later
+
+================================================================================
+
+
+

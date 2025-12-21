@@ -10,6 +10,19 @@ import sys
 import yaml
 from pathlib import Path
 from datetime import datetime
+from typing import Tuple, Dict, List, Optional
+
+# Try to import the refactored match_study_type function
+try:
+    # Add src directory to path if running from project root
+    if Path(__file__).parent.exists():
+        sys.path.insert(0, str(Path(__file__).parent))
+    from src.logic.study_matcher import match_study_type as refactored_match_study_type
+    USE_REFACTORED = True
+except ImportError:
+    # Fallback to local copy if import fails
+    USE_REFACTORED = False
+    print("WARNING: Could not import refactored match_study_type, using local copy")
 
 try:
     import openpyxl
@@ -18,47 +31,57 @@ except ImportError:
     sys.exit(1)
 
 
-def load_rvu_settings(settings_file='rvu_settings.yaml'):
-    """Load RVU settings from YAML file."""
-    # Handle PyInstaller bundled files
-    if getattr(sys, 'frozen', False):
-        # Running as compiled executable
-        base_path = Path(sys._MEIPASS)
-    else:
-        # Running as script
-        base_path = Path(__file__).parent.absolute()
+def load_rvu_settings(settings_source=None):
+    """Load RVU settings and rules from YAML files.
     
-    settings_path = base_path / settings_file
-    
-    # Also check current working directory as fallback
-    if not settings_path.exists():
-        cwd_path = Path.cwd() / settings_file
-        if cwd_path.exists():
-            settings_path = cwd_path
-    
-    try:
-        with open(settings_path, 'r', encoding='utf-8') as f:
-            settings = yaml.safe_load(f)
-        return settings
-    except FileNotFoundError:
-        print(f"ERROR: {settings_file} not found")
+    Handles split rvu_rules.yaml and rvu_settings.yaml in v1.7+,
+    or single rvu_settings.yaml in older versions.
+    """
+    if settings_source is None:
         if getattr(sys, 'frozen', False):
-            print(f"  Running as frozen executable")
-            print(f"  Checked bundled location: {base_path / settings_file}")
-            print(f"  sys._MEIPASS: {sys._MEIPASS}")
-            # List contents for debugging
-            try:
-                files_in_bundle = list(Path(sys._MEIPASS).iterdir())
-                print(f"  Files in bundle: {[f.name for f in files_in_bundle]}")
-            except:
-                pass
+            base_dir = Path(sys._MEIPASS)
         else:
-            print(f"  Checked: {settings_path}")
-        print(f"  Also checked working directory: {Path.cwd() / settings_file}")
+            base_dir = Path(__file__).parent.absolute()
+    else:
+        base_dir = Path(settings_source)
+
+    # Check for v1.7 structure subfolder
+    v17_dir = base_dir / "settings"
+    search_dir = v17_dir if v17_dir.exists() else base_dir
+    
+    rules_path = search_dir / "rvu_rules.yaml"
+    settings_path = search_dir / "rvu_settings.yaml"
+    
+    # Fallback for old standalone settings file
+    if not settings_path.exists() and not v17_dir.exists():
+        settings_path = base_dir / "rvu_settings.yaml"
+        
+    combined_settings = {}
+    
+    # Try rules first
+    if rules_path.exists():
+        try:
+            with open(rules_path, 'r', encoding='utf-8') as f:
+                combined_settings.update(yaml.safe_load(f) or {})
+        except Exception as e:
+            print(f"WARNING: Failed to load rules from {rules_path}: {e}")
+            
+    # Then settings
+    if settings_path.exists():
+        try:
+            with open(settings_path, 'r', encoding='utf-8') as f:
+                settings_data = yaml.safe_load(f) or {}
+                for k, v in settings_data.items():
+                    if k not in combined_settings:
+                        combined_settings[k] = v
+        except Exception as e:
+            print(f"WARNING: Failed to load settings from {settings_path}: {e}")
+            
+    if not combined_settings:
+        print(f"ERROR: Could not find settings or rules in {base_dir}")
         sys.exit(1)
-    except yaml.YAMLError as e:
-        print(f"ERROR: Invalid YAML in {settings_file}: {e}")
-        sys.exit(1)
+        
+    return combined_settings
 
 
 def find_column_index(headers, target_names):
@@ -80,8 +103,12 @@ def find_column_index(headers, target_names):
 def check_procedure_match(procedure_text, rvu_table, classification_rules, direct_lookups):
     """
     Check what study type and RVU would be assigned to this procedure.
-    Mirrors the match_study_type function from RVUCounter.pyw to ensure consistency.
+    Uses refactored logic if available, otherwise falls back to local copy.
     """
+    if USE_REFACTORED:
+        return refactored_match_study_type(procedure_text, rvu_table, classification_rules, direct_lookups)
+    
+    # Fallback to local copy
     if not procedure_text:
         return "Unknown", 0.0
     
@@ -93,7 +120,6 @@ def check_procedure_match(procedure_text, rvu_table, classification_rules, direc
         direct_lookups = {}
     
     procedure_lower = procedure_text.lower().strip()
-    procedure_stripped = procedure_text.strip()
     
     # Check classification rules
     classification_match_name = None
@@ -211,6 +237,14 @@ def check_procedure_match(procedure_text, rvu_table, classification_rules, direc
             if "pet" in procedure_lower and "ct" in procedure_lower:
                 pet_ct_match = (study_type, rvu)
             continue
+        
+        # Special handling for "CTA Brain with Perfusion" - don't match via partial matching
+        # unless it has CTA/angio indicators (classification rules should handle it if it does)
+        if study_lower == "cta brain with perfusion":
+            # Only match if it has CTA/angio indicators (otherwise classification rules would have matched it)
+            has_cta_indicator = ("cta" in procedure_lower or "angio" in procedure_lower or "angiography" in procedure_lower)
+            if not has_cta_indicator:
+                continue  # Skip partial matching for this study type if no CTA indicators
         
         if study_lower in procedure_lower or procedure_lower in study_lower:
             score = len(study_type)

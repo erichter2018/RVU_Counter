@@ -1,0 +1,162 @@
+backup:
+  backup_retention_count: 10
+  backup_schedule: shift_end
+  cloud_backup_enabled: true
+  first_backup_prompt_shown: true
+  github_backup_enabled: false
+  last_backup_error: null
+  last_backup_status: success
+  last_backup_time: '2025-12-20T08:03:26.962028'
+  onedrive_path: C:\Users\erik.richter\OneDrive - Radiology Partners Inc
+  setup_prompt_dismissed: true
+compensation_rates:
+  weekday:
+    assoc:
+      10am: 29
+      10pm: 38
+      11am: 29
+      11pm: 39
+      12am: 39
+      12pm: 29
+      1am: 39
+      1pm: 29
+      2am: 41
+      2pm: 29
+      3am: 41
+      3pm: 29
+      4am: 41
+      4pm: 32
+      5am: 41
+      5pm: 32
+      6am: 39
+      6pm: 32
+      7am: 39
+      7pm: 32
+      8am: 29
+      8pm: 35
+      9am: 29
+      9pm: 37
+    partner:
+      10am: 31
+      10pm: 39
+      11am: 31
+      11pm: 40
+      12am: 41
+      12pm: 31
+      1am: 41
+      1pm: 31
+      2am: 43
+      2pm: 31
+      3am: 43
+      3pm: 31
+      4am: 43
+      4pm: 34
+      5am: 43
+      5pm: 34
+      6am: 41
+      6pm: 34
+      7am: 41
+      7pm: 34
+      8am: 31
+      8pm: 36
+      9am: 31
+      9pm: 37
+  weekend:
+    assoc:
+      10am: 32
+      10pm: 39
+      11am: 32
+      11pm: 40
+      12am: 41
+      12pm: 32
+      1am: 41
+      1pm: 32
+      2am: 43
+      2pm: 32
+      3am: 43
+      3pm: 32
+      4am: 43
+      4pm: 34
+      5am: 41
+      5pm: 34
+      6am: 41
+      6pm: 34
+      7am: 32
+      7pm: 34
+      8am: 32
+      8pm: 36
+      9am: 32
+      9pm: 37
+    partner:
+      10am: 34
+      10pm: 41
+      11am: 34
+      11pm: 42
+      12am: 43
+      12pm: 34
+      1am: 43
+      1pm: 34
+      2am: 45
+      2pm: 34
+      3am: 45
+      3pm: 34
+      4am: 45
+      4pm: 36
+      5am: 45
+      5pm: 36
+      6am: 43
+      6pm: 36
+      7am: 43
+      7pm: 36
+      8am: 34
+      8pm: 38
+      9am: 34
+      9pm: 39
+settings:
+  auto_start: true
+  dark_mode: true
+  data_source: Auto
+  efficiency_heatmap_mode: count
+  efficiency_study_count_mode: average
+  ignore_duplicate_accessions: true
+  last_seen_version: 1.7.5
+  min_study_seconds: 1
+  pace_comparison_mode: prior
+  pace_goal_rvu_per_hour: 15.0
+  pace_goal_shift_hours: 9.0
+  pace_goal_total_rvu: 135.0
+  role: Partner
+  shift_length_hours: 9
+  show_avg: true
+  show_comp_avg: false
+  show_comp_last_full_hour: false
+  show_comp_last_hour: false
+  show_comp_projected: false
+  show_comp_projected_shift: false
+  show_comp_total: false
+  show_last_full_hour: true
+  show_last_hour: true
+  show_pace_car: true
+  show_projected: true
+  show_projected_shift: true
+  show_time: true
+  show_total: true
+  stay_on_top: true
+window_positions:
+  backup_history:
+    x: 5762
+    y: 2
+  main:
+    x: 4986
+    y: 148
+    width: 249
+    height: 472
+  settings:
+    x: 5254
+    y: -310
+  statistics:
+    x: 5092
+    y: -263
+  tools:
+    x: 5327
+    y: -179

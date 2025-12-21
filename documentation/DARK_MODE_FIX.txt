@@ -1,0 +1,70 @@
+================================================================================
+RVU COUNTER v1.7 - DARK MODE FIX
+================================================================================
+Date: December 19, 2025
+Status: ✅ FIXED
+
+================================================================================
+ISSUE
+================================================================================
+
+❌ Tools window not fully dark mode compliant
+   - ScrolledText areas were showing white background in dark mode
+   - Text was black on white even when dark mode enabled
+
+================================================================================
+FIX APPLIED
+================================================================================
+
+FILE: src/ui/tools_window.py
+
+✅ Added text color properties:
+   - self.text_bg = "#2d2d2d" if dark_mode else "#ffffff"
+   - self.text_fg = "#ffffff" if dark_mode else "#000000"
+
+✅ Applied colors to Database Repair text area:
+   - bg=self.text_bg (dark gray in dark mode)
+   - fg=self.text_fg (white in dark mode)
+   - insertbackground=self.text_fg (cursor color)
+
+✅ Applied colors to Excel Checker text area:
+   - bg=self.text_bg (dark gray in dark mode)
+   - fg=self.text_fg (white in dark mode)
+   - insertbackground=self.text_fg (cursor color)
+
+================================================================================
+DARK MODE COLORS
+================================================================================
+
+Window Background: #1e1e1e (very dark gray)
+Text Areas Background: #2d2d2d (medium dark gray)
+Text Color: #ffffff (white)
+Cursor Color: #ffffff (white)
+
+LIGHT MODE COLORS:
+Window Background: #f0f0f0 (light gray)
+Text Areas Background: #ffffff (white)
+Text Color: #000000 (black)
+Cursor Color: #000000 (black)
+
+================================================================================
+TESTING
+================================================================================
+
+✅ Application starts successfully
+✅ Tools window opens correctly
+✅ Dark mode: Text areas show dark background with white text
+✅ Light mode: Text areas show white background with black text
+✅ Both tabs (Database Repair & Excel Checker) are dark mode compliant
+
+================================================================================
+STATUS
+================================================================================
+
+Dark Mode Compliance: ✅ COMPLETE
+All Text Widgets: ✅ STYLED
+Testing: ✅ PASSED
+
+READY FOR USE: YES ✅
+
+================================================================================

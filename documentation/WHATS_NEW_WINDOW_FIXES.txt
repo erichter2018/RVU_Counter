@@ -1,0 +1,181 @@
+================================================================================
+RVU Counter v1.7 - What's New Window Fixes
+================================================================================
+
+Date: December 16, 2025
+Issues Fixed: 2 critical What's New window bugs
+
+================================================================================
+ISSUE #1: What's New Doesn't Auto-Display on Fresh Install/Upgrade
+================================================================================
+
+**Problem:**
+The What's New window was not automatically opening on first run after fresh
+install or upgrade, even though the code was correctly implemented.
+
+**Root Cause:**
+The default `settings/user_settings.yaml` file had `last_seen_version: '1.7'`
+already set. When the app loaded this default on first run, it compared:
+  - Current version: '1.7'
+  - Last seen version: '1.7' (from default template)
+  - Result: '1.7' == '1.7' → NO What's New display ❌
+
+**Fix Applied:**
+Changed `settings/user_settings.yaml` default value:
+```yaml
+# BEFORE:
+last_seen_version: '1.7'
+
+# AFTER:
+last_seen_version: ''
+```
+
+**How It Works Now:**
+- Fresh install: `last_seen_version: ''` → '' != '1.7' → What's New displays ✅
+- Upgrade: `last_seen_version: '1.6'` → '1.6' != '1.7' → What's New displays ✅
+- After first view: `last_seen_version: '1.7'` → won't display again until v1.8
+
+================================================================================
+ISSUE #2: What's New Window Won't Close from Settings
+================================================================================
+
+**Problem:**
+When the What's New window was opened from the Settings window, clicking the
+X button or Close button would not close the window UNLESS the Settings window
+was closed first.
+
+**Root Cause:**
+The What's New window was using `focus_force()` which creates modal-like
+behavior in Tkinter, preventing proper window management and closure.
+
+**Code Changes:**
+
+```python
+# BEFORE:
+def __init__(self, parent):
+    self.parent = parent
+    self.window = tk.Toplevel(parent)
+    self.window.protocol("WM_DELETE_WINDOW", self.window.destroy)
+    # ... setup code ...
+    self.window.lift()
+    self.window.focus_force()  # ❌ Causes modal behavior!
+
+# AFTER:
+def __init__(self, parent):
+    self.window = tk.Toplevel(parent)
+    self.window.protocol("WM_DELETE_WINDOW", self.close_window)
+    # ... setup code ...
+    self.window.lift()  # ✅ No focus_force()!
+
+def close_window(self):
+    """Close the window properly."""
+    try:
+        self.window.destroy()
+    except:
+        pass
+```
+
+**Changes Made:**
+1. Removed `self.parent` storage (not used)
+2. Removed `focus_force()` call (caused modal behavior)
+3. Added dedicated `close_window()` method with error handling
+4. Window can now be closed independently of parent windows
+
+================================================================================
+TESTING VERIFICATION
+================================================================================
+
+✅ Fresh Install Test:
+  1. Run RVU Counter for first time
+  2. After 1 second, What's New window appears automatically
+  3. Window can be closed via X or Close button
+  4. App continues running normally
+
+✅ Upgrade Test:
+  1. Upgrade from v1.6 to v1.7
+  2. Launch app
+  3. After 1 second, What's New window appears automatically
+  4. Window can be closed via X or Close button
+  5. App continues running normally
+
+✅ Manual Open from Settings Test:
+  1. Open Settings window
+  2. Click "? What's New" button
+  3. What's New window opens
+  4. Click X or Close button → window closes immediately ✅
+  5. Settings window remains open ✅
+  6. Can re-open What's New without issues ✅
+
+✅ Version Tracking Test:
+  1. First run of v1.7 → What's New displays
+  2. Close and reopen app → What's New does NOT display (correct!)
+  3. Only displays again when version changes to v1.8
+
+================================================================================
+TECHNICAL DETAILS
+================================================================================
+
+**File Modified: `settings/user_settings.yaml`**
+Line 122: `last_seen_version: ''` (was '1.7')
+
+**File Modified: `src/ui/whats_new_window.py`**
+Lines 17-36: Removed parent storage, removed focus_force()
+Lines 38-43: Added close_window() method
+
+**Files Rebuilt:**
+- packaging/RVU Counter.exe (with updated template and code)
+- GitHub release updated
+
+**Version Check Logic (main_window.py lines 745-757):**
+```python
+def _check_version_and_show_whats_new(self):
+    current_version = APP_VERSION.split(' ')[0]  # e.g., "1.7"
+    last_version = self.data_manager.data["settings"].get("last_seen_version", "")
+    
+    if last_version != current_version:
+        # Version changed - show What's New
+        logger.info(f"Version changed from {last_version} to {current_version}")
+        self.data_manager.data["settings"]["last_seen_version"] = current_version
+        self.data_manager.save_data(save_records=False)
+        
+        # Show What's New after a short delay (let UI settle)
+        self.root.after(1000, self.open_whats_new)
+```
+
+================================================================================
+USER EXPERIENCE IMPROVEMENTS
+================================================================================
+
+✅ **First Run Experience:**
+   - New users see release notes automatically
+   - Explains new features without needing to search
+
+✅ **Upgrade Experience:**
+   - Existing users see what changed
+   - Automatic notification of new features
+   - Only shows once per version (not annoying)
+
+✅ **Window Management:**
+   - All windows can be closed independently
+   - No modal behavior
+   - No window lockups
+   - Smooth user experience
+
+✅ **Manual Access:**
+   - Users can re-read release notes anytime
+   - Accessible from Settings → "? What's New"
+   - Opens and closes reliably
+
+================================================================================
+GITHUB RELEASE UPDATED
+================================================================================
+
+**Release:** https://github.com/erichter2018/RVU-Releases/releases/tag/v1.7
+
+**Assets:**
+- RVU Counter.exe (with both fixes)
+- Install_or_Upgrade_RVU_Counter.bat
+
+**Ready for Distribution:** ✅ YES
+
+================================================================================

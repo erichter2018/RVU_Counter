@@ -1,0 +1,356 @@
+================================================================================
+⚠️ TESTING CHECKLIST - COMPLETE BEFORE GITHUB UPLOAD
+================================================================================
+Status: 🔴 NOT YET TESTED
+Date: December 19, 2025
+
+EXE Location: packaging\RVU Counter.exe
+Size: 50.42 MB
+Build Date: 12/19/2025 4:42 PM
+
+================================================================================
+🧪 TEST #1: MANUAL EXE (Quick Test)
+================================================================================
+
+Purpose: Verify the exe works standalone
+Duration: ~5 minutes
+
+Steps:
+□ 1. Create test folder: C:\temp\rvu_test_manual\
+□ 2. Copy "RVU Counter.exe" from packaging\ to test folder
+□ 3. Double-click RVU Counter.exe
+
+Verify:
+□ App starts without errors
+□ Creates: data\, settings\, helpers\, logs\ folders
+□ Creates: settings\user_settings.yaml
+□ Creates: settings\rvu_rules.yaml
+□ Creates: data\rvu_records.db (empty)
+□ UI displays correctly
+
+Basic Function Tests:
+□ Click "Start Shift" - works
+□ Click "+ Manual Study" - dialog opens
+□ Add study: "CT CHEST WITH IV CONTRAST"
+   Expected: Should match CT Chest (1.6 RVU)
+□ Check RVU counter updates
+□ Click "Statistics" - window opens
+□ Click wrench icon (🔧) - Tools window opens
+□ Tools window tabs: Database Repair + Excel Checker visible
+□ Click "Settings" - window opens
+□ Click "?" in Settings - What's New viewer opens
+□ Toggle dark mode - UI changes to dark theme
+□ Reopen Tools - verify dark mode applied
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #2: FRESH INSTALL (Batch File Test)
+================================================================================
+
+Purpose: Verify Install_or_Upgrade_RVU_Counter.bat works for new users
+Duration: ~5 minutes
+
+Setup:
+□ 1. Create test folder: C:\temp\rvu_test_fresh\
+□ 2. Copy "Install_or_Upgrade_RVU_Counter.bat" to test folder
+     (From: c:\Users\erik.richter\Desktop\e_tools\Install_or_Upgrade_RVU_Counter.bat)
+
+**IMPORTANT**: Before running, temporarily upload RVU Counter.exe to GitHub!
+   - Or modify batch file line 190 to use local path for testing
+   - Line 190: set "DOWNLOAD_URL=..." change to local file
+
+Steps:
+□ 3. Run Install_or_Upgrade_RVU_Counter.bat
+□ 4. When prompted "Fresh or Upgrade?", verify says "FRESH INSTALLATION"
+□ 5. Press any key to continue
+□ 6. Watch progress
+
+Verify:
+□ Creates folder structure (data, settings, helpers, logs)
+□ Downloads RVU Counter.exe (or copies if using local path)
+□ Starts RVU Counter automatically
+□ Empty database created
+□ App works correctly
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #3: UPGRADE (Batch File Test)
+================================================================================
+
+Purpose: Verify Install_or_Upgrade_RVU_Counter.bat preserves existing data
+Duration: ~5 minutes
+
+Setup:
+□ 1. Create test folder: C:\temp\rvu_test_upgrade\
+□ 2. Copy your EXISTING RVU Counter installation there:
+     - RVU Counter.exe (or old version like "RVU Counter 1.6.exe")
+     - rvu_records.db (your database with real data)
+     - rvu_settings.yaml (your settings)
+     OR copy everything from your working RVU Counter folder
+
+□ 3. Copy Install_or_Upgrade_RVU_Counter.bat to that folder
+
+Steps:
+□ 4. Run Install_or_Upgrade_RVU_Counter.bat
+□ 5. When prompted, verify says "UPGRADE"
+□ 6. Press any key to continue
+□ 7. Watch progress
+
+Verify:
+□ Detects existing installation
+□ Creates backup folder with timestamp
+□ Creates new folder structure (data, settings, helpers, logs)
+□ Moves database to data\rvu_records.db
+□ Downloads new RVU Counter.exe
+□ Cleans up old exe files
+□ Starts new version
+
+Check Data Preservation:
+□ Open Statistics - all your old data visible
+□ Check shift history - matches your records
+□ Check settings - preserved (except split into two files)
+□ Test a shift - works normally
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #4: DARK MODE (UI Test)
+================================================================================
+
+Purpose: Verify full dark mode compliance
+Duration: ~3 minutes
+
+Steps:
+□ 1. Open RVU Counter (from any test above)
+□ 2. Settings → Check "Dark Mode" → Save
+□ 3. Close and reopen app
+
+Verify Main Window:
+□ Background is dark (#1e1e1e)
+□ Text is light/white
+□ All buttons visible
+□ Wrench icon visible
+
+Verify Statistics Window:
+□ Background is dark
+□ All text visible
+□ Graphs display correctly
+□ All views (Summary, By Study, etc.) work
+
+Verify Tools Window:
+□ Window background dark
+□ Tabs properly colored:
+   - Selected: Blue (#0078d7)
+   - Unselected: Dark gray (#2d2d2d)
+□ Text areas dark background, white text
+□ Cursor visible (white)
+□ Both tabs (Database Repair & Excel Checker) properly styled
+
+Verify Settings Window:
+□ Background dark
+□ All controls visible and styled
+□ "What's New" button visible and styled
+
+Verify What's New Window:
+□ Background dark
+□ Text visible
+□ Scrolling works
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #5: WINDOW POSITIONS (Multi-Window Test)
+================================================================================
+
+Purpose: Verify all windows save/restore positions
+Duration: ~3 minutes
+
+Steps:
+□ 1. Open RVU Counter
+□ 2. Move main window to a specific location
+□ 3. Open Statistics - move to different location
+□ 4. Open Tools (wrench icon) - move to different location
+□ 5. Open Settings - move to different location
+□ 6. Close ALL windows
+□ 7. Reopen RVU Counter
+
+Verify:
+□ Main window opens at saved position
+□ Statistics opens at saved position
+□ Tools opens at saved position
+□ Settings opens at saved position
+
+Multi-Monitor Test (if applicable):
+□ Move Tools window to second monitor
+□ Close app
+□ Reopen app
+□ Tools window opens on second monitor at saved position
+
+Disconnect Monitor Test (if applicable):
+□ Move Tools to second monitor
+□ Close app
+□ Disconnect second monitor
+□ Reopen app
+□ Tools window appears on primary monitor (not off-screen)
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #6: RVU CLASSIFICATIONS (Data Accuracy Test)
+================================================================================
+
+Purpose: Verify RVU fixes are working
+Duration: ~5 minutes
+
+Add these studies manually and verify RVU values:
+
+□ 1. "CT ABDOMEN WITHOUT CONTRAST"
+     Expected: CT Abdomen - 1.0 RVU ✓
+
+□ 2. "MRI BRAIN WITHOUT WITH CONTRAST AND MRA"
+     Expected: MRI Brain with MRA - 2.3 RVU ✓
+
+□ 3. "XR BILATERAL AC JOINTS"
+     Expected: XR MSK Bilateral - 0.6 RVU ✓
+
+□ 4. "XR ABDOMEN 3 VIEWS WITH LEFT LATERAL DECUBITUS"
+     Expected: XR Abdomen - 0.4 RVU ✓
+     (NOT US Abdomen!)
+
+□ 5. "CT CERVICAL THORACIC AND LUMBAR SPINE WITHOUT CONTRAST"
+     Expected: CT Triple Spine - 5.25 RVU ✓
+
+□ 6. "CT HEAD FACE AND CERVICAL SPINE WITHOUT CONTRAST"
+     Expected: CT Head Face and Cervical - 2.9 RVU ✓
+
+□ 7. "CTA LOWER EXTREMITY RIGHT"
+     Expected: CTA Lower Extremity - 1.75 RVU ✓
+
+□ 8. "MRI HIP BILATERAL WITHOUT CONTRAST"
+     Expected: MRI Hip Bilateral - 3.5 RVU ✓
+
+□ 9. "CT HEAD PERFUSION WITH IV CONTRAST"
+     Expected: CT Other - 1.0 RVU ✓
+     (NOT CTA Brain with Perfusion!)
+
+□ 10. Check Statistics - verify all studies appear with correct RVUs
+
+Result: _____ (PASS/FAIL)
+Failed Studies: _________________________________
+
+================================================================================
+🧪 TEST #7: INTEGRATED TOOLS (New Features Test)
+================================================================================
+
+Purpose: Verify new Tools window functionality
+Duration: ~5 minutes
+
+Database Repair Tab:
+□ 1. Click wrench icon (🔧) - Tools window opens
+□ 2. Select "Database Repair" tab
+□ 3. Click "Scan for Mismatches"
+□ 4. Watch progress bar
+□ 5. Verify results display correctly
+     - If no mismatches: Shows "✓ No mismatches found!"
+     - If mismatches: Shows list of mismatches
+□ 6. If mismatches found:
+     - Click "Fix All Mismatches"
+     - Confirm dialog appears
+     - Click Yes
+     - Watch progress
+     - Verify "Success" message
+
+Excel Checker Tab:
+□ 7. Select "Excel Checker" tab
+□ 8. Click "Select Excel File"
+□ 9. Choose an Excel payroll file (if available)
+□ 10. Watch processing
+□ 11. Verify report displays in text area
+□ 12. Click "Export Report"
+□ 13. Save report to file
+□ 14. Verify file created and readable
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+🧪 TEST #8: WHAT'S NEW VIEWER (New Feature Test)
+================================================================================
+
+Purpose: Verify What's New viewer works
+Duration: ~2 minutes
+
+Steps:
+□ 1. Open Settings
+□ 2. Look for "?" button in bottom right
+□ 3. Click "?" button
+□ 4. What's New window opens
+□ 5. Verify content displays:
+     - Title: "What's New in RVU Counter v1.7"
+     - Sections visible and formatted
+     - Scrolling works
+     - Text is readable
+□ 6. Close window
+□ 7. If in dark mode, verify window is dark themed
+
+Result: _____ (PASS/FAIL)
+Notes: _________________________________
+
+================================================================================
+📋 OVERALL TEST SUMMARY
+================================================================================
+
+Test #1 (Manual EXE):          _____ (PASS/FAIL)
+Test #2 (Fresh Install):       _____ (PASS/FAIL)
+Test #3 (Upgrade):             _____ (PASS/FAIL)
+Test #4 (Dark Mode):           _____ (PASS/FAIL)
+Test #5 (Window Positions):    _____ (PASS/FAIL)
+Test #6 (RVU Classifications): _____ (PASS/FAIL)
+Test #7 (Integrated Tools):    _____ (PASS/FAIL)
+Test #8 (What's New Viewer):   _____ (PASS/FAIL)
+
+Critical Bugs Found: _________________________________
+
+Minor Issues Found: _________________________________
+
+Overall Status: _____ (READY / NOT READY)
+
+================================================================================
+✅ SIGN-OFF
+================================================================================
+
+If ALL tests pass, you are ready to:
+
+□ Upload to GitHub
+   - Go to: https://github.com/erichter2018/RVU-Releases
+   - Create release: v1.7
+   - Upload: RVU Counter.exe (EXACT name with space!)
+   - Add release notes from WHATS_NEW_v1.7.md
+   - Mark as "Latest release"
+   - Publish
+
+□ Distribute to users
+   - Send Install_or_Upgrade_RVU_Counter.bat
+   - Or share GitHub release link
+   - Include DISTRIBUTION_README.txt
+
+□ Monitor for issues
+   - Watch for user feedback
+   - Be ready for hotfix if needed
+
+Tester: _________________
+Date: ___________________
+Signature: ______________
+
+================================================================================
+
+🎉 Good luck with testing and release! 🎉
+
+================================================================================

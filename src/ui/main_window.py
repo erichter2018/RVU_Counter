@@ -143,6 +143,11 @@ class RVUCounterApp:
         # Data management
         self.data_manager = RVUData()
         
+        # Update manager
+        from ..core.update_manager import UpdateManager
+        self.update_manager = UpdateManager()
+        self.update_info = None
+        
         # Set stay on top based on settings (default True if not set)
         stay_on_top = self.data_manager.data["settings"].get("stay_on_top", True)
         self.root.attributes("-topmost", stay_on_top)
@@ -191,6 +196,12 @@ class RVUCounterApp:
         self.typical_shift_end_hour = 8     # 8am default
         self._calculate_typical_shift_times()  # Update from historical data
         
+        # Check for updates
+        self._check_for_updates()
+        
+        # Check if this is first run after update (show What's New)
+        self._check_version_and_show_whats_new()
+        
         # Adaptive polling variables for PowerScribe worker thread
         import time
         self._last_accession_seen = ""
@@ -229,6 +240,10 @@ class RVUCounterApp:
         self._primary_source = "PowerScribe"  # Which source to check first
         self._last_secondary_check = 0  # Timestamp of last secondary source check
         self._secondary_check_interval = 5.0  # How often to check secondary when primary is idle (seconds)
+        
+        # Inactivity auto-end shift tracker
+        self.last_activity_time = datetime.now()
+        self._auto_end_prompt_shown = False
         
         self._ps_thread_running = True
         self._ps_thread = threading.Thread(target=self._powerscribe_worker, daemon=True)
@@ -347,6 +362,16 @@ class RVUCounterApp:
         self.shift_start_label = ttk.Label(top_section, text="", font=("Arial", 8), foreground="gray")
         self.shift_start_label.grid(row=0, column=1, sticky=tk.W, padx=(8, 0), pady=(0, 0))
         
+        # Row 0: Tools icon in very top right corner
+        tools_frame = ttk.Frame(top_section)
+        tools_frame.grid(row=0, column=1, sticky=tk.NE, padx=(0, 2), pady=(2, 0))
+        
+        self.tools_icon = tk.Label(tools_frame, text="🔧", font=("Arial", 12), 
+                                   fg="gray", cursor="hand2",
+                                   bg=self.root.cget('bg'))
+        self.tools_icon.pack()
+        self.tools_icon.bind("<Button-1>", lambda e: self.open_tools())
+        
         # Row 1: Data source indicator (left) and version (right)
         self.data_source_indicator = ttk.Label(top_section, text="detecting...", 
                                                font=("Arial", 7), foreground="gray", cursor="hand2")
@@ -370,6 +395,12 @@ class RVUCounterApp:
         version_text = f"v{APP_VERSION}"
         self.version_label = ttk.Label(version_frame, text=version_text, font=("Arial", 7), foreground="gray")
         self.version_label.pack(side=tk.LEFT)
+        
+        # Update available button (hidden by default)
+        self.update_btn = tk.Label(version_frame, text="⚠️ Update!", font=("Arial", 8, "bold"),
+                                   fg="white", bg="#ff6b00", cursor="hand2", padx=5, pady=2)
+        self.update_btn.bind("<Button-1>", lambda e: self._handle_update_click())
+        # Don't pack yet, wait for check
         
         # Counters frame - use tk.LabelFrame with explicit border control for tighter spacing
         self.counters_frame = tk.LabelFrame(main_frame, bd=1, relief=tk.GROOVE, padx=2, pady=2)
@@ -646,6 +677,102 @@ class RVUCounterApp:
         # Apply theme colors to tk widgets (must be done AFTER widgets are created)
         self._update_tk_widget_colors()
     
+    def _check_for_updates(self):
+        """Check for updates in a background thread."""
+        def run_check():
+            try:
+                available, release_info = self.update_manager.check_for_updates()
+                if available:
+                    self.update_info = release_info
+                    # Update UI in main thread
+                    self.root.after(0, self._show_update_available)
+            except Exception as e:
+                logger.error(f"Error in update check thread: {e}")
+        
+        threading.Thread(target=run_check, daemon=True).start()
+
+    def _show_update_available(self):
+        """Show the update available notification."""
+        self.update_btn.pack(side=tk.LEFT, padx=(5, 0))
+        logger.info("Update available UI shown")
+
+    def _handle_update_click(self):
+        """Handle click on update button."""
+        if not self.update_info:
+            return
+            
+        version = self.update_info.get("tag_name", "Unknown")
+        msg = f"A new version ({version}) is available. Would you like to download and install it now?\n\nThe application will close during the update."
+        
+        if messagebox.askyesno("Update Available", msg):
+            self._start_update()
+
+    def _start_update(self):
+        """Start the update download and application."""
+        # Create progress window with dark mode
+        progress_win = tk.Toplevel(self.root)
+        progress_win.title("Updating...")
+        progress_win.geometry("350x120")
+        progress_win.transient(self.root)
+        progress_win.grab_set()
+        progress_win.configure(bg='#2b2b2b')  # Dark background
+        
+        # Center on parent
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - 175
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - 60
+        progress_win.geometry(f"350x120+{x}+{y}")
+        
+        status_label = ttk.Label(progress_win, text="Downloading update...", padding=10,
+                                 background='#2b2b2b', foreground='white')
+        status_label.pack()
+        
+        # Progress bar
+        progress = ttk.Progressbar(progress_win, mode='determinate', maximum=100)
+        progress.pack(fill=tk.X, padx=20, pady=5)
+        
+        # Percentage label
+        percent_label = ttk.Label(progress_win, text="0%", padding=5,
+                                  background='#2b2b2b', foreground='white')
+        percent_label.pack()
+        
+        def update_progress(current, total):
+            """Update progress bar from background thread."""
+            if total > 0:
+                percentage = int((current / total) * 100)
+                self.root.after(0, lambda: progress.configure(value=percentage))
+                self.root.after(0, lambda: percent_label.config(text=f"{percentage}%"))
+        
+        def do_download():
+            try:
+                new_exe = self.update_manager.download_update(self.update_info, progress_callback=update_progress)
+                if new_exe:
+                    # Success - launch updater
+                    self.root.after(0, lambda: status_label.config(text="Installing update..."))
+                    self.root.after(0, lambda: self.update_manager.start_update_process(new_exe))
+                else:
+                    self.root.after(0, lambda: messagebox.showerror("Update Error", "Failed to download update."))
+                    self.root.after(0, progress_win.destroy)
+            except Exception as e:
+                logger.error(f"Error downloading update: {e}")
+                self.root.after(0, lambda: messagebox.showerror("Update Error", f"An error occurred: {e}"))
+                self.root.after(0, progress_win.destroy)
+        
+        threading.Thread(target=do_download, daemon=True).start()
+
+    def _check_version_and_show_whats_new(self):
+        """Check if this is first run after update and show What's New."""
+        current_version = APP_VERSION.split(' ')[0]  # e.g., "1.7"
+        last_version = self.data_manager.data["settings"].get("last_seen_version", "")
+        
+        if last_version != current_version:
+            # Version changed - show What's New
+            logger.info(f"Version changed from {last_version} to {current_version}, showing What's New")
+            self.data_manager.data["settings"]["last_seen_version"] = current_version
+            self.data_manager.save_data(save_records=False)
+            
+            # Show What's New after a short delay (let UI settle)
+            self.root.after(1000, self.open_whats_new)
+
     def setup_refresh(self):
         """Setup periodic refresh."""
         # Always refresh to update debug display, but only track if running
@@ -756,26 +883,63 @@ class RVUCounterApp:
             
             current_time = datetime.now()
             
-            # ALWAYS use reference time (e.g., 11pm) for pace comparison
-            # This normalizes all shifts to the same starting point for fair comparison
-            reference_start = self._get_reference_shift_start(current_time)
+            # Get actual shift start
+            shift_start_str = self.data_manager.data["current_shift"].get("shift_start")
+            if not shift_start_str:
+                logger.warning("[PACE] No shift_start found")
+                return
+            shift_start = datetime.fromisoformat(shift_start_str)
             
-            # Elapsed time since reference start (11pm) in minutes
-            elapsed_minutes = (current_time - reference_start).total_seconds() / 60
-            if elapsed_minutes < 0:
-                elapsed_minutes = 0
+            # Determine comparison method based on mode and shift start time
+            use_elapsed_time = False
             
-            logger.info(f"[PACE] Current time: {current_time.strftime('%H:%M:%S')}, "
-                       f"Reference (11pm): {reference_start.strftime('%H:%M:%S')}, Elapsed: {elapsed_minutes:.1f}min")
+            if self.pace_comparison_mode == 'goal':
+                # Goal mode: always use elapsed time
+                use_elapsed_time = True
+            else:
+                # For other modes: check if shift started near typical start time
+                # If shift start is more than 30 minutes from typical start, use elapsed time
+                typical_start_hour = self.typical_shift_start_hour
+                
+                # Calculate minute difference from typical start time
+                typical_start = shift_start.replace(hour=typical_start_hour, minute=0, second=0, microsecond=0)
+                # Handle case where typical start is previous day (e.g., shift at 1am, typical is 11pm yesterday)
+                if shift_start.hour < typical_start_hour:
+                    typical_start = typical_start - timedelta(days=1)
+                
+                minutes_diff = abs((shift_start - typical_start).total_seconds() / 60)
+                
+                # If started >30 minutes from typical, treat as elapsed time comparison
+                if minutes_diff > 30:
+                    use_elapsed_time = True
+                    logger.info(f"[PACE] Shift started {minutes_diff:.0f}min from typical ({typical_start_hour}:00), using elapsed time comparison")
+            
+            if use_elapsed_time:
+                # Elapsed time mode: calculate from actual shift start
+                elapsed_minutes = (current_time - shift_start).total_seconds() / 60
+                if elapsed_minutes < 0:
+                    elapsed_minutes = 0
+                logger.info(f"[PACE] Elapsed mode - Current: {current_time.strftime('%H:%M:%S')}, "
+                           f"Shift start: {shift_start.strftime('%H:%M:%S')}, Elapsed: {elapsed_minutes:.1f}min")
+            else:
+                # Reference time mode: use 11pm reference for time-of-day comparison
+                reference_start = self._get_reference_shift_start(current_time)
+                elapsed_minutes = (current_time - reference_start).total_seconds() / 60
+                if elapsed_minutes < 0:
+                    elapsed_minutes = 0
+                logger.info(f"[PACE] Reference mode - Current: {current_time.strftime('%H:%M:%S')}, "
+                           f"Reference (11pm): {reference_start.strftime('%H:%M:%S')}, Elapsed: {elapsed_minutes:.1f}min")
             
             # Get prior shift data (returns tuple: rvu_at_elapsed, total_rvu)
-            prior_data = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes)
+            prior_data = self._get_prior_shift_rvu_at_elapsed_time(elapsed_minutes, use_elapsed_time)
             
             if prior_data is None:
                 # No prior shift data available
-                self.pace_label_now_text.config(text="No prior shift data")
+                logger.warning(f"[PACE] No pace data available for mode: {self.pace_comparison_mode}")
+                self.pace_label_now_text.config(text=f"No data ({self.pace_comparison_mode})")
                 self.pace_label_now_value.config(text="")
                 self.pace_label_separator.config(text="")
+                self.pace_label_prior_text.config(text="")
                 self.pace_label_prior_value.config(text="")
                 self.pace_label_time.config(text="")
                 self.pace_label_right.config(text="")
@@ -1520,30 +1684,40 @@ class RVUCounterApp:
         
         return reference
     
-    def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float):
+    def _get_prior_shift_rvu_at_elapsed_time(self, elapsed_minutes: float, use_elapsed_time: bool = False):
         """Get RVU from comparison source at the same elapsed time.
         
         Returns tuple (rvu_at_elapsed, total_rvu) or None if no data available.
         Uses self.pace_comparison_mode to determine comparison source:
         - 'goal': Theoretical pace based on settings (RVU/h × hours)
         - 'prior', 'best_week', 'best_ever', 'week_N': Actual historical shifts
+        
+        Args:
+            elapsed_minutes: Time elapsed (from shift start or reference time)
+            use_elapsed_time: If True, compare based on elapsed time from shift start.
+                            If False, compare based on reference time (11pm).
         """
         try:
             logger.info(f"[PACE] _get_prior_shift_rvu_at_elapsed_time: mode={self.pace_comparison_mode}, elapsed={elapsed_minutes:.1f}min, cached_shift={self.pace_comparison_shift is not None}")
             # Handle 'goal' mode - theoretical pace
             if self.pace_comparison_mode == 'goal':
-                goal_rvu_h = self.data_manager.data["settings"].get("pace_goal_rvu_per_hour", 15.0)
-                goal_hours = self.data_manager.data["settings"].get("pace_goal_shift_hours", 9.0)
-                goal_total = goal_rvu_h * goal_hours
-                
-                # Calculate RVU at current elapsed time
-                elapsed_hours = elapsed_minutes / 60.0
-                rvu_at_elapsed = goal_rvu_h * elapsed_hours
-                
-                # Cap at total (in case elapsed exceeds goal hours)
-                rvu_at_elapsed = min(rvu_at_elapsed, goal_total)
-                
-                return (rvu_at_elapsed, goal_total)
+                try:
+                    goal_rvu_h = float(self.data_manager.data["settings"].get("pace_goal_rvu_per_hour", 15.0))
+                    goal_hours = float(self.data_manager.data["settings"].get("pace_goal_shift_hours", 9.0))
+                    goal_total = goal_rvu_h * goal_hours
+                    
+                    # Calculate RVU at current elapsed time
+                    elapsed_hours = elapsed_minutes / 60.0
+                    rvu_at_elapsed = goal_rvu_h * elapsed_hours
+                    
+                    # Cap at total (in case elapsed exceeds goal hours)
+                    rvu_at_elapsed = min(rvu_at_elapsed, goal_total)
+                    
+                    logger.info(f"[PACE] Goal mode: {goal_rvu_h:.1f} RVU/h × {elapsed_hours:.2f}h = {rvu_at_elapsed:.1f} RVU (total: {goal_total:.1f})")
+                    return (rvu_at_elapsed, goal_total)
+                except Exception as e:
+                    logger.error(f"[PACE] Error in goal mode calculation: {e}")
+                    return None
             
             # Determine which shift to use for comparison
             comparison_shift = None
@@ -1584,24 +1758,31 @@ class RVUCounterApp:
             # Get comparison shift's actual start time
             prior_start = datetime.fromisoformat(comparison_shift["shift_start"])
             
-            # Use reference time approach: normalize to typical shift start hour (e.g., 11pm)
-            # This ensures fair comparison even if shifts started at slightly different times
-            start_hour = self.typical_shift_start_hour
-            
-            # Create reference time for prior shift (e.g., 11pm on the day of shift)
-            prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
-            
-            # Handle case where shift started after midnight (e.g., 1am) but reference is 11pm
-            if prior_start.hour < start_hour:
-                # Shift started after midnight, so reference 11pm is on previous day
-                prior_reference = prior_reference - timedelta(days=1)
-            
-            # Calculate target time: reference (11pm) + elapsed minutes
-            target_time = prior_reference + timedelta(minutes=elapsed_minutes)
-            
-            logger.info(f"[PACE] Prior shift: actual_start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
-                       f"reference_11pm={prior_reference.strftime('%Y-%m-%d %H:%M:%S')}, "
-                       f"target_time={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            # Calculate target time based on comparison mode
+            if use_elapsed_time:
+                # Elapsed time mode: compare X minutes into each shift
+                target_time = prior_start + timedelta(minutes=elapsed_minutes)
+                logger.info(f"[PACE] Elapsed comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
+                           f"elapsed={elapsed_minutes:.1f}min, target={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                # Reference time mode: normalize to typical shift start hour (e.g., 11pm)
+                # This ensures fair comparison for shifts that started at similar times of day
+                start_hour = self.typical_shift_start_hour
+                
+                # Create reference time for prior shift (e.g., 11pm on the day of shift)
+                prior_reference = prior_start.replace(hour=start_hour, minute=0, second=0, microsecond=0)
+                
+                # Handle case where shift started after midnight (e.g., 1am) but reference is 11pm
+                if prior_start.hour < start_hour:
+                    # Shift started after midnight, so reference 11pm is on previous day
+                    prior_reference = prior_reference - timedelta(days=1)
+                
+                # Calculate target time: reference (11pm) + elapsed minutes
+                target_time = prior_reference + timedelta(minutes=elapsed_minutes)
+                
+                logger.info(f"[PACE] Reference comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
+                           f"reference_11pm={prior_reference.strftime('%Y-%m-%d %H:%M:%S')}, "
+                           f"target={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
             # Sum RVU for all records finished before target_time
             rvu_at_elapsed = 0.0
@@ -1696,9 +1877,18 @@ class RVUCounterApp:
             # New study - record it
             records.append(study_record)
             self.data_manager.save()
+            
+            # Reset inactivity timer on new study
+            self.last_activity_time = datetime.now()
+            self._auto_end_prompt_shown = False
+            
             # Add to seen_accessions so duplicate checks are faster
             self.tracker.seen_accessions.add(accession)
             logger.info(f"Recorded new study: {accession} - {study_record.get('study_type', 'Unknown')} ({study_record.get('rvu', 0):.1f} RVU) - Duration: {new_duration:.1f}s")
+        
+        # Reset inactivity timer on ANY update or new study to be safe
+        self.last_activity_time = datetime.now()
+        self._auto_end_prompt_shown = False
     
     def _record_multi_accession_study(self, current_time):
         """Record a completed multi-accession study as SEPARATE individual studies.
@@ -3522,8 +3712,32 @@ class RVUCounterApp:
             if self.data_manager.data["current_shift"].get("shift_start"):
                 self.data_manager.end_current_shift()
             
-            # Start new shift
-            self.shift_start = datetime.now()
+            # Determine shift start time
+            # If keeping temp records with >5 RVU, retroactively extend shift to earliest study time
+            retroactive_shift_start = None
+            if keep_temp_records and total_rvu > 5.0:
+                # Find the earliest time_performed from temporary records
+                earliest_time = None
+                for record in temp_records:
+                    time_performed_str = record.get("time_performed")
+                    if time_performed_str:
+                        try:
+                            time_performed = datetime.fromisoformat(time_performed_str)
+                            if earliest_time is None or time_performed < earliest_time:
+                                earliest_time = time_performed
+                        except (ValueError, TypeError):
+                            continue
+                
+                if earliest_time:
+                    # Set shift start to earliest study time (rounded down to nearest minute for cleanliness)
+                    retroactive_shift_start = earliest_time.replace(second=0, microsecond=0)
+                    logger.info(f"Retroactively extending shift start to {retroactive_shift_start} based on {total_rvu:.1f} RVU in temporary studies")
+            
+            # Start new shift - use retroactive time if available, otherwise use current time
+            if retroactive_shift_start:
+                self.shift_start = retroactive_shift_start
+            else:
+                self.shift_start = datetime.now()
             
             # Calculate effective shift start (rounded to hour if within 15 min)
             minutes_into_hour = self.shift_start.minute
@@ -3546,6 +3760,7 @@ class RVUCounterApp:
             # Handle temporary records based on user choice
             if keep_temp_records:
                 # Keep existing records, mark their accessions as seen
+                # Records already have their correct time_performed values, so they'll be placed at the right times
                 for record in temp_records:
                     self.tracker.seen_accessions.add(record.get("accession", ""))
             else:
@@ -3574,6 +3789,11 @@ class RVUCounterApp:
                 self.pace_car_frame.pack(fill=tk.X, pady=(0, 2), after=self.counters_frame)
             self.data_manager.save()
             logger.info(f"Shift started at {self.shift_start}")
+            
+            # Reset inactivity tracker on shift start
+            self.last_activity_time = datetime.now()
+            self._auto_end_prompt_shown = False
+            
             self.update_display()
     
     def undo_last(self):
@@ -3784,6 +4004,67 @@ class RVUCounterApp:
         
         return total_comp
     
+    def _handle_inactivity_prompt(self):
+        """Prompt user when no activity for 1 hour."""
+        result = messagebox.askyesno(
+            "Inactive Shift",
+            "No new studies have been detected for over an hour.\n\n"
+            "Did your shift end?\n\n"
+            "• Yes - End shift at the time of the last study\n"
+            "• No - Keep the shift running",
+            parent=self.root
+        )
+        
+        if result:
+            logger.info("User confirmed shift ended due to inactivity")
+            
+            # Find the most recent study's time_finished
+            records = self.data_manager.data["current_shift"].get("records", [])
+            shift_end_time = datetime.now()
+            
+            if records:
+                try:
+                    last_study_times = []
+                    for r in records:
+                        if r.get("time_finished"):
+                            last_study_times.append(datetime.fromisoformat(r["time_finished"]))
+                    
+                    if last_study_times:
+                        shift_end_time = max(last_study_times)
+                        logger.info(f"Setting inactive shift end to last study time: {shift_end_time}")
+                except Exception as e:
+                    logger.error(f"Error determining inactivity end time: {e}")
+            
+            # Stop the shift using the calculated end time
+            self.is_running = False
+            self.data_manager.data["current_shift"]["shift_end"] = shift_end_time.isoformat()
+            self.data_manager.end_current_shift()
+            
+            # Cleanup state
+            self.data_manager.data["current_shift"]["shift_start"] = None
+            self.data_manager.data["current_shift"]["shift_end"] = None
+            self.data_manager.data["current_shift"]["records"] = []
+            
+            self.start_btn.config(text="Start Shift")
+            self.root.title("RVU Counter - Stopped")
+            self.shift_start = None
+            self.effective_shift_start = None
+            self.projected_shift_end = None
+            self.update_shift_start_label()
+            self.update_recent_studies_label()
+            for widget in self.study_widgets:
+                widget.destroy()
+            self.study_widgets.clear()
+            self.data_manager.save()
+            self.pace_car_frame.pack_forget()
+            self._update_counters_only()
+            self.update_display()
+        else:
+            logger.info("User chose to keep shift running after inactivity prompt")
+            # Reset the timer
+            self.last_activity_time = datetime.now()
+            self._auto_end_prompt_shown = False
+
     def calculate_stats(self) -> dict:
         """Calculate statistics."""
         if not self.shift_start:
@@ -3975,6 +4256,15 @@ class RVUCounterApp:
         
         stats = self.calculate_stats()
         settings = self.data_manager.data["settings"]
+        
+        # Check for inactivity if shift is running
+        if self.is_running and not self._auto_end_prompt_shown:
+            current_time = datetime.now()
+            inactivity_minutes = (current_time - self.last_activity_time).total_seconds() / 60
+            
+            if inactivity_minutes >= 60:
+                self._auto_end_prompt_shown = True
+                self.root.after(1, self._handle_inactivity_prompt)
         
         if settings.get("show_total", True):
             self.total_label_text.grid()
@@ -4528,6 +4818,16 @@ class RVUCounterApp:
         """Open statistics modal."""
         from .statistics_window import StatisticsWindow
         StatisticsWindow(self.root, self.data_manager, self)
+    
+    def open_tools(self):
+        """Open tools window (Database Repair & Excel Checker)."""
+        from .tools_window import ToolsWindow
+        ToolsWindow(self.root, self)
+    
+    def open_whats_new(self):
+        """Open What's New window."""
+        from .whats_new_window import WhatsNewWindow
+        WhatsNewWindow(self.root)
     
     def apply_theme(self):
         """Apply light or dark theme based on settings."""

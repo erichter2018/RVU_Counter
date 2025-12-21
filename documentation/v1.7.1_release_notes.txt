@@ -1,0 +1,12 @@
+RVU Counter v1.7.1 - Auto-Update Test Release
+==============================================
+
+This is a test release to validate the auto-update mechanism.
+
+Changes in v1.7.1:
+- Fixed pace car Goal mode to use elapsed time from actual shift start
+- Fixed pace car Best/Prior modes to intelligently switch between:
+  * Time-of-day comparison (if shift starts within 30 min of typical 11pm)
+  * Elapsed time comparison (if shift starts >30 min from typical)
+
+Users running v1.7 should see an update notification and be able to upgrade automatically.

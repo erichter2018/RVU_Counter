@@ -20,7 +20,7 @@ settings:
   data_source: Auto
   show_time: true
   stay_on_top: true
-  efficiency_heatmap_mode: none
+  efficiency_heatmap_mode: count
   show_pace_car: true
   pace_goal_rvu_per_hour: 15.0
   pace_goal_shift_hours: 9.0
@@ -31,7 +31,7 @@ direct_lookups: {}
 rvu_table:
   MRI Brain: 2.3
   MRI Brain with MRA and MRV: 4.6
-  MRI Brain with MRA: 6.9
+  MRI Brain with MRA: 2.3
   MRI Spine: 1.75
   MRI Spine Cervical: 1.75
   MRI Spine Thoracic: 1.75
@@ -51,13 +51,19 @@ rvu_table:
   CT CAP: 3.06
   CT CAP Trauma: 3.0
   CTA CAP: 3.06
-  CTA Chest + CT AP: 2.68
+  CTA Chest + CT AP: 3.0
   CTA AP: 1.68
   CT CA: 2.0
   CT AP: 1.68
+  CT Abdomen: 1.0
+  MRI Hip Bilateral: 3.5
   CT 3D Imaging Processing: 1.75
-  CT Extremity Bilateral: 2.0
+  CT Extremity Bilateral: 1.0
+  CT Lower Extremity: 1.0
+  CT Upper Extremity: 1.0
+  CT Outside Film Read: 0.9
   CT Other: 1.0
+  XR Scanogram: 1.0
   NM Myocardial stress: 1.62
   NM Other: 1.0
   PET CT: 3.6
@@ -95,7 +101,10 @@ rvu_table:
   CTA Runoff with Abdo/Pelvis: 2.75
   Bone Survey: 1.0
   CTA Brain and Neck: 3.5
-  CTA Brain and Neck with Perfusion: 4.5
+  CTA Brain and Neck with Perfusion: 4.65
+  CT Triple Spine: 5.25
+  CT Head Face and Cervical: 2.9
+  CTA Lower Extremity: 1.75
   CT Neck Chest: 2.5
   CT Brain and Cervical: 1.9
   CT TL Spine: 2.0
@@ -214,7 +223,6 @@ classification_rules:
     - perfusion
     any_of_keywords:
     - CTA
-    - contrast
     - angio
     - angiography
     excluded_keywords:
@@ -232,7 +240,6 @@ classification_rules:
     - perfusion
     any_of_keywords:
     - CTA
-    - contrast
     - angio
     - angiography
     excluded_keywords:
@@ -292,12 +299,23 @@ classification_rules:
     excluded_keywords:
     - head
     - brain
+  CT Triple Spine:
+  - required_keywords:
+    - CT
+    - cervical
+    - thoracic
+    - lumbar
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
   CT TL Spine:
   - required_keywords:
     - CT
     - thor
     - lumb
     excluded_keywords:
+    - cervical
     - XR
     - xr
     - x-ray
@@ -463,8 +481,17 @@ classification_rules:
     - angiography
   - required_keywords:
     - CT
+    - stone
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  CT Abdomen:
+  - required_keywords:
+    - CT
     - abdomen
     excluded_keywords:
+    - pel
     - chest
     - XR
     - xr
@@ -473,11 +500,15 @@ classification_rules:
     - angiography
   - required_keywords:
     - CT
-    - stone
+    - abd
     excluded_keywords:
+    - pel
+    - chest
     - XR
     - xr
     - x-ray
+    - angio
+    - angiography
   CT Neck Chest:
   - required_keywords:
     - CT
@@ -520,6 +551,25 @@ classification_rules:
     - neck
     - abd
     - pel
+    - XR
+    - xr
+    - x-ray
+  CT Head Face and Cervical:
+  - required_keywords:
+    - CT
+    - head
+    - face
+    - cervical
+    excluded_keywords:
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - brain
+    - facial
+    - cervical
+    excluded_keywords:
     - XR
     - xr
     - x-ray
@@ -688,6 +738,20 @@ classification_rules:
     - head
     any_of_keywords:
     - mra
+    - angiography
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MRI
+    - brain
+    - angiography
+    excluded_keywords:
+    - mrv
+    - venography
+  - required_keywords:
+    - MR
+    - brain
     - angiography
     excluded_keywords:
     - mrv
@@ -905,6 +969,15 @@ classification_rules:
     - elbow
     - wrist
     - hand
+  MRI Hip Bilateral:
+  - required_keywords:
+    - MRI
+    - hip
+    - bilateral
+  - required_keywords:
+    - MR
+    - hip
+    - bilateral
   MRI Lower Extremity:
   - required_keywords:
     - MRI
@@ -1108,12 +1181,22 @@ classification_rules:
     - prostate
     - bladder
     - transvaginal
+    - XR
+    - xr
+    - x-ray
+    - CT
+    - ct
   - required_keywords:
     - US
     - abdomen
     excluded_keywords:
     - pelvis
     - transvaginal
+    - XR
+    - xr
+    - x-ray
+    - CT
+    - ct
   US Pelvis:
   - required_keywords:
     - US
@@ -1184,6 +1267,13 @@ classification_rules:
     - foot
     - humerus
     - forearm
+    - acromioclavicular
+    - ac joints
+    - ac joint
+    - foreign body
+    - calcaneus
+    - tmj
+    - temporomandibular
     - tibia-fibula
     - tibia/fibula
     - tib/fib
@@ -1207,12 +1297,19 @@ classification_rules:
   XR Abdomen:
   - required_keywords:
     - XR
+    any_of_keywords:
     - abd
+    - abdomen
+    - decubitus
   XR Exam Unlisted:
   - required_keywords:
     - XR
     - exam
     - unlisted
+  XR Scanogram:
+  - required_keywords:
+    - XR
+    - scanogram
   Bone Survey:
   - required_keywords:
     - bone
@@ -1244,6 +1341,9 @@ classification_rules:
     - foot
     - humerus
     - forearm
+    - acromioclavicular
+    - ac joints
+    - ac joint
     - tibia-fibula
     - tibia/fibula
     - tib/fib
@@ -1343,6 +1443,77 @@ classification_rules:
     - body
   - required_keywords:
     - XR
+  CTA Lower Extremity:
+  - required_keywords:
+    - CT
+    - lower
+    - extremity
+    any_of_keywords:
+    - angio
+    - angiography
+    - CTA
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Lower Extremity:
+  - required_keywords:
+    - CT
+    any_of_keywords:
+    - lower extremity
+    - hip
+    - femur
+    - knee
+    - leg
+    - ankle
+    - foot
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - lower
+    - extremity
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Upper Extremity:
+  - required_keywords:
+    - CT
+    any_of_keywords:
+    - upper extremity
+    - shoulder
+    - humerus
+    - elbow
+    - arm
+    - forearm
+    - wrist
+    - hand
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  - required_keywords:
+    - CT
+    - upper
+    - extremity
+    excluded_keywords:
+    - bilateral
+    - XR
+    - xr
+    - x-ray
+  CT Outside Film Read:
+  - required_keywords:
+    - CT
+    - outside
+    - film
+    - read
   CT Other:
   - required_keywords:
     - CT
@@ -1468,15 +1639,15 @@ compensation_rates:
 window_positions:
   main:
     x: 4986
-    y: 118
+    y: 148
     width: 249
-    height: 502
+    height: 472
   settings:
     x: 5254
     y: -310
   statistics:
     x: 5092
-    y: -288
+    y: -263
   backup_history:
     x: 5762
     y: 2
@@ -1484,7 +1655,7 @@ backup:
   cloud_backup_enabled: true
   backup_schedule: shift_end
   backup_retention_count: 10
-  last_backup_time: '2025-12-17T08:00:35.950787'
+  last_backup_time: '2025-12-19T08:00:07.735584'
   last_backup_status: success
   last_backup_error: null
   onedrive_path: C:\Users\erik.richter\OneDrive - Radiology Partners Inc

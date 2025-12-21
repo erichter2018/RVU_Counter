@@ -208,30 +208,46 @@ def find_nearest_monitor_for_window(x: int, y: int, width: int, height: int) -> 
 # App Paths
 # =============================================================================
 
+def get_app_root():
+    """Get the root directory of the application, handling portable executable cases."""
+    if getattr(sys, 'frozen', False):
+        # Running as a compiled .exe
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as a script - assume root is parent of 'src'
+        # script_dir is src/core/
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.abspath(os.path.join(script_dir, "..", ".."))
+
+def ensure_directories():
+    """Create the required directory structure if it doesn't exist."""
+    # Import inside to avoid circular dependency
+    from .config import SETTINGS_FOLDER, DATA_FOLDER, HELPERS_FOLDER, LOG_FOLDER
+    
+    root = get_app_root()
+    for folder in [SETTINGS_FOLDER, DATA_FOLDER, HELPERS_FOLDER, LOG_FOLDER]:
+        path = os.path.join(root, folder)
+        if not os.path.exists(path):
+            os.makedirs(path, exist_ok=True)
+
 def get_app_paths():
     """Get the correct paths for bundled app vs running as script.
 
     Returns:
         tuple: (settings_dir, data_dir)
         - settings_dir: Where bundled settings file is (read-only in bundle)
-        - data_dir: Where to store persistent data (records, window positions)
+        - data_dir: The root directory for data (next to exe or project root)
     """
     if getattr(sys, 'frozen', False):
         # Running as PyInstaller bundle
-        # Settings are bundled in _MEIPASS (temp folder)
         settings_dir = sys._MEIPASS
-        # Data should be stored next to the .exe for persistence
         data_dir = os.path.dirname(sys.executable)
-        logger.info(f"Running as frozen app: settings={settings_dir}, data={data_dir}")
     else:
         # Running as script
-        # Go up from src/core/ to the root directory
-        script_dir = os.path.dirname(os.path.abspath(__file__))  # src/core/
-        src_dir = os.path.dirname(script_dir)  # src/
-        root_dir = os.path.dirname(src_dir)  # root/
-        settings_dir = root_dir
-        data_dir = root_dir
-        logger.info(f"Running as script: settings={settings_dir}, data={data_dir}")
+        data_dir = get_app_root()
+        settings_dir = data_dir
+        
+    logger.info(f"App paths: settings={settings_dir}, data={data_dir}")
     return settings_dir, data_dir
 
 
@@ -241,4 +257,6 @@ __all__ = [
     'is_point_on_any_monitor',
     'find_nearest_monitor_for_window',
     'get_app_paths',
+    'get_app_root',
+    'ensure_directories',
 ]

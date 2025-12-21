@@ -1,0 +1,108 @@
+================================================================================
+WHAT'S NEW DOCUMENT - UPDATED
+================================================================================
+Date: December 19, 2025
+Status: ✅ COMPLETE
+
+================================================================================
+CHANGES MADE
+================================================================================
+
+1. ✅ REMOVED "COMING SOON" SECTION
+   - Deleted entire "Coming Soon" section (was lines 52-57)
+   - All features listed there are already implemented and working
+
+2. ✅ MOVED FEATURES TO "MAJOR FEATURES" SECTION
+   - Added "Integrated Tools (New!)" section
+   - Added "What's New Viewer (New!)" section
+   - Now properly documented as completed features
+
+================================================================================
+WHAT WAS IN "COMING SOON" (NOW IMPLEMENTED)
+================================================================================
+
+❌ REMOVED FROM "COMING SOON":
+- Integrated Tools → Now documented as implemented
+- Self-Healing Documentation → Already working (not mentioned in coming soon removal)
+- In-App What's New Viewer → Now documented as implemented
+
+✅ ADDED TO "MAJOR FEATURES":
+- Integrated Tools (New!)
+  * Database Repair Tool
+  * Excel Payroll Checker
+  * Access via wrench icon (🔧)
+
+- What's New Viewer (New!)
+  * In-App Release Notes
+  * Access via "?" button in Settings
+
+================================================================================
+FILE UPDATED
+================================================================================
+
+FILE: documentation/WHATS_NEW_v1.7.md
+
+BEFORE:
+- Had "Coming Soon" section listing incomplete features
+- Features were actually already implemented
+
+AFTER:
+- "Coming Soon" section removed
+- Implemented features properly documented in "Major Features"
+- Clear instructions on how to access new features
+
+================================================================================
+NEW DOCUMENT STRUCTURE
+================================================================================
+
+1. 🚀 Major Features
+   - Auto-Update System
+   - Integrated Tools (NEW!)
+   - What's New Viewer (NEW!)
+   - Improved Data Organization
+
+2. 🔧 Bug Fixes & Improvements
+   - RVU Classification Enhancements (19 items)
+   - Performance & Stability
+
+3. 📋 Migration Notes
+   - First Launch instructions
+
+4. Thank you message
+
+================================================================================
+VERIFICATION
+================================================================================
+
+✅ "Coming Soon" section completely removed
+✅ Integrated Tools properly documented
+✅ What's New Viewer properly documented
+✅ Clear access instructions provided
+✅ No promises of incomplete features
+✅ All listed features are working
+
+================================================================================
+BENEFITS
+================================================================================
+
+✓ No confusion about what's available vs. coming
+✓ Users know exactly what features are in v1.7
+✓ Clear instructions on accessing new features
+✓ Professional documentation
+✓ Accurate feature list
+
+================================================================================
+STATUS
+================================================================================
+
+Document: ✅ UPDATED
+Accuracy: ✅ CORRECT
+Completeness: ✅ COMPLETE
+Ready for Use: ✅ YES
+
+================================================================================
+
+All locked RVU Counter processes closed.
+What's New document updated and accurate.
+
+================================================================================

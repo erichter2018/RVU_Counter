@@ -1214,13 +1214,16 @@ class StatisticsWindow:
         # Hide all Canvas tables and frames (they will be recreated/shown by each view)
         canvas_tables = ['_summary_table', '_all_studies_table', '_by_modality_table', 
                         '_by_patient_class_table', '_by_study_type_table', '_by_body_part_table', 
-                        '_by_hour_table', '_compensation_table', '_projection_table']
+                        '_by_hour_table', '_compensation_table', '_projection_table',
+                        '_comparison_controls_frame', '_comparison_content_frame']
         for table_attr in canvas_tables:
             if hasattr(self, table_attr):
                 try:
-                    table = getattr(self, table_attr)
-                    if hasattr(table, 'frame'):
-                        table.frame.pack_forget()
+                    attr_val = getattr(self, table_attr)
+                    if hasattr(attr_val, 'frame'):
+                        attr_val.frame.pack_forget()
+                    elif isinstance(attr_val, (tk.Widget, ttk.Widget)):
+                        attr_val.pack_forget()
                 except:
                     pass
         
@@ -1305,27 +1308,39 @@ class StatisticsWindow:
                     pass
                 
                 # Clean up ALL comparison-related stored data
-                cleanup_attrs = [
-                    '_comparison_canvas_widgets',
-                    '_comparison_data1',
-                    '_comparison_data2', 
+                # Destroy widgets first before setting to None
+                widget_attrs = [
+                    '_comparison_controls_frame',
+                    '_comparison_content_frame',
                     '_comparison_scroll_canvas',
                     '_comparison_scrollable_frame',
                     '_comparison_mousewheel_canvas',
                     '_comparison_mousewheel_frame',
-                    '_comparison_mousewheel_callback',
-                    '_comparison_controls_frame',
-                    '_comparison_content_frame',
                     '_comparison_modality_frame'
                 ]
                 
-                for attr in cleanup_attrs:
+                for attr in widget_attrs:
                     if hasattr(self, attr):
                         try:
-                            # Set to None so it gets recreated when switching back
+                            widget = getattr(self, attr)
+                            if widget and isinstance(widget, (tk.Widget, ttk.Widget)):
+                                widget.destroy()
                             setattr(self, attr, None)
                         except:
                             pass
+                            
+                # Clean up data references
+                data_attrs = [
+                    '_comparison_canvas_widgets',
+                    '_comparison_data1',
+                    '_comparison_data2',
+                    '_comparison_records1',
+                    '_comparison_records2',
+                    '_comparison_mousewheel_callback'
+                ]
+                for attr in data_attrs:
+                    if hasattr(self, attr):
+                        setattr(self, attr, None)
         
         # Show/hide efficiency checkboxes based on view mode
         if view_mode == "efficiency":
@@ -1467,7 +1482,7 @@ class StatisticsWindow:
         all_modalities = {}
         for record in records:
             try:
-                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                rec_time = datetime.fromisoformat(record.get("time_finished", ""))
                 hour = rec_time.hour
             except:
                 continue
@@ -1515,13 +1530,13 @@ class StatisticsWindow:
         total_studies = sum(d["studies"] for d in hour_data.values())
         total_rvu = sum(d["rvu"] for d in hour_data.values())
         
-        # Find the earliest time_performed to determine shift start hour
+        # Find the earliest time_finished to determine shift start hour
         start_hour = None
         if records:
             earliest_time = None
             for record in records:
                 try:
-                    rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                    rec_time = datetime.fromisoformat(record.get("time_finished", ""))
                     if earliest_time is None or rec_time < earliest_time:
                         earliest_time = rec_time
                 except:
@@ -3014,9 +3029,9 @@ class StatisticsWindow:
             modality = study_type.split()[0] if study_type else "Unknown"
             
             try:
-                rec_time = datetime.fromisoformat(record.get("time_performed", ""))
+                rec_time = datetime.fromisoformat(record.get("time_finished", ""))
                 hour = rec_time.hour
-                record_time_str = record.get("time_performed", "")
+                record_time_str = record.get("time_finished", "")
             except:
                 continue
             
@@ -3652,6 +3667,11 @@ class StatisticsWindow:
         total_rvu = sum(r.get("rvu", 0) for r in records)
         avg_rvu = total_rvu / total_studies if total_studies > 0 else 0
         
+        # Get compensation color from theme (dark green for light mode, lighter green for dark mode)
+        comp_color = "dark green"
+        if self.app and hasattr(self.app, 'theme_colors'):
+            comp_color = self.app.theme_colors.get("comp_color", "dark green")
+        
         # Calculate time span - sum of actual shift durations, not time from first to last record
         hours = 0.0
         shifts_with_records = {}  # Initialize outside conditional
@@ -3667,7 +3687,9 @@ class StatisticsWindow:
             record_times = []
             for r in records:
                 try:
-                    record_times.append(datetime.fromisoformat(r.get("time_performed", "")))
+                    time_str = r.get("time_finished") or r.get("time_performed", "")
+                    if time_str:
+                        record_times.append(datetime.fromisoformat(time_str))
                 except:
                     pass
             
@@ -4025,8 +4047,8 @@ class StatisticsWindow:
             hourly_stats_per_shift[shift_start_str] = {}
             for r in shift_records:
                 try:
-                    time_performed = datetime.fromisoformat(r.get("time_performed", ""))
-                    hour = time_performed.hour
+                    time_finished = datetime.fromisoformat(r.get("time_finished", ""))
+                    hour = time_finished.hour
                     
                     if hour not in hourly_stats_per_shift[shift_start_str]:
                         hourly_stats_per_shift[shift_start_str][hour] = {
@@ -4134,20 +4156,19 @@ class StatisticsWindow:
         self._summary_table.add_row({'metric': 'Total RVU', 'value': f"{total_rvu:.1f}"})
         self._summary_table.add_row({'metric': 'Average RVU per Study', 'value': f"{avg_rvu:.2f}"})
         
-        # Calculate compensation above average RVU per study (in dollars per hour)
-        above_avg_records = [r for r in records if r.get("rvu", 0) > avg_rvu]
-        if above_avg_records and hours > 0:
-            # Calculate total compensation for above-average studies
-            above_avg_compensation = sum(self._calculate_study_compensation(r) for r in above_avg_records)
+        # Calculate total compensation for all records
+        if records and hours > 0:
+            # Calculate total compensation for all studies
+            total_comp = sum(self._calculate_study_compensation(r) for r in records)
             # Calculate compensation per hour
-            above_avg_comp_per_hour = above_avg_compensation / hours
+            comp_per_hour = total_comp / hours
             self._summary_table.add_row({
-                'metric': 'Hourly compensation rate',
-                'value': f"${above_avg_comp_per_hour:,.2f}/hr"
-            })
+                'metric': 'Hourly Compensation Rate',
+                'value': f"${comp_per_hour:,.2f}/hr"
+            }, cell_text_colors={'value': comp_color})
         else:
             self._summary_table.add_row({
-                'metric': 'Hourly compensation rate',
+                'metric': 'Hourly Compensation Rate',
                 'value': 'N/A'
             })
         
@@ -4271,13 +4292,13 @@ class StatisticsWindow:
                 self._summary_table.add_row({
                     'metric': '  XR to $100',
                     'value': f"{xr_studies_for_100:.1f} studies, {xr_time_for_100_formatted}"
-                })
+                }, cell_text_colors={'metric': comp_color})
             elif xr_time_for_100_formatted != "N/A":
                 # Show time even if compensation rate not set
                 self._summary_table.add_row({
                     'metric': '  XR to $100',
                     'value': f"{xr_time_for_100_formatted} (rate not set)"
-                })
+                }, cell_text_colors={'metric': comp_color})
             else:
                 self._summary_table.add_row({
                     'metric': '  XR to $100',
@@ -4289,13 +4310,13 @@ class StatisticsWindow:
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
                     'value': f"{ct_studies_for_100:.1f} studies, {ct_time_for_100_formatted}"
-                })
+                }, cell_text_colors={'metric': comp_color})
             elif ct_time_for_100_formatted != "N/A":
                 # Show time even if compensation rate not set
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
                     'value': f"{ct_time_for_100_formatted} (rate not set)"
-                })
+                }, cell_text_colors={'metric': comp_color})
             else:
                 self._summary_table.add_row({
                     'metric': '  CT to $100',
@@ -5301,9 +5322,8 @@ class StatisticsWindow:
         
         # Create persistent control frame OUTSIDE scrollable area (only once)
         if not hasattr(self, '_comparison_controls_frame') or self._comparison_controls_frame is None:
-            # Clear existing content first
-            for widget in self.table_frame.winfo_children():
-                widget.destroy()
+            # We don't need to clear table_frame here because refresh_data() 
+            # already hides all known tables and frames.
             
             # Create control frame at top (fixed, not scrollable)
             controls_frame = ttk.Frame(self.table_frame)

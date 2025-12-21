@@ -1,0 +1,126 @@
+================================================================================
+RVU Counter v1.7 - What's New Window FINAL FIX
+================================================================================
+
+Date: December 16, 2025
+Status: ✅ FIXED AND DEPLOYED
+
+================================================================================
+THE ROOT CAUSE
+================================================================================
+
+**Settings Window (line 49 of settings_window.py):**
+```python
+self.window.grab_set()
+```
+
+The Settings window was MODAL - it grabbed ALL input! This prevented any child
+windows (like What's New) from receiving mouse/keyboard events.
+
+**Result:**
+- What's New window would open but couldn't be interacted with
+- X button wouldn't work
+- Close button wouldn't work
+- HAD to close Settings first to regain control
+
+================================================================================
+THE SOLUTION
+================================================================================
+
+**Make What's New Override the Modal Grab:**
+
+```python
+# In WhatsNewWindow.__init__:
+self.window.grab_set()      # Override Settings' grab
+self.window.focus_force()   # Take focus
+
+# In close_window():
+self.window.grab_release()  # Release grab first
+self.window.destroy()       # Then destroy
+```
+
+**How It Works:**
+1. Settings opens with grab_set() - becomes modal
+2. What's New opens and calls grab_set() - steals the grab from Settings
+3. What's New is now interactive and can be closed
+4. When What's New closes, it releases grab properly
+5. Settings automatically regains control (its grab_set is still active)
+
+================================================================================
+WHAT WAS TESTED
+================================================================================
+
+✅ **From Main Window:**
+   - Open What's New → works
+   - Close with X → works
+   - Close with button → works
+   - Can reopen multiple times → works
+
+✅ **From Settings Window:**
+   - Settings is modal (grab_set)
+   - Click "? What's New" → opens
+   - What's New is interactive ✅
+   - Click X → closes immediately ✅
+   - Click Close button → closes immediately ✅
+   - Settings regains focus ✅
+   - Can reopen What's New ✅
+
+✅ **Auto-Open on First Run:**
+   - Fresh install → What's New appears automatically
+   - Upgrade → What's New appears automatically
+   - Subsequent runs → doesn't appear (correct!)
+
+================================================================================
+FILES MODIFIED
+================================================================================
+
+**src/ui/whats_new_window.py:**
+- Line 31: Added `self.window.grab_set()`
+- Line 32: Added `self.window.focus_force()`
+- Line 39: Added `self.window.grab_release()` before destroy
+
+**settings/user_settings.yaml:**
+- Line 122: Set `last_seen_version: ''` for fresh installs
+
+================================================================================
+GITHUB RELEASE
+================================================================================
+
+**Release:** https://github.com/erichter2018/RVU-Releases/releases/tag/v1.7
+
+**Assets:**
+- ✅ RVU Counter.exe (final version with fix)
+- ✅ Install_or_Upgrade_RVU_Counter.bat
+
+**Ready for Distribution:** ✅ YES
+
+================================================================================
+KEY LEARNINGS
+================================================================================
+
+1. **Modal Windows (grab_set):**
+   - Prevents ALL other windows from receiving input
+   - Child windows must override with their own grab_set()
+   - Always release grab before destroying window
+
+2. **Window Hierarchy:**
+   - Toplevel() creates independent window (good)
+   - But doesn't bypass modal grabs (bad)
+   - Must explicitly grab_set() to override
+
+3. **Proper Cleanup:**
+   - grab_release() before destroy() prevents issues
+   - Ensures parent window regains control smoothly
+
+================================================================================
+FINAL VERIFICATION
+================================================================================
+
+✅ Local testing confirmed working
+✅ Packaged successfully
+✅ Uploaded to GitHub
+✅ Ready for user distribution
+
+🎉 What's New window now works perfectly from all contexts! 🎉
+
+================================================================================

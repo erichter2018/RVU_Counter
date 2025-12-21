@@ -1,0 +1,346 @@
+================================================================================
+GITHUB RELEASE INSTRUCTIONS - RVU Counter v1.7
+================================================================================
+Date: December 19, 2025
+Status: ✅ READY FOR UPLOAD
+
+================================================================================
+📦 WHAT'S READY
+================================================================================
+
+✅ RVU Counter.exe (v1.7) - PACKAGED
+   Location: packaging\RVU Counter.exe
+   Includes: Auto-update, Tools, What's New, 19 RVU fixes
+
+✅ Install_or_Upgrade_RVU_Counter.bat - READY
+   Location: Install_or_Upgrade_RVU_Counter.bat
+   Purpose: User installation script
+
+✅ DISTRIBUTION_README.txt - READY
+   Location: DISTRIBUTION_README.txt
+   Purpose: User instructions
+
+================================================================================
+🧪 TESTING CHECKLIST (DO THIS FIRST!)
+================================================================================
+
+Before uploading to GitHub, test locally:
+
+□ 1. FRESH INSTALL TEST:
+     - Create new folder: C:\temp\rvu_test_fresh\
+     - Copy Install_or_Upgrade_RVU_Counter.bat there
+     - Run the batch file
+     - Verify: Creates folders, downloads exe, runs app
+     - Verify: Empty database created
+     - Test: Start shift, add manual study, statistics
+
+□ 2. UPGRADE TEST:
+     - Copy your current RVU Counter installation to: C:\temp\rvu_test_upgrade\
+     - Copy Install_or_Upgrade_RVU_Counter.bat there
+     - Run the batch file
+     - Verify: Preserves database
+     - Verify: All your old data visible
+     - Test: All features working
+
+□ 3. MANUAL EXE TEST:
+     - Create folder: C:\temp\rvu_test_manual\
+     - Copy ONLY "RVU Counter.exe" from packaging\ there
+     - Run RVU Counter.exe
+     - Verify: Creates data/, settings/, helpers/, logs/
+     - Verify: App starts and works
+     - Test: Tools window (wrench icon)
+     - Test: What's New (? in settings)
+
+□ 4. DARK MODE TEST:
+     - Settings → Enable dark mode
+     - Open Tools window
+     - Verify: All elements dark themed
+     - Verify: Tabs properly colored
+
+□ 5. MULTI-MONITOR TEST (if you have multiple monitors):
+     - Move Tools window to second monitor
+     - Close and reopen
+     - Verify: Opens at saved position
+
+================================================================================
+🚀 GITHUB RELEASE PROCESS
+================================================================================
+
+STEP 1: GO TO GITHUB
+---------------------
+https://github.com/erichter2018/RVU-Releases
+
+STEP 2: CREATE NEW RELEASE
+---------------------------
+Click: "Releases" → "Create a new release"
+
+STEP 3: TAG VERSION
+--------------------
+Tag: v1.7
+Target: main (or master branch)
+Release title: RVU Counter v1.7
+
+STEP 4: RELEASE NOTES
+----------------------
+Copy the content from: documentation\WHATS_NEW_v1.7.md
+
+Or use this formatted version:
+
+---BEGIN COPY---
+
+# RVU Counter v1.7 - Major Update
+
+## 🚀 Major Features
+
+### Auto-Update System
+- **One-Click Updates**: Check for new versions automatically on startup
+- **No More Manual Downloads**: Updates download and install seamlessly
+- **Update Notification**: Small "✨ Update Available" button appears when new version is ready
+- **Safe Rollback**: Previous version kept as backup during update
+
+### Integrated Tools (New!)
+- **Database Repair Tool**: Scan and fix RVU mismatches directly from the app
+- **Excel Payroll Checker**: Compare Excel files with RVU rules to find discrepancies
+- **Easy Access**: Click the wrench icon (🔧) in the top right corner
+
+### What's New Viewer (New!)
+- **In-App Release Notes**: See what's new directly in the application
+- **Access**: Click the "?" button in the Settings window
+
+### Improved Data Organization
+- **Separated Settings**: User preferences now separate from RVU rules
+- **Cleaner Folder Structure**: 
+  - `data/` - Your database and records
+  - `settings/` - Your personal preferences
+  - `helpers/` - Update tools
+  - `logs/` - Application logs
+- **Faster Rule Updates**: RVU classification rules can now be updated without app restart
+
+## 🔧 Bug Fixes & Improvements
+
+### RVU Classification Enhancements (19 fixes)
+- ✅ Fixed: "CT Abdomen" now correctly classified as 1.0 RVU (not CT AP)
+- ✅ Fixed: "MR Brain Angiography" now correctly gets 2.3 RVU
+- ✅ Fixed: Bilateral XR studies (AC joints, calcaneus, etc.) now get correct 0.6 RVU
+- ✅ Fixed: "XR Abdomen Decubitus" no longer matches ultrasound
+- ✅ New: "CT Outside Film Read" - 0.9 RVU
+- ✅ New: "XR Scanogram" - 1.0 RVU
+- ✅ New: "MRI Hip Bilateral" - 3.5 RVU
+- ✅ New: "CT Triple Spine" (C+T+L) - 5.25 RVU
+- ✅ New: "CT Head Face and Cervical" - 2.9 RVU
+- ✅ New: "CTA Lower Extremity" - 1.75 RVU
+- ✅ Updated: "CTA Chest + CT AP" - 3.0 RVU (was 2.68)
+- ✅ Updated: "CT Extremity Bilateral" - 1.0 RVU (was 2.0)
+
+### Performance & Stability
+- Improved startup speed with new settings architecture
+- Better error handling for file operations
+- Enhanced logging for troubleshooting
+
+## 📋 Installation
+
+### For New Users:
+1. Download `Install_or_Upgrade_RVU_Counter.bat`
+2. Create a folder for RVU Counter
+3. Run the batch file - it will download and set everything up
+
+### For Existing Users (v1.6 or earlier):
+1. Download `Install_or_Upgrade_RVU_Counter.bat`
+2. Place it in your RVU Counter folder
+3. Run the batch file - your data will be preserved
+
+### Manual Installation:
+1. Download `RVU Counter.exe`
+2. Place in a folder of your choice
+3. Run it - folder structure will be created automatically
+
+## ⚠️ First Launch (v1.7)
+When you first run v1.7, the app will automatically:
+1. Create the new folder structure (`data/`, `settings/`, `helpers/`, `logs/`)
+2. Move your database to `data/rvu_records.db`
+3. Split your settings into user preferences and RVU rules
+4. Keep a backup of your old `rvu_settings.yaml` file
+
+**This is a one-time process and happens automatically. No action needed!**
+
+---
+
+**Thank you for using RVU Counter!**
+
+---END COPY---
+
+STEP 5: ATTACH FILES
+--------------------
+Upload these files:
+
+REQUIRED:
+✓ RVU Counter.exe (from packaging\ folder)
+  - CRITICAL: Must be named EXACTLY "RVU Counter.exe" (with space)
+  - Auto-update system expects this exact name
+
+OPTIONAL (for users):
+✓ Install_or_Upgrade_RVU_Counter.bat
+✓ DISTRIBUTION_README.txt
+
+STEP 6: PRE-RELEASE OR LATEST
+------------------------------
+☐ Leave "Set as a pre-release" UNCHECKED
+☑ Check "Set as the latest release"
+
+This makes auto-update work for all users.
+
+STEP 7: PUBLISH
+---------------
+Click: "Publish release"
+
+================================================================================
+⚠️ CRITICAL REQUIREMENTS
+================================================================================
+
+1. EXACT FILENAME
+   ❗ The exe MUST be named "RVU Counter.exe" (with space)
+   ❗ Auto-update will ONLY work with this exact name
+   ❗ Do NOT rename to "RVU_Counter.exe" or "RVUCounter.exe"
+
+2. TAG VERSION
+   ❗ Tag must be "v1.7" (lowercase v)
+   ❗ UpdateManager expects semantic versioning
+
+3. LATEST RELEASE
+   ❗ Must be marked as "latest release"
+   ❗ This is how auto-update finds it
+
+4. PUBLIC REPOSITORY
+   ❗ Repository must be public for auto-update
+   ❗ Or users need personal access tokens for private
+
+================================================================================
+✅ VERIFICATION AFTER RELEASE
+================================================================================
+
+After publishing, verify:
+
+□ Release appears at: https://github.com/erichter2018/RVU-Releases/releases/latest
+□ "RVU Counter.exe" is listed in assets (with exact name)
+□ Release is marked as "Latest"
+□ Tag shows as "v1.7"
+
+Test auto-update:
+□ Open an older version of RVU Counter (v1.6)
+□ Wait for startup check (may take a few seconds)
+□ Verify: "✨ Update Available" button appears
+□ Click update button
+□ Verify: Downloads and installs v1.7
+□ Verify: App restarts successfully
+
+================================================================================
+📧 USER DISTRIBUTION
+================================================================================
+
+After GitHub release is live, you can distribute to users:
+
+OPTION A: EMAIL (Recommended)
+------------------------------
+Subject: RVU Counter v1.7 - Major Update Available
+
+Body:
+---
+Hello,
+
+RVU Counter v1.7 is now available with major new features!
+
+🎉 What's New:
+• Auto-update system (no more manual downloads!)
+• Integrated database repair and Excel checker tools
+• In-app What's New viewer
+• 19 RVU classification fixes
+• Improved performance
+
+📥 Installation:
+
+FOR NEW USERS:
+1. Download the attached batch file
+2. Create a folder for RVU Counter
+3. Run the batch file
+
+FOR EXISTING USERS:
+1. Download the attached batch file
+2. Place in your RVU Counter folder
+3. Run the batch file (your data will be preserved)
+
+Your database and all settings will be automatically preserved.
+
+Questions? Contact me.
+
+---
+Attach: Install_or_Upgrade_RVU_Counter.bat
+
+OPTION B: DIRECT LINK
+----------------------
+Send users this link:
+https://github.com/erichter2018/RVU-Releases/releases/latest
+
+They can download:
+- RVU Counter.exe (for manual installation)
+- Install_or_Upgrade_RVU_Counter.bat (for easy install/upgrade)
+
+OPTION C: AUTO-UPDATE (After v1.7 is released)
+-----------------------------------------------
+Users on v1.7 or later will see the "✨ Update Available" button
+automatically when you publish future releases!
+
+================================================================================
+🔒 BACKUP REMINDER
+================================================================================
+
+Before distributing:
+□ Backup your own RVU Counter database
+□ Test on a clean machine if possible
+□ Have rollback plan (keep v1.6 available)
+
+================================================================================
+📊 MONITORING
+================================================================================
+
+After release, monitor for:
+- Download counts on GitHub
+- User feedback
+- Bug reports
+- Installation issues
+
+Be ready to create v1.7.1 hotfix if needed.
+
+================================================================================
+🎉 SUCCESS CRITERIA
+================================================================================
+
+Release is successful when:
+✓ GitHub release published with correct files
+✓ Auto-update detects new version
+✓ Fresh install works
+✓ Upgrade preserves data
+✓ All features working
+✓ No critical bugs reported
+
+================================================================================
+📞 SUPPORT PLAN
+================================================================================
+
+Be prepared for user questions about:
+- How to upgrade from v1.6
+- Where did my data go? (in data/ folder now)
+- How to use new Tools feature
+- How auto-update works
+- RVU classification changes
+
+Have DISTRIBUTION_README.txt ready to send.
+
+================================================================================
+
+You're ready to release! 🚀
+
+Test first, then upload to GitHub, then distribute to users.
+
+Good luck with the release!
+
+================================================================================

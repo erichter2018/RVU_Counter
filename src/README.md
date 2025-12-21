@@ -275,13 +275,14 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 ## Migration from Monolith
 
-The refactored code is **100% compatible** with existing:
-- Database files (`rvu_records.db`)
-- Settings files (`rvu_settings.yaml`)
-- Backup files
-- User data
+Version 1.7 introduces a standardized folder structure for better organization and portability:
+- `/data/rvu_records.db`: The SQLite database
+- `/settings/rvu_settings.yaml`: User preferences
+- `/settings/rvu_rules.yaml`: RVU values and classification rules (Split in v1.7)
+- `/logs/rvu_counter.log`: Application logs
+- `/helpers/`: Update scripts and temporary files
 
-**No migration required** - just start using the new code.
+The application automatically handles the migration from the old "flat" structure to this new format on first launch.
 
 ---
 
@@ -350,5 +351,5 @@ See also:
 ---
 
 *Refactored: December 2025*  
-*Version: 1.5.1*  
+*Version: 1.6 (12/18/2025)*  
 *Architecture: Modular MVC*
