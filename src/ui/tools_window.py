@@ -1,5 +1,6 @@
 """Tools window for database repair and Excel checking."""
 
+import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 import logging
@@ -290,6 +291,9 @@ class ToolsWindow:
         
         if not file_path:
             return
+        
+        # Store the selected file path for later use
+        self.selected_excel_path = file_path
             
         self.upload_btn.config(state=tk.DISABLED)
         self.export_btn.config(state=tk.DISABLED)
@@ -333,10 +337,18 @@ class ToolsWindow:
         """Export the current report to a text file."""
         if not self.current_report:
             return
+        
+        # Generate default filename from input Excel file
+        default_filename = ""
+        if hasattr(self, 'selected_excel_path') and self.selected_excel_path:
+            # Get the base name without extension and add .txt
+            base_name = os.path.splitext(os.path.basename(self.selected_excel_path))[0]
+            default_filename = f"{base_name}_report.txt"
             
         file_path = filedialog.asksaveasfilename(
             title="Save Report",
             defaultextension=".txt",
+            initialfile=default_filename,
             filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
         )
         
@@ -401,6 +413,8 @@ class ToolsWindow:
 
 
 __all__ = ['ToolsWindow']
+
+
 
 
 

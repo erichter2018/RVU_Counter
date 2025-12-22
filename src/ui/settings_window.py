@@ -7,7 +7,8 @@ from tkinter import ttk, messagebox, filedialog
 import logging
 from typing import TYPE_CHECKING
 
-from ..core.platform_utils import is_point_on_any_monitor, find_nearest_monitor_for_window
+from ..core.platform_utils import is_point_on_any_monitor, find_nearest_monitor_for_window, get_primary_monitor_bounds
+from ..logic.study_tracker import StudyTracker
 
 if TYPE_CHECKING:
     from ..data import RVUData
@@ -68,10 +69,36 @@ class SettingsWindow:
         
         if dark_mode:
             bg_color = "#1e1e1e"
+            entry_bg = "#2d2d2d"
+            entry_fg = "#e0e0e0"
+            fg_color = "#e0e0e0"
+            border_color = "#888888"
         else:
             bg_color = "SystemButtonFace"
+            entry_bg = "white"
+            entry_fg = "black"
+            fg_color = "black"
+            border_color = "#cccccc"
         
         self.window.configure(bg=bg_color)
+        
+        # Configure combobox style to match statistics window
+        style = ttk.Style()
+        if dark_mode:
+            # Configure Combobox styling for dark mode visibility (matching statistics)
+            style.configure("TCombobox", 
+                          fieldbackground=entry_bg, 
+                          foreground=entry_fg,
+                          background=entry_bg,
+                          selectbackground="#0078d7",
+                          selectforeground="white",
+                          bordercolor=border_color,
+                          arrowcolor=fg_color)
+            style.map("TCombobox",
+                     fieldbackground=[('readonly', entry_bg), ('disabled', bg_color)],
+                     foreground=[('readonly', entry_fg), ('disabled', '#888888')],
+                     selectbackground=[('readonly', '#0078d7')],
+                     selectforeground=[('readonly', 'white')])
     
     def create_settings_ui(self):
         """Create settings UI."""
@@ -95,6 +122,10 @@ class SettingsWindow:
         # Dark mode
         self.dark_mode_var = tk.BooleanVar(value=settings.get("dark_mode", False))
         ttk.Checkbutton(col1, text="Dark Mode", variable=self.dark_mode_var).pack(anchor=tk.W, pady=2)
+        
+        # Borderless mode
+        self.borderless_mode_var = tk.BooleanVar(value=settings.get("borderless_mode", False))
+        ttk.Checkbutton(col1, text="Remove title bar", variable=self.borderless_mode_var).pack(anchor=tk.W, pady=2)
         
         # Column 2: Show time and Stay on top
         col2 = ttk.Frame(general_settings_frame)
@@ -222,15 +253,83 @@ class SettingsWindow:
         for key in self.comp_mapping:
             self.sync_compensation_state(key)
         
+        # Two-column frame for Shift Length/Min Duration and Mini Interface
+        shift_mini_frame = ttk.Frame(main_frame)
+        shift_mini_frame.pack(fill=tk.X, pady=(10, 5))
+        
+        # Left column: Shift Length and Min Study Duration
+        shift_col = ttk.Frame(shift_mini_frame)
+        shift_col.pack(side=tk.LEFT, anchor=tk.N, padx=(0, 20))
+        
         # Shift length (hours)
-        ttk.Label(main_frame, text="Shift Length (hours):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        ttk.Label(shift_col, text="Shift Length (hours):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(0, 5))
         self.shift_length_var = tk.StringVar(value=str(self.data_manager.data["settings"].get("shift_length_hours", 9)))
-        ttk.Entry(main_frame, textvariable=self.shift_length_var, width=10).pack(anchor=tk.W, pady=2)
+        ttk.Entry(shift_col, textvariable=self.shift_length_var, width=10).pack(anchor=tk.W, pady=2)
         
         # Min study seconds
-        ttk.Label(main_frame, text="Min Study Duration (seconds):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
+        ttk.Label(shift_col, text="Min Study Duration (seconds):", font=("Arial", 9, "bold")).pack(anchor=tk.W, pady=(10, 5))
         self.min_seconds_var = tk.StringVar(value=str(self.data_manager.data["settings"]["min_study_seconds"]))
-        ttk.Entry(main_frame, textvariable=self.min_seconds_var, width=10).pack(anchor=tk.W, pady=2)
+        ttk.Entry(shift_col, textvariable=self.min_seconds_var, width=10).pack(anchor=tk.W, pady=2)
+        
+        # Right column: Mini Interface Settings
+        mini_frame = ttk.LabelFrame(shift_mini_frame, text="Mini Interface", padding="5")
+        mini_frame.pack(side=tk.LEFT, anchor=tk.N)
+        
+        ttk.Label(mini_frame, text="Double-click anywhere in main interface to\nlaunch mini mode.", 
+                 font=("Arial", 8), foreground="gray", justify=tk.LEFT).pack(anchor=tk.W, pady=(0, 5))
+        
+        # Metric selection dropdowns
+        metrics_options = [
+            ("Pace (vs prior shift)", "pace"),
+            ("Current Total", "current_total"),
+            ("Estimated Total (shift)", "estimated_total"),
+            ("Average per Hour", "average_hour")
+        ]
+        
+        # Row 1: First metric
+        metric1_frame = ttk.Frame(mini_frame)
+        metric1_frame.pack(anchor=tk.W, pady=2)
+        
+        ttk.Label(metric1_frame, text="Metric 1:", font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.mini_metric_1_var = tk.StringVar(value=settings.get("mini_metric_1", "pace"))
+        metric1_dropdown = ttk.Combobox(metric1_frame, textvariable=self.mini_metric_1_var, 
+                                        values=[opt[1] for opt in metrics_options], 
+                                        state="readonly", width=20)
+        metric1_dropdown.pack(side=tk.LEFT)
+        
+        # Display readable names in dropdown
+        def get_display_name(value):
+            for display, val in metrics_options:
+                if val == value:
+                    return display
+            return value
+        
+        # Set display name
+        current_val = self.mini_metric_1_var.get()
+        for i, (display, val) in enumerate(metrics_options):
+            if val == current_val:
+                metric1_dropdown.current(i)
+                break
+        
+        # Row 2: Second metric
+        metric2_frame = ttk.Frame(mini_frame)
+        metric2_frame.pack(anchor=tk.W, pady=2)
+        
+        ttk.Label(metric2_frame, text="Metric 2:", font=("Arial", 9)).pack(side=tk.LEFT, padx=(0, 10))
+        
+        self.mini_metric_2_var = tk.StringVar(value=settings.get("mini_metric_2", "current_total"))
+        metric2_dropdown = ttk.Combobox(metric2_frame, textvariable=self.mini_metric_2_var, 
+                                        values=[opt[1] for opt in metrics_options], 
+                                        state="readonly", width=20)
+        metric2_dropdown.pack(side=tk.LEFT)
+        
+        # Set display name
+        current_val = self.mini_metric_2_var.get()
+        for i, (display, val) in enumerate(metrics_options):
+            if val == current_val:
+                metric2_dropdown.current(i)
+                break
         
         # Ignore duplicates
         self.ignore_duplicates_var = tk.BooleanVar(value=self.data_manager.data["settings"]["ignore_duplicate_accessions"])
@@ -301,13 +400,6 @@ class SettingsWindow:
             self.backup_schedule_var = tk.StringVar(value="shift_end")
             self.backup_status_label = None
         
-        # Buttons
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill=tk.X, pady=10)
-        
-        ttk.Button(buttons_frame, text="Clear Current Shift", command=self.clear_current_shift).pack(side=tk.LEFT, padx=2)
-        ttk.Button(buttons_frame, text="Clear All Data", command=self.clear_all_data).pack(side=tk.LEFT, padx=2)
-        
         # Save/Cancel with version on bottom right
         save_cancel_frame = ttk.Frame(main_frame)
         save_cancel_frame.pack(fill=tk.X, pady=10)
@@ -332,8 +424,14 @@ class SettingsWindow:
     def save_settings(self):
         """Save settings."""
         try:
+            # Check if borderless mode is changing (before we save)
+            old_borderless = self.data_manager.data["settings"].get("borderless_mode", False)
+            new_borderless = self.borderless_mode_var.get()
+            borderless_changed = old_borderless != new_borderless
+            
             self.data_manager.data["settings"]["auto_start"] = self.auto_start_var.get()
             self.data_manager.data["settings"]["dark_mode"] = self.dark_mode_var.get()
+            self.data_manager.data["settings"]["borderless_mode"] = self.borderless_mode_var.get()
             self.data_manager.data["settings"]["show_total"] = self.show_total_var.get()
             self.data_manager.data["settings"]["show_avg"] = self.show_avg_var.get()
             self.data_manager.data["settings"]["show_last_hour"] = self.show_last_hour_var.get()
@@ -354,6 +452,8 @@ class SettingsWindow:
             self.data_manager.data["settings"]["show_time"] = self.show_time_var.get()
             self.data_manager.data["settings"]["stay_on_top"] = self.stay_on_top_var.get()
             self.data_manager.data["settings"]["show_pace_car"] = self.show_pace_car_var.get()
+            self.data_manager.data["settings"]["mini_metric_1"] = self.mini_metric_1_var.get()
+            self.data_manager.data["settings"]["mini_metric_2"] = self.mini_metric_2_var.get()
             
             # Save backup settings
             if "backup" not in self.data_manager.data:
@@ -384,34 +484,17 @@ class SettingsWindow:
             # Force rebuild of widgets to show/hide time display when setting changes
             self.app.last_record_count = -1
             self.app.update_display()
+            
+            # Notify if borderless mode changed - requires restart
+            if borderless_changed:
+                messagebox.showinfo("Restart Required", 
+                                   "Borderless mode changes will take effect after restarting the application.")
+            
             self.window.destroy()
             logger.info("Settings saved")
         except Exception as e:
             messagebox.showerror("Error", f"Error saving settings: {e}")
             logger.error(f"Error saving settings: {e}")
-    
-    def clear_current_shift(self):
-        """Clear current shift data."""
-        if messagebox.askyesno("Confirm", "Clear current shift data?"):
-            self.data_manager.clear_current_shift()
-            self.app.update_display()
-            logger.info("Current shift cleared from settings")
-    
-    def clear_all_data(self):
-        """Clear all data."""
-        if messagebox.askyesno("Confirm", "Clear ALL data? This cannot be undone."):
-            self.data_manager.clear_all_data()
-            # Clear recent studies from interface by resetting last_record_count and forcing rebuild
-            self.app.last_record_count = -1  # Force rebuild by setting to -1
-            # Reset tracker to clear any active studies
-            self.app.tracker = StudyTracker(
-                min_seconds=self.data_manager.data["settings"]["min_study_seconds"]
-            )
-            self.app.tracker.seen_accessions.clear()
-            self.app.tracker.active_studies.clear()
-            # Force update display to clear widgets
-            self.app.update_display()
-            logger.info("All data cleared from settings")
     
     def on_settings_window_move(self, event):
         """Save settings window position when moved."""

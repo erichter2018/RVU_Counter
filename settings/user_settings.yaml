@@ -6,7 +6,7 @@ backup:
   github_backup_enabled: false
   last_backup_error: null
   last_backup_status: success
-  last_backup_time: '2025-12-20T08:03:26.962028'
+  last_backup_time: '2025-12-21T08:04:23.206703'
   onedrive_path: C:\Users\erik.richter\OneDrive - Radiology Partners Inc
   setup_prompt_dismissed: true
 compensation_rates:
@@ -119,7 +119,7 @@ settings:
   efficiency_heatmap_mode: count
   efficiency_study_count_mode: average
   ignore_duplicate_accessions: true
-  last_seen_version: 1.7.5
+  last_seen_version: '1.8'
   min_study_seconds: 1
   pace_comparison_mode: prior
   pace_goal_rvu_per_hour: 15.0
@@ -142,21 +142,27 @@ settings:
   show_time: true
   show_total: true
   stay_on_top: true
+  borderless_mode: true
+  mini_metric_1: estimated_total
+  mini_metric_2: pace
 window_positions:
   backup_history:
     x: 5762
     y: 2
   main:
-    x: 4986
-    y: 148
+    x: 4997
+    y: 180
     width: 249
     height: 472
   settings:
-    x: 5254
-    y: -310
+    x: 5300
+    y: -350
   statistics:
-    x: 5092
-    y: -263
+    x: 5306
+    y: -287
   tools:
     x: 5327
     y: -179
+  mini:
+    x: 4999
+    y: 556

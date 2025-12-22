@@ -5639,6 +5639,11 @@ class StatisticsWindow:
             elapsed_hours = (time_finished - shift_start_rounded).total_seconds() / 3600
             hour_bucket = int(elapsed_hours)  # 0, 1, 2, etc.
             
+            # Skip records that finished before the rounded shift start (negative hour buckets)
+            # This can happen when the actual shift started slightly after the rounded time
+            if hour_bucket < 0:
+                continue
+            
             if hour_bucket not in hourly_data:
                 hourly_data[hour_bucket] = {
                     'rvu': 0,
@@ -5693,6 +5698,7 @@ class StatisticsWindow:
                 avg_rvu.append(cumulative_rvu[-1] / (hour + 1) if cumulative_rvu else 0)
                 avg_studies.append(cumulative_studies[-1] / (hour + 1) if cumulative_studies else 0)
                 
+                # Pad modality cumulative with zeros for hours with no studies
                 for modality in modality_cumulative:
                     modality_cumulative[modality].append(modality_cumulative[modality][-1] if modality_cumulative[modality] else 0)
         

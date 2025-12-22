@@ -148,6 +148,11 @@ class RVUCounterApp:
         self.update_manager = UpdateManager()
         self.update_info = None
         
+        # Set borderless mode based on settings (default False)
+        borderless_mode = self.data_manager.data["settings"].get("borderless_mode", False)
+        if borderless_mode:
+            self.root.overrideredirect(True)
+        
         # Set stay on top based on settings (default True if not set)
         stay_on_top = self.data_manager.data["settings"].get("stay_on_top", True)
         self.root.attributes("-topmost", stay_on_top)
@@ -344,10 +349,43 @@ class RVUCounterApp:
         main_frame = ttk.Frame(self.root, padding=(5, 2, 5, 5))  # left, top, right, bottom
         main_frame.pack(fill=tk.BOTH, expand=True)
         
+        # Store reference to main_frame for later use
+        self.main_frame = main_frame
+        
+        # Mini window reference
+        self.mini_window = None
+        
+        # Add close button if in borderless mode
+        borderless_mode = self.data_manager.data["settings"].get("borderless_mode", False)
+        if borderless_mode:
+            dark_mode = self.data_manager.data["settings"].get("dark_mode", False)
+            
+            self.close_btn_main = tk.Label(
+                main_frame,
+                text="X",
+                font=("Arial", 7, "bold"),
+                bg="#ff6666" if dark_mode else "#ffcccc",  # Light red background
+                fg="#ffffff" if dark_mode else "#cc0000",  # White or dark red text
+                cursor="hand2",
+                padx=2,
+                pady=0,
+                relief=tk.RAISED,
+                borderwidth=1
+            )
+            self.close_btn_main.place(relx=1.0, x=-1, y=1, anchor=tk.NE)
+            self.close_btn_main.bind("<Button-1>", lambda e: self.root.quit())
+            self.close_btn_main.bind("<Enter>", lambda e: self.close_btn_main.config(bg="#ff0000", fg="#ffffff"))
+            self.close_btn_main.bind("<Leave>", lambda e: self.close_btn_main.config(
+                bg="#ff6666" if dark_mode else "#ffcccc",
+                fg="#ffffff" if dark_mode else "#cc0000"
+            ))
+            self.close_btn_main.tkraise()  # Ensure it's on top
+        
         # Title bar is draggable (bind to main frame)
         main_frame.bind("<Button-1>", self.start_drag)
         main_frame.bind("<B1-Motion>", self.on_drag)
         main_frame.bind("<ButtonRelease-1>", self.on_drag_end)
+        main_frame.bind("<Double-Button-1>", self.on_double_click)
         
         # Top section using grid for precise vertical control
         top_section = ttk.Frame(main_frame)
@@ -397,7 +435,7 @@ class RVUCounterApp:
         self.version_label.pack(side=tk.LEFT)
         
         # Update available button (hidden by default)
-        self.update_btn = tk.Label(version_frame, text="⚠️ Update!", font=("Arial", 8, "bold"),
+        self.update_btn = tk.Label(version_frame, text="Update!", font=("Arial", 8, "bold"),
                                    fg="white", bg="#ff6b00", cursor="hand2", padx=5, pady=2)
         self.update_btn.bind("<Button-1>", lambda e: self._handle_update_click())
         # Don't pack yet, wait for check
@@ -564,8 +602,9 @@ class RVUCounterApp:
         self.undo_btn = ttk.Button(buttons_frame, text="Undo", command=self.undo_last, width=6, state=tk.DISABLED)
         self.undo_btn.pack(side=tk.LEFT, padx=3)
         
-        # Track if undo has been used
+        # Track undo/redo state
         self.undo_used = False
+        self.last_undone_study = None  # Store the last undone study for redo
         
         self.settings_btn = ttk.Button(buttons_frame, text="Settings", command=self.open_settings, width=8)
         self.settings_btn.pack(side=tk.LEFT, padx=3)
@@ -676,6 +715,30 @@ class RVUCounterApp:
         
         # Apply theme colors to tk widgets (must be done AFTER widgets are created)
         self._update_tk_widget_colors()
+        
+        # Bind drag and double-click to all widgets (for borderless mode)
+        self._bind_drag_to_all_widgets()
+    
+    def _bind_drag_to_all_widgets(self):
+        """Recursively bind drag and double-click events to all widgets except buttons."""
+        def bind_widget(widget):
+            # Skip buttons and other interactive widgets
+            widget_class = widget.winfo_class()
+            if widget_class in ('Button', 'TButton', 'Entry', 'TEntry', 'Text', 'Scrollbar'):
+                return
+            
+            # Bind drag events
+            widget.bind("<Button-1>", self.start_drag, add="+")
+            widget.bind("<B1-Motion>", self.on_drag, add="+")
+            widget.bind("<ButtonRelease-1>", self.on_drag_end, add="+")
+            widget.bind("<Double-Button-1>", self.on_double_click, add="+")
+            
+            # Recursively bind to all children
+            for child in widget.winfo_children():
+                bind_widget(child)
+        
+        # Start from main_frame
+        bind_widget(self.main_frame)
     
     def _check_for_updates(self):
         """Check for updates in a background thread."""
@@ -683,6 +746,14 @@ class RVUCounterApp:
             try:
                 available, release_info = self.update_manager.check_for_updates()
                 if available:
+                    # Check if this version has been skipped
+                    skipped_version = self.data_manager.data["settings"].get("skipped_update_version", "")
+                    new_version = release_info.get("tag_name", "").lstrip('v')
+                    
+                    if skipped_version and skipped_version == new_version:
+                        logger.info(f"Update {new_version} was previously skipped by user")
+                        return
+                    
                     self.update_info = release_info
                     # Update UI in main thread
                     self.root.after(0, self._show_update_available)
@@ -697,15 +768,161 @@ class RVUCounterApp:
         logger.info("Update available UI shown")
 
     def _handle_update_click(self):
-        """Handle click on update button."""
+        """Handle click on update button - show update dialog with details."""
         if not self.update_info:
             return
-            
-        version = self.update_info.get("tag_name", "Unknown")
-        msg = f"A new version ({version}) is available. Would you like to download and install it now?\n\nThe application will close during the update."
         
-        if messagebox.askyesno("Update Available", msg):
+        self._show_update_dialog()
+    
+    def _show_update_dialog(self):
+        """Show detailed update dialog with release notes and options."""
+        if not self.update_info:
+            return
+        
+        # Create dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Update Available")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Apply theme
+        colors = self.get_theme_colors()
+        dialog.configure(bg=colors["bg"])
+        
+        # Center on main window
+        dialog_width = 500
+        dialog_height = 400
+        x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog_width // 2)
+        y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog_height // 2)
+        dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
+        dialog.minsize(400, 300)
+        
+        # Main container
+        main_frame = tk.Frame(dialog, bg=colors["bg"], padx=15, pady=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Version info
+        version = self.update_info.get("tag_name", "Unknown")
+        current_version = f"v{APP_VERSION}"
+        
+        title_label = tk.Label(
+            main_frame,
+            text=f"New Version Available: {version}",
+            font=("Arial", 12, "bold"),
+            bg=colors["bg"],
+            fg=colors["fg"]
+        )
+        title_label.pack(anchor=tk.W, pady=(0, 5))
+        
+        current_label = tk.Label(
+            main_frame,
+            text=f"Current version: {current_version}",
+            font=("Arial", 9),
+            bg=colors["bg"],
+            fg="gray"
+        )
+        current_label.pack(anchor=tk.W, pady=(0, 10))
+        
+        # Release notes frame with scrollbar
+        notes_label = tk.Label(
+            main_frame,
+            text="What's New:",
+            font=("Arial", 10, "bold"),
+            bg=colors["bg"],
+            fg=colors["fg"]
+        )
+        notes_label.pack(anchor=tk.W, pady=(0, 5))
+        
+        # Scrollable text area for release notes
+        text_frame = tk.Frame(main_frame, bg=colors["bg"])
+        text_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        release_text = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            font=("Consolas", 9),
+            bg=colors["bg"] if colors["dark_mode"] else "white",
+            fg=colors["fg"],
+            relief=tk.SUNKEN,
+            borderwidth=1,
+            yscrollcommand=scrollbar.set,
+            padx=10,
+            pady=10
+        )
+        release_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=release_text.yview)
+        
+        # Get release notes
+        body = self.update_info.get("body", "No release notes available.")
+        release_text.insert("1.0", body)
+        release_text.config(state=tk.DISABLED)  # Make read-only
+        
+        # Buttons frame
+        button_frame = tk.Frame(main_frame, bg=colors["bg"])
+        button_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        def on_update():
+            dialog.destroy()
             self._start_update()
+        
+        def on_skip():
+            # Save skipped version
+            self.data_manager.data["settings"]["skipped_update_version"] = version.lstrip('v')
+            self.data_manager.save()
+            self.update_btn.pack_forget()  # Hide update button
+            logger.info(f"User skipped update {version}")
+            dialog.destroy()
+        
+        def on_later():
+            # Just close dialog, will show again next time
+            logger.info("User chose to be reminded later")
+            dialog.destroy()
+        
+        # Update Now button (prominent)
+        update_btn = tk.Button(
+            button_frame,
+            text="Update Now",
+            command=on_update,
+            font=("Arial", 9, "bold"),
+            bg="#ff6b00",
+            fg="white",
+            padx=15,
+            pady=5,
+            cursor="hand2",
+            relief=tk.RAISED
+        )
+        update_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Skip This Version button
+        skip_btn = tk.Button(
+            button_frame,
+            text="Skip This Version",
+            command=on_skip,
+            font=("Arial", 9),
+            bg=colors["button_bg"],
+            fg=colors["button_fg"],
+            padx=10,
+            pady=5,
+            cursor="hand2"
+        )
+        skip_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        # Remind Me Later button
+        later_btn = tk.Button(
+            button_frame,
+            text="Remind Me Later",
+            command=on_later,
+            font=("Arial", 9),
+            bg=colors["button_bg"],
+            fg=colors["button_fg"],
+            padx=10,
+            pady=5,
+            cursor="hand2"
+        )
+        later_btn.pack(side=tk.LEFT)
 
     def _start_update(self):
         """Start the update download and application."""
@@ -1698,7 +1915,7 @@ class RVUCounterApp:
                             If False, compare based on reference time (11pm).
         """
         try:
-            logger.info(f"[PACE] _get_prior_shift_rvu_at_elapsed_time: mode={self.pace_comparison_mode}, elapsed={elapsed_minutes:.1f}min, cached_shift={self.pace_comparison_shift is not None}")
+            logger.debug(f"[PACE] _get_prior_shift_rvu_at_elapsed_time: mode={self.pace_comparison_mode}, elapsed={elapsed_minutes:.1f}min, cached_shift={self.pace_comparison_shift is not None}")
             # Handle 'goal' mode - theoretical pace
             if self.pace_comparison_mode == 'goal':
                 try:
@@ -1713,7 +1930,7 @@ class RVUCounterApp:
                     # Cap at total (in case elapsed exceeds goal hours)
                     rvu_at_elapsed = min(rvu_at_elapsed, goal_total)
                     
-                    logger.info(f"[PACE] Goal mode: {goal_rvu_h:.1f} RVU/h × {elapsed_hours:.2f}h = {rvu_at_elapsed:.1f} RVU (total: {goal_total:.1f})")
+                    logger.debug(f"[PACE] Goal mode: {goal_rvu_h:.1f} RVU/h × {elapsed_hours:.2f}h = {rvu_at_elapsed:.1f} RVU (total: {goal_total:.1f})")
                     return (rvu_at_elapsed, goal_total)
                 except Exception as e:
                     logger.error(f"[PACE] Error in goal mode calculation: {e}")
@@ -1725,7 +1942,7 @@ class RVUCounterApp:
             if self.pace_comparison_shift and self.pace_comparison_shift.get("records"):
                 # Use cached comparison shift (set when user selects from popup) if it has records
                 comparison_shift = self.pace_comparison_shift
-                logger.info(f"[PACE] Using cached comparison shift: mode={self.pace_comparison_mode}, records={len(comparison_shift.get('records', []))}")
+                logger.debug(f"[PACE] Using cached comparison shift: mode={self.pace_comparison_mode}, records={len(comparison_shift.get('records', []))}")
             
             if not comparison_shift:
                 # No cached shift or cached shift has no records - find prior shift (most recent valid one)
@@ -1762,7 +1979,7 @@ class RVUCounterApp:
             if use_elapsed_time:
                 # Elapsed time mode: compare X minutes into each shift
                 target_time = prior_start + timedelta(minutes=elapsed_minutes)
-                logger.info(f"[PACE] Elapsed comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
+                logger.debug(f"[PACE] Elapsed comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
                            f"elapsed={elapsed_minutes:.1f}min, target={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
             else:
                 # Reference time mode: normalize to typical shift start hour (e.g., 11pm)
@@ -1780,7 +1997,7 @@ class RVUCounterApp:
                 # Calculate target time: reference (11pm) + elapsed minutes
                 target_time = prior_reference + timedelta(minutes=elapsed_minutes)
                 
-                logger.info(f"[PACE] Reference comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
+                logger.debug(f"[PACE] Reference comparison - Prior start={prior_start.strftime('%Y-%m-%d %H:%M:%S')}, "
                            f"reference_11pm={prior_reference.strftime('%Y-%m-%d %H:%M:%S')}, "
                            f"target={target_time.strftime('%Y-%m-%d %H:%M:%S')}")
             
@@ -1811,17 +2028,17 @@ class RVUCounterApp:
                     if time_finished <= target_time:
                         rvu_at_elapsed += rvu
                         records_before_target += 1
-                        logger.info(f"[PACE]   ✓ BEFORE: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
+                        logger.debug(f"[PACE]   ✓ BEFORE: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
                     else:
                         records_after_target += 1
                         if records_after_target <= 3:  # Only log first 3 after-target records to avoid spam
-                            logger.info(f"[PACE]   ✗ AFTER: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
+                            logger.debug(f"[PACE]   ✗ AFTER: finished={time_finished.strftime('%H:%M:%S')}, rvu={rvu:.1f}, proc={record.get('procedure', 'N/A')[:40]}")
                 except (ValueError, TypeError) as e:
                     # Skip records with invalid time_finished format
                     logger.debug(f"Failed to parse time_finished '{time_finished_str}': {e}")
                     continue
             
-            logger.info(f"[PACE] ═══ RESULT ═══ Elapsed: {elapsed_minutes:.1f}min | Target: {target_time.strftime('%H:%M:%S')} | "
+            logger.debug(f"[PACE] ═══ RESULT ═══ Elapsed: {elapsed_minutes:.1f}min | Target: {target_time.strftime('%H:%M:%S')} | "
                        f"RVU at elapsed: {rvu_at_elapsed:.1f} | Total RVU: {total_rvu:.1f} | "
                        f"Records before/after: {records_before_target}/{records_after_target}")
             
@@ -2041,8 +2258,14 @@ class RVUCounterApp:
             logger.debug(f"Recorded individual study from multi-accession: {accession}")
             recorded_count += 1
         
+        # Clear redo buffer when new study is added
+        self.last_undone_study = None
         self.undo_used = False
-        self.undo_btn.config(state=tk.NORMAL)
+        self.undo_btn.config(state=tk.NORMAL, text="Undo")
+        
+        # Update mini window button if it exists
+        if self.mini_window and self.mini_window.undo_btn:
+            self.mini_window.undo_btn.config(text="U")
         
         logger.info(f"Recorded multi-accession: {recorded_count} individual studies ({total_rvu:.1f} total RVU) - Duration: {total_duration:.1f}s")
         self.update_display()
@@ -3407,8 +3630,14 @@ class RVUCounterApp:
                                 "duration_seconds": completed_study["duration"],
                             }
                             self._record_or_update_study(study_record)
+                            # Clear redo buffer when new study is added
+                            self.last_undone_study = None
                             self.undo_used = False
-                            self.undo_btn.config(state=tk.NORMAL)
+                            self.undo_btn.config(state=tk.NORMAL, text="Undo")
+                            
+                            # Update mini window button if it exists
+                            if self.mini_window and self.mini_window.undo_btn:
+                                self.mini_window.undo_btn.config(text="U")
                         else:
                             logger.debug(f"Skipping short study: {acc} ({duration:.1f}s < {self.tracker.min_seconds}s)")
                     # Clear all active studies
@@ -3511,9 +3740,15 @@ class RVUCounterApp:
                     "duration_seconds": study["duration"],              # Time taken to finish
                 }
                 self._record_or_update_study(study_record)
-                # Reset undo button when new study is added or updated
+                # Clear redo buffer when new study is added or updated
+                self.last_undone_study = None
                 self.undo_used = False
-                self.undo_btn.config(state=tk.NORMAL)
+                self.undo_btn.config(state=tk.NORMAL, text="Undo")
+                
+                # Update mini window button if it exists
+                if self.mini_window and self.mini_window.undo_btn:
+                    self.mini_window.undo_btn.config(text="U")
+                    
                 self.update_display()
             
             # Now handle current study
@@ -3543,8 +3778,15 @@ class RVUCounterApp:
                                     "duration_seconds": completed_study["duration"],
                                 }
                                 self._record_or_update_study(study_record)
+                                # Clear redo buffer when new study is added
+                                self.last_undone_study = None
                                 self.undo_used = False
-                                self.undo_btn.config(state=tk.NORMAL)
+                                self.undo_btn.config(state=tk.NORMAL, text="Undo")
+                                
+                                # Update mini window button if it exists
+                                if self.mini_window and self.mini_window.undo_btn:
+                                    self.mini_window.undo_btn.config(text="U")
+                                    
                                 del self.tracker.active_studies[acc]
                     if self.tracker.active_studies:
                         self.update_display()
@@ -3797,15 +4039,40 @@ class RVUCounterApp:
             self.update_display()
     
     def undo_last(self):
-        """Undo the last completed study (only works once per study)."""
+        """Toggle between undo and redo for the last study."""
         records = self.data_manager.data["current_shift"]["records"]
-        if records and not self.undo_used:
-            removed = records.pop()
+        
+        if self.undo_used and self.last_undone_study:
+            # Redo - restore the last undone study
+            records.append(self.last_undone_study)
             self.data_manager.save()
-            self.undo_used = True
-            self.undo_btn.config(state=tk.DISABLED)
+            logger.info(f"Redid study: {self.last_undone_study['accession']}")
+            
+            # Clear redo state
+            self.last_undone_study = None
+            self.undo_used = False
+            self.undo_btn.config(text="Undo")
+            
+            # Update mini window button if it exists
+            if self.mini_window and self.mini_window.undo_btn:
+                self.mini_window.undo_btn.config(text="U")
+            
+        elif records and not self.undo_used:
+            # Undo - remove the last study
+            removed = records.pop()
+            self.last_undone_study = removed
+            self.data_manager.save()
             logger.info(f"Undid study: {removed['accession']}")
-            self.update_display()
+            
+            # Set to redo state
+            self.undo_used = True
+            self.undo_btn.config(text="Redo")
+            
+            # Update mini window button if it exists
+            if self.mini_window and self.mini_window.undo_btn:
+                self.mini_window.undo_btn.config(text="R")
+        
+        self.update_display()
     
     def delete_study_by_index(self, index: int):
         """Delete study by index from records."""
@@ -5232,6 +5499,28 @@ class RVUCounterApp:
         # Save immediately on mouse release
         self.save_window_position()
     
+    def on_double_click(self, event):
+        """Handle double-click on main window - launch mini interface."""
+        logger.info("Main window double-clicked, launching mini interface")
+        self.launch_mini_interface()
+    
+    def launch_mini_interface(self):
+        """Launch the mini interface and hide the main window."""
+        if self.mini_window is not None:
+            # Mini window already exists, just focus it
+            self.mini_window.window.focus_force()
+            return
+        
+        # Save main window position before hiding
+        self.save_window_position()
+        
+        # Hide main window
+        self.root.withdraw()
+        
+        # Create mini window
+        from .mini_window import MiniWindow
+        self.mini_window = MiniWindow(self.root, self.data_manager, self)
+    
     def save_window_position(self):
         """Save the main window position and size."""
         try:
@@ -5255,8 +5544,25 @@ class RVUCounterApp:
             self._last_saved_main_y = current_y
             # Only save settings (window positions), not records
             self.data_manager.save(save_records=False)
+            logger.debug(f"Main window position saved: ({current_x}, {current_y})")
         except Exception as e:
             logger.error(f"Error saving window position: {e}")
+    
+    def restore_window_position(self):
+        """Restore the main window position from saved settings."""
+        try:
+            window_pos = self.data_manager.data.get("window_positions", {}).get("main")
+            if window_pos:
+                x = window_pos.get("x", 100)
+                y = window_pos.get("y", 100)
+                width = window_pos.get("width", 600)
+                height = window_pos.get("height", 800)
+                
+                # Restore position and size
+                self.root.geometry(f"{width}x{height}+{x}+{y}")
+                logger.debug(f"Main window position restored: ({x}, {y}, {width}x{height})")
+        except Exception as e:
+            logger.error(f"Error restoring window position: {e}")
     
     def _update_time_display(self):
         """Update time display for recent studies and current study duration every second."""

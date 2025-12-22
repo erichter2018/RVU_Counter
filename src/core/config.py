@@ -4,8 +4,8 @@ import os
 import sys
 
 # Version
-APP_VERSION = "1.7.5"
-APP_VERSION_DATE = "12/19/2025"  # Kept for reference, not displayed
+APP_VERSION = "1.8"
+APP_VERSION_DATE = "12/21/2025"  # Kept for reference, not displayed
 APP_NAME = "RVU Counter"
 
 # Optional feature availability
