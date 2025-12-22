@@ -795,11 +795,11 @@ class RVUCounterApp:
         
         # Center on main window
         dialog_width = 500
-        dialog_height = 400
+        dialog_height = 600  # Increased height to ensure buttons are visible
         x = self.root.winfo_x() + (self.root.winfo_width() // 2) - (dialog_width // 2)
         y = self.root.winfo_y() + (self.root.winfo_height() // 2) - (dialog_height // 2)
         dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
-        dialog.minsize(400, 300)
+        dialog.minsize(400, 500)  # Increased minimum height
         
         # Main container
         main_frame = tk.Frame(dialog, bg=colors["bg"], padx=15, pady=15)
@@ -864,9 +864,9 @@ class RVUCounterApp:
         release_text.insert("1.0", body)
         release_text.config(state=tk.DISABLED)  # Make read-only
         
-        # Buttons frame
+        # Buttons frame - pack at bottom to ensure visibility
         button_frame = tk.Frame(main_frame, bg=colors["bg"])
-        button_frame.pack(fill=tk.X, pady=(10, 0))
+        button_frame.pack(fill=tk.X, pady=(15, 0), side=tk.BOTTOM)
         
         def on_update():
             dialog.destroy()
@@ -876,12 +876,14 @@ class RVUCounterApp:
             # Save skipped version
             self.data_manager.data["settings"]["skipped_update_version"] = version.lstrip('v')
             self.data_manager.save()
-            self.update_btn.pack_forget()  # Hide update button
+            # Hide update button immediately
+            self.update_btn.pack_forget()
             logger.info(f"User skipped update {version}")
             dialog.destroy()
         
         def on_later():
-            # Just close dialog, will show again next time
+            # Hide update button immediately when user chooses to be reminded later
+            self.update_btn.pack_forget()
             logger.info("User chose to be reminded later")
             dialog.destroy()
         
