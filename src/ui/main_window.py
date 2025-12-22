@@ -435,7 +435,7 @@ class RVUCounterApp:
         self.version_label.pack(side=tk.LEFT)
         
         # Update available button (hidden by default)
-        self.update_btn = tk.Label(version_frame, text="Update!", font=("Arial", 8, "bold"),
+        self.update_btn = tk.Label(version_frame, text="Update Available", font=("Arial", 8, "bold"),
                                    fg="white", bg="#ff6b00", cursor="hand2", padx=5, pady=2)
         self.update_btn.bind("<Button-1>", lambda e: self._handle_update_click())
         # Don't pack yet, wait for check
@@ -669,6 +669,10 @@ class RVUCounterApp:
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=0, pady=0)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Bind double-click to canvas and scrollable frame for mini mode launch
+        canvas.bind("<Double-Button-1>", self.on_double_click)
+        self.studies_scrollable_frame.bind("<Double-Button-1>", self.on_double_click)
         
         # Store study widgets for deletion
         self.study_widgets = []
@@ -4674,6 +4678,7 @@ class RVUCounterApp:
                 delete_btn.bind("<Button-1>", lambda e, idx=actual_index: self.delete_study_by_index(idx))
                 delete_btn.bind("<Enter>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_hover"]))
                 delete_btn.bind("<Leave>", lambda e, btn=delete_btn: btn.config(bg=colors["delete_btn_bg"]))
+                # Don't bind double-click to delete button (let it propagate for mini mode)
                 delete_btn.pack(side=tk.LEFT, padx=(1, 3), pady=0)
                 
                 # Study text label (show actual procedure name, or "Multiple XR" for multi-accession)
@@ -4709,6 +4714,12 @@ class RVUCounterApp:
                 if not starts_with_valid:
                     rvu_label.config(foreground="#8B0000")  # Dark red
                 rvu_label.pack(side=tk.RIGHT)
+                
+                # Bind double-click to study frame and labels for mini mode launch
+                study_frame.bind("<Double-Button-1>", self.on_double_click)
+                main_row_frame.bind("<Double-Button-1>", self.on_double_click)
+                procedure_label.bind("<Double-Button-1>", self.on_double_click)
+                rvu_label.bind("<Double-Button-1>", self.on_double_click)
                 
                 # Time information row (if show_time is enabled) - appears BELOW the main row, tightly spaced
                 show_time = self.data_manager.data["settings"].get("show_time", False)

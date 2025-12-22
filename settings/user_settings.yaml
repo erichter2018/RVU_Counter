@@ -151,7 +151,7 @@ window_positions:
     y: 2
   main:
     x: 4997
-    y: 180
+    y: 181
     width: 249
     height: 472
   settings:
@@ -164,5 +164,5 @@ window_positions:
     x: 5327
     y: -179
   mini:
-    x: 4999
+    x: 5000
     y: 556
